@@ -1,0 +1,2944 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>胚胎頭尾摺疊、胚外膜與臍帶胎盤演化模擬（解剖精確版）</title>
+  <style>
+    /* =========================================================================
+       高對比深色科學實驗室設計系統 (Textbook-Accurate Embryology Palette)
+       ========================================================================= */
+    :root {
+      --bg-deep: #0f172a;
+      --bg-panel: rgba(15, 23, 42, 0.84);
+      --bg-card: rgba(30, 41, 59, 0.72);
+      --border-subtle: rgba(148, 163, 184, 0.2);
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+
+      /* 經典教科書標準解剖色彩 */
+      --c-ectoderm: #38bdf8;   /* 外胚層：亮藍 */
+      --c-endoderm: #facc15;   /* 內胚層 / 卵黃囊 / 腸管：金黃 */
+      --c-mesoderm: #f43f5e;   /* 中胚層 / 心管 / 體蒂：珊瑚紅 */
+      --c-amnion: #7dd3fc;     /* 羊膜：水藍 */
+      --c-allantois: #fb923c;  /* 尿囊：橘紅 */
+      --c-chorion: #e879f9;    /* 絨毛膜：洋紅 */
+      --c-cord: #c084fc;       /* 體蒂 / 臍帶：亮紫 */
+      --c-fibrous: #e2e8f0;    /* 臍尿管 / 正中臍韌帶：纖維白 */
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-deep);
+      color: var(--text-primary);
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* 主畫布容器 */
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      touch-action: none;
+      cursor: grab;
+      background:
+        radial-gradient(circle at 42% 46%, rgba(30, 41, 59, 0.72) 0%, rgba(15, 23, 42, 0.98) 70%),
+        #0f172a;
+    }
+
+    #canvas-container:active {
+      cursor: grabbing;
+    }
+
+    #main-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* 玻璃擬態面板 */
+    .glass {
+      background: var(--bg-panel);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.48);
+    }
+
+    /* 頂部標題與快捷控制列 */
+    #top-bar {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      pointer-events: none;
+      z-index: 20;
+    }
+
+    .title-pill {
+      pointer-events: auto;
+      padding: 9px 14px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      max-width: 470px;
+    }
+
+    .title-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(250, 204, 21, 0.22));
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .title-text h1 {
+      font-size: 0.96rem;
+      font-weight: 700;
+      letter-spacing: 0.015em;
+      line-height: 1.25;
+      color: var(--text-primary);
+    }
+
+    .title-text p {
+      font-size: 0.71rem;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    .top-actions {
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 12px;
+      border-radius: 11px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(15, 23, 42, 0.88);
+      color: var(--text-primary);
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      backdrop-filter: blur(10px);
+      white-space: nowrap;
+    }
+
+    .btn:hover {
+      background: rgba(30, 41, 59, 0.96);
+      border-color: rgba(148, 163, 184, 0.45);
+      transform: translateY(-1px);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .btn-placenta {
+      background: linear-gradient(135deg, rgba(232, 121, 249, 0.28), rgba(244, 63, 94, 0.34));
+      border-color: rgba(232, 121, 249, 0.58);
+      color: #fdf4ff;
+    }
+
+    .btn-placenta:hover {
+      box-shadow: 0 0 18px rgba(232, 121, 249, 0.35);
+      border-color: #f0abfc;
+    }
+
+    .btn.active {
+      background: rgba(56, 189, 248, 0.22);
+      border-color: rgba(56, 189, 248, 0.65);
+      color: #e0f2fe;
+    }
+
+    .btn-icon {
+      padding: 8px 10px;
+      min-width: 35px;
+    }
+
+    /* 操作提示 */
+    .gesture-hint {
+      position: fixed;
+      left: 12px;
+      top: 72px;
+      padding: 6px 11px;
+      border-radius: 9px;
+      font-size: 0.71rem;
+      color: var(--text-secondary);
+      pointer-events: none;
+      z-index: 12;
+      opacity: 0.88;
+    }
+
+    /* 右側可收合譜系與圖層面板 */
+    #side-panel {
+      position: fixed;
+      top: 72px;
+      right: 12px;
+      bottom: 126px;
+      width: 336px;
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      z-index: 18;
+      transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease;
+    }
+
+    #side-panel.collapsed {
+      transform: translateX(calc(100% + 24px));
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .panel-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 13px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .panel-scroll::-webkit-scrollbar {
+      width: 5px;
+    }
+
+    .panel-scroll::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.28);
+      border-radius: 99px;
+    }
+
+    .stage-card {
+      background: rgba(30, 41, 59, 0.68);
+      border: 1px solid rgba(56, 189, 248, 0.28);
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+
+    .stage-badge {
+      display: inline-block;
+      font-size: 0.69rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(56, 189, 248, 0.2);
+      color: #7dd3fc;
+      margin-bottom: 5px;
+    }
+
+    .stage-card h2 {
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .stage-card p {
+      font-size: 0.77rem;
+      line-height: 1.55;
+      color: #cbd5e1;
+    }
+
+    /* 視野與圖層開關 */
+    .toggles-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(30, 41, 59, 0.55);
+      border: 1px solid var(--border-subtle);
+      cursor: pointer;
+      transition: border-color 0.18s;
+    }
+
+    .toggle-row:hover {
+      border-color: rgba(148, 163, 184, 0.42);
+    }
+
+    .toggle-text {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .toggle-text span:first-child {
+      font-size: 0.79rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .toggle-text span:last-child {
+      font-size: 0.68rem;
+      color: var(--text-secondary);
+    }
+
+    .switch {
+      position: relative;
+      width: 38px;
+      height: 20px;
+      background: rgba(100, 116, 139, 0.45);
+      border-radius: 99px;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+
+    .switch::after {
+      content: "";
+      position: absolute;
+      top: 2.5px;
+      left: 2.5px;
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      background: #fff;
+      transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .toggle-row.on .switch {
+      background: #0ea5e9;
+    }
+
+    .toggle-row.on .switch::after {
+      transform: translateX(18px);
+    }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.73rem;
+      font-weight: 700;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      letter-spacing: 0.04em;
+    }
+
+    /* 譜系高亮按鈕清單 */
+    .lineage-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .lineage-btn {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(30, 41, 59, 0.52);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-primary);
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.16s ease;
+    }
+
+    .lineage-btn:hover {
+      background: rgba(51, 65, 85, 0.72);
+    }
+
+    .lineage-btn.selected {
+      background: rgba(56, 189, 248, 0.16);
+      border-color: var(--dot-color, #38bdf8);
+      box-shadow: 0 0 0 1px var(--dot-color, #38bdf8) inset;
+    }
+
+    .dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      box-shadow: 0 0 8px currentColor;
+    }
+
+    /* 譜系詳情卡片 */
+    #lineage-detail {
+      display: none;
+      flex-direction: column;
+      gap: 7px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      border-radius: 12px;
+      padding: 11px;
+      animation: fadeUp 0.2s ease;
+    }
+
+    #lineage-detail.visible {
+      display: flex;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .detail-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 0.86rem;
+      font-weight: 700;
+    }
+
+    .detail-row {
+      font-size: 0.75rem;
+      line-height: 1.5;
+      color: #cbd5e1;
+      padding-top: 6px;
+      border-top: 1px solid rgba(148, 163, 184, 0.12);
+    }
+
+    .detail-row strong {
+      display: block;
+      font-size: 0.69rem;
+      color: var(--text-secondary);
+      margin-bottom: 2px;
+    }
+
+    .pill-yes {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 99px;
+      font-size: 0.69rem;
+      font-weight: 700;
+      background: rgba(56, 189, 248, 0.2);
+      color: #7dd3fc;
+    }
+
+    .pill-partial {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 99px;
+      font-size: 0.69rem;
+      font-weight: 700;
+      background: rgba(250, 204, 21, 0.2);
+      color: #fde047;
+    }
+
+    .pill-no {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 99px;
+      font-size: 0.69rem;
+      font-weight: 700;
+      background: rgba(232, 121, 249, 0.2);
+      color: #f5d0fe;
+    }
+
+    /* 左下角可切換微觀小視窗 */
+    #inset-panel {
+      position: fixed;
+      left: 12px;
+      bottom: 126px;
+      width: 256px;
+      border-radius: 14px;
+      overflow: hidden;
+      z-index: 16;
+    }
+
+    .inset-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 10px;
+      background: rgba(30, 41, 59, 0.78);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .inset-tabs {
+      display: flex;
+      gap: 4px;
+    }
+
+    .inset-tab {
+      padding: 4px 8px;
+      border-radius: 7px;
+      font-size: 0.71rem;
+      font-weight: 600;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+
+    .inset-tab.active {
+      background: rgba(56, 189, 248, 0.2);
+      border-color: rgba(56, 189, 248, 0.55);
+      color: #e0f2fe;
+    }
+
+    .inset-body {
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    #inset-canvas {
+      width: 238px;
+      height: 144px;
+      border-radius: 9px;
+      background: rgba(11, 17, 32, 0.9);
+      display: block;
+    }
+
+    .inset-caption {
+      font-size: 0.69rem;
+      line-height: 1.45;
+      color: #cbd5e1;
+    }
+
+    /* 底部時間軸控制列 */
+    #bottom-bar {
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      border-radius: 16px;
+      padding: 10px 15px 11px;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .timeline-row {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      flex-wrap: wrap;
+    }
+
+    .play-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .play-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      border: none;
+      background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(56, 189, 248, 0.35);
+      transition: transform 0.15s;
+    }
+
+    .play-btn:hover {
+      transform: scale(1.06);
+    }
+
+    .speed-group {
+      display: flex;
+      background: rgba(30, 41, 59, 0.78);
+      border-radius: 9px;
+      padding: 2px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .speed-btn {
+      padding: 5px 8px;
+      font-size: 0.71rem;
+      font-weight: 700;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      border-radius: 7px;
+      cursor: pointer;
+    }
+
+    .speed-btn.active {
+      background: rgba(56, 189, 248, 0.25);
+      color: #e0f2fe;
+    }
+
+    .scrubber-wrap {
+      flex: 1;
+      min-width: 180px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    #timeline-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 7px;
+      border-radius: 99px;
+      background: linear-gradient(90deg, #e879f9 0%, #38bdf8 25%, #facc15 55%, #fb923c 78%, #2dd4bf 100%);
+      outline: none;
+      cursor: pointer;
+    }
+
+    #timeline-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #f8fafc;
+      border: 3px solid #38bdf8;
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.75);
+      cursor: grab;
+    }
+
+    .progress-readout {
+      font-size: 0.78rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: #7dd3fc;
+      min-width: 48px;
+      text-align: right;
+    }
+
+    .stage-buttons {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 7px;
+    }
+
+    .stage-btn {
+      padding: 7px 8px;
+      border-radius: 10px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(30, 41, 59, 0.55);
+      color: var(--text-secondary);
+      font-size: 0.74rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.18s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      text-align: center;
+    }
+
+    .stage-btn:hover {
+      background: rgba(51, 65, 85, 0.75);
+      color: var(--text-primary);
+    }
+
+    .stage-btn.active {
+      background: rgba(56, 189, 248, 0.22);
+      border-color: rgba(56, 189, 248, 0.68);
+      color: #f8fafc;
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.22);
+    }
+
+    .stage-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 17px;
+      height: 17px;
+      border-radius: 50%;
+      background: rgba(148, 163, 184, 0.22);
+      font-size: 0.67rem;
+      flex-shrink: 0;
+    }
+
+    .stage-btn.active .stage-num {
+      background: #38bdf8;
+      color: #0f172a;
+    }
+
+    /* 胎盤微血管交會 Modal */
+    #placenta-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.8);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      z-index: 50;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    #placenta-modal.open {
+      display: flex;
+      animation: fadeIn 0.2s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .modal-box {
+      width: 100%;
+      max-width: 920px;
+      max-height: 92vh;
+      border-radius: 20px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border: 1px solid rgba(232, 121, 249, 0.45);
+      background: rgba(15, 23, 42, 0.97);
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.72);
+    }
+
+    .modal-header {
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-subtle);
+      background: linear-gradient(90deg, rgba(190, 18, 60, 0.24), rgba(232, 121, 249, 0.16));
+    }
+
+    .modal-header h2 {
+      font-size: 1.02rem;
+      font-weight: 700;
+      color: #fdf4ff;
+    }
+
+    .modal-header p {
+      font-size: 0.75rem;
+      color: #f5d0fe;
+      margin-top: 2px;
+    }
+
+    .modal-body {
+      padding: 16px 20px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+    }
+
+    .placenta-canvas-wrap {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      max-height: 52vh;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      background: #090e1c;
+    }
+
+    #placenta-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .placenta-banner {
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.38);
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-size: 0.83rem;
+      font-weight: 600;
+      color: #e0f2fe;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      line-height: 1.5;
+    }
+
+    .placenta-legend-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 8px;
+    }
+
+    .p-leg-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.75rem;
+      color: #cbd5e1;
+      background: rgba(30, 41, 59, 0.62);
+      padding: 7px 10px;
+      border-radius: 9px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .p-swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* 響應式適配 (iPad / 手機) */
+    @media (max-width: 960px) {
+      #side-panel { width: 292px; }
+      .gesture-hint { display: none; }
+      .stage-btn span.stage-sub { display: none; }
+    }
+
+    @media (max-width: 700px) {
+      .title-text p { display: none; }
+      .title-text h1 { font-size: 0.84rem; }
+      #side-panel {
+        width: calc(100vw - 24px);
+        max-width: 340px;
+        bottom: 146px;
+      }
+      #inset-panel { display: none; }
+      .stage-buttons { grid-template-columns: repeat(3, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 主畫布 -->
+  <div id="canvas-container">
+    <canvas id="main-canvas"></canvas>
+  </div>
+
+  <!-- 頂部工具列 -->
+  <header id="top-bar">
+    <div class="title-pill glass">
+      <div class="title-icon" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <path d="M5 12C5 7.5 8.5 5 12 5C15.5 5 19 7.5 19 12" stroke="#7dd3fc" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M5 12C7.5 10.2 16.5 10.2 19 12" stroke="#38bdf8" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M6 13.5C8 12.2 16 12.2 18 13.5C18.5 17.5 15.5 20 12 20C8.5 20 5.5 17.5 6 13.5Z" stroke="#facc15" stroke-width="2"/>
+          <path d="M18 13.5L21.5 11.5" stroke="#fb923c" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="title-text">
+        <h1>胚胎頭尾摺疊、胚外膜與臍帶胎盤演化模擬</h1>
+        <p>解剖精確版・矢狀切面共壁拓撲 (Fig. A → D → 胎兒與胎盤)</p>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <button id="btn-placenta-micro" class="btn btn-placenta" title="開啟胎盤母體面與胎兒面微血管交會示意">
+        <span>🔬</span>
+        <span>胎盤微血管交會</span>
+      </button>
+      <button id="btn-zoom-out" class="btn btn-icon" title="縮小">－</button>
+      <button id="btn-zoom-in" class="btn btn-icon" title="放大">＋</button>
+      <button id="btn-reset-view" class="btn" title="重置視角">重置視角</button>
+      <button id="btn-toggle-panel" class="btn active" title="展開或收合右側面板">譜系面板</button>
+    </div>
+  </header>
+
+  <div class="gesture-hint glass">
+    拖曳平移・滾輪/雙指縮放・可於右側開關「外圍絨毛膜與胎盤」切換圖 A–D 特寫視野
+  </div>
+
+  <!-- 左下角可切換微觀小視窗 -->
+  <div id="inset-panel" class="glass">
+    <div class="inset-header">
+      <div class="inset-tabs">
+        <button class="inset-tab active" data-inset="cord">臍帶橫切面</button>
+        <button class="inset-tab" data-inset="adult">成人尿囊遺跡</button>
+      </div>
+      <button id="btn-collapse-inset" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:0.85rem;padding:0 4px;">▾</button>
+    </div>
+    <div class="inset-body" id="inset-body">
+      <canvas id="inset-canvas" width="238" height="144"></canvas>
+      <div class="inset-caption" id="inset-caption"></div>
+    </div>
+  </div>
+
+  <!-- 右側譜系高亮與視野控制面板 -->
+  <aside id="side-panel" class="glass">
+    <div class="panel-scroll">
+      <div class="stage-card">
+        <span class="stage-badge" id="stage-badge">階段 1 / 5 ・ 圖 A</span>
+        <h2 id="stage-title">扁平胚盤與四層胚外膜確立</h2>
+        <p id="stage-desc"></p>
+      </div>
+
+      <!-- 視野與圖層開關 -->
+      <div class="toggles-stack">
+        <div class="toggle-row on" id="toggle-chorion" role="switch" aria-checked="true" tabindex="0">
+          <div class="toggle-text">
+            <span>顯示外圍絨毛膜與胎盤</span>
+            <span>關閉可聚焦圖 A→D 局部特寫視野</span>
+          </div>
+          <div class="switch"></div>
+        </div>
+        <div class="toggle-row" id="toggle-embryo-only" role="switch" aria-checked="false" tabindex="0">
+          <div class="toggle-text">
+            <span>僅顯示構成胚體部分</span>
+            <span>淡化胚外膜，突顯外胚層、腸管與臍尿管</span>
+          </div>
+          <div class="switch"></div>
+        </div>
+        <div class="toggle-row on" id="toggle-labels" role="switch" aria-checked="true" tabindex="0">
+          <div class="toggle-text">
+            <span>顯示解剖標註與摺疊箭頭</span>
+            <span>動態追蹤口咽膜、心管、腸管與體蒂</span>
+          </div>
+          <div class="switch"></div>
+        </div>
+      </div>
+
+      <!-- 譜系高亮清單 -->
+      <div>
+        <div class="section-head">
+          <span>譜系高亮與來源命運追蹤</span>
+          <button id="btn-clear-highlight" style="background:none;border:none;color:#38bdf8;font-size:0.72rem;cursor:pointer;display:none;">顯示全部</button>
+        </div>
+        <div class="lineage-list" id="lineage-list"></div>
+      </div>
+
+      <!-- 譜系詳情卡 -->
+      <div id="lineage-detail">
+        <div class="detail-head">
+          <span style="display:flex;align-items:center;gap:8px;">
+            <span class="dot" id="ld-dot"></span>
+            <span id="ld-name"></span>
+          </span>
+          <button id="ld-close" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:0.95rem;">✕</button>
+        </div>
+        <div class="detail-row">
+          <strong>來源細胞 (Origin)</strong>
+          <span id="ld-origin"></span>
+        </div>
+        <div class="detail-row">
+          <strong>是否構成胚體 (Contributes to Embryo?)</strong>
+          <span id="ld-contrib"></span>
+        </div>
+        <div class="detail-row">
+          <strong>演化命運與空間移動 (Fate)</strong>
+          <span id="ld-fate"></span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 底部時間軸控制列 -->
+  <footer id="bottom-bar" class="glass">
+    <div class="timeline-row">
+      <div class="play-group">
+        <button id="btn-play" class="play-btn" title="播放 / 暫停 (Space)">
+          <svg id="icon-play" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+          <svg id="icon-pause" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="display:none;">
+            <path d="M6 5h4v14H6zm8 0h4v14h-4z"/>
+          </svg>
+        </button>
+        <div class="speed-group">
+          <button class="speed-btn" data-speed="0.5">0.5x</button>
+          <button class="speed-btn active" data-speed="1">1x</button>
+          <button class="speed-btn" data-speed="2">2x</button>
+        </div>
+      </div>
+
+      <div class="scrubber-wrap">
+        <input type="range" id="timeline-slider" min="0" max="1000" value="200" aria-label="胚胎發育時間軸" />
+        <div class="progress-readout" id="progress-readout">20%</div>
+      </div>
+    </div>
+
+    <div class="stage-buttons">
+      <button class="stage-btn" data-stage="0">
+        <span class="stage-num">0</span>
+        <span>囊胚<span class="stage-sub"> 分化</span></span>
+      </button>
+      <button class="stage-btn active" data-stage="1">
+        <span class="stage-num">1</span>
+        <span>圖A<span class="stage-sub"> 扁平胚盤</span></span>
+      </button>
+      <button class="stage-btn" data-stage="2">
+        <span class="stage-num">2</span>
+        <span>圖B<span class="stage-sub"> 頭尾摺疊</span></span>
+      </button>
+      <button class="stage-btn" data-stage="3">
+        <span class="stage-num">3</span>
+        <span>圖C–D<span class="stage-sub"> 捲曲會合</span></span>
+      </button>
+      <button class="stage-btn" data-stage="4">
+        <span class="stage-num">4</span>
+        <span>臍帶<span class="stage-sub"> 與胎兒</span></span>
+      </button>
+    </div>
+  </footer>
+
+  <!-- 胎盤母體面與胎兒面微血管交會 Modal -->
+  <div id="placenta-modal" role="dialog" aria-modal="true" aria-labelledby="placenta-title">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div>
+          <h2 id="placenta-title">🔬 胎盤微血管交會：母體面 vs. 胎兒面物質交換</h2>
+          <p>Maternal Spiral Arteries &amp; Intervillous Space ⇄ Fetal Chorionic Villi Capillary Loops</p>
+        </div>
+        <button id="btn-close-modal" class="btn">關閉 ✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="placenta-canvas-wrap">
+          <canvas id="placenta-canvas"></canvas>
+        </div>
+        <div class="placenta-banner">
+          <span style="font-size:1.25rem;">🛡️</span>
+          <span>核心原則：<strong>母子血液不直接混合！</strong>母體螺旋動脈將充氧血注入絨毛間隙，僅透過極薄的<strong>胎盤屏障（滋養層上皮＋胎兒微血管壁）</strong>進行 O₂、養分與 CO₂、廢物的雙向擴散交換。</span>
+        </div>
+        <div class="placenta-legend-row">
+          <div class="p-leg-item">
+            <span class="p-swatch" style="background:#ef4444;box-shadow:0 0 8px #ef4444;"></span>
+            <span><strong>母體螺旋動脈 / 胎兒臍靜脈</strong>：充氧血</span>
+          </div>
+          <div class="p-leg-item">
+            <span class="p-swatch" style="background:#3b82f6;box-shadow:0 0 8px #3b82f6;"></span>
+            <span><strong>胎兒臍動脈 / 母體靜脈</strong>：缺氧血</span>
+          </div>
+          <div class="p-leg-item">
+            <span class="p-swatch" style="background:#38bdf8;box-shadow:0 0 8px #38bdf8;"></span>
+            <span><strong>青/金光點</strong>：O₂ 與養分擴散進入胎兒血</span>
+          </div>
+          <div class="p-leg-item">
+            <span class="p-swatch" style="background:#cbd5e1;box-shadow:0 0 6px #cbd5e1;"></span>
+            <span><strong>灰白光點</strong>：CO₂ 與廢物排回母體靜脈</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* =========================================================================
+       胚胎頭尾摺疊、胚外膜與臍帶胎盤演化模擬（解剖精確版）
+       核心幾何：嚴格共壁拓撲 + 統一控制點陣列平滑插值 (Catmull-Rom Splines)
+       ========================================================================= */
+    (() => {
+      // ----------------------------
+      // 1. 數學與平滑曲線工具
+      // ----------------------------
+      const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+      const lerp = (a, b, t) => a + (b - a) * t;
+      const smoothstep = (e0, e1, x) => {
+        const t = clamp((x - e0) / (e1 - e0), 0, 1);
+        return t * t * (3 - 2 * t);
+      };
+
+      function lerpColor(hexA, hexB, t) {
+        const a = parseInt(hexA.slice(1), 16);
+        const b = parseInt(hexB.slice(1), 16);
+        const r = Math.round(lerp((a >> 16) & 255, (b >> 16) & 255, t));
+        const g = Math.round(lerp((a >> 8) & 255, (b >> 8) & 255, t));
+        const bl = Math.round(lerp(a & 255, b & 255, t));
+        return `rgb(${r},${g},${bl})`;
+      }
+
+      // 兩組同長度點陣列的線性插值
+      function lerpPts(ptsA, ptsB, t) {
+        const out = new Array(ptsA.length);
+        for (let i = 0; i < ptsA.length; i++) {
+          out[i] = [
+            lerp(ptsA[i][0], ptsB[i][0], t),
+            lerp(ptsA[i][1], ptsB[i][1], t)
+          ];
+        }
+        return out;
+      }
+
+      // 根據目前 progress (0~1) 在 4 個主摺疊關鍵幀 (K1:0.20, K2:0.45, K3:0.72, K4:1.00) 之間平滑插值
+      function sampleKeyframePts(kfObj, p) {
+        if (p <= 0.20) return kfObj.k1;
+        if (p <= 0.45) {
+          const t = smoothstep(0.20, 0.45, p);
+          return lerpPts(kfObj.k1, kfObj.k2, t);
+        }
+        if (p <= 0.72) {
+          const t = smoothstep(0.45, 0.72, p);
+          return lerpPts(kfObj.k2, kfObj.k3, t);
+        }
+        const t = smoothstep(0.72, 1.00, p);
+        return lerpPts(kfObj.k3, kfObj.k4, t);
+      }
+
+      // 使用 Catmull-Rom 轉換為 Cubic Bezier 繪製極致平滑的開放或封閉有機路徑
+      function traceSmoothPath(c, pts, closed = false, tension = 0.5) {
+        const n = pts.length;
+        if (n < 2) return;
+        c.beginPath();
+        c.moveTo(pts[0][0], pts[0][1]);
+
+        const getPt = (idx) => {
+          if (closed) return pts[(idx + n) % n];
+          return pts[clamp(idx, 0, n - 1)];
+        };
+
+        const segs = closed ? n : n - 1;
+        for (let i = 0; i < segs; i++) {
+          const p0 = getPt(i - 1);
+          const p1 = getPt(i);
+          const p2 = getPt(i + 1);
+          const p3 = getPt(i + 2);
+
+          const cp1x = p1[0] + ((p2[0] - p0[0]) / 6) * tension * 2;
+          const cp1y = p1[1] + ((p2[1] - p0[1]) / 6) * tension * 2;
+          const cp2x = p2[0] - ((p3[0] - p1[0]) / 6) * tension * 2;
+          const cp2y = p2[1] - ((p3[1] - p1[1]) / 6) * tension * 2;
+
+          c.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2[0], p2[1]);
+        }
+        if (closed) c.closePath();
+      }
+
+      function roundRect(c, x, y, w, h, r) {
+        c.beginPath();
+        c.moveTo(x + r, y);
+        c.lineTo(x + w - r, y);
+        c.quadraticCurveTo(x + w, y, x + w, y + r);
+        c.lineTo(x + w, y + h - r);
+        c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        c.lineTo(x + r, y + h);
+        c.quadraticCurveTo(x, y + h, x, y + h - r);
+        c.lineTo(x, y + r);
+        c.quadraticCurveTo(x, y, x + r, y);
+        c.closePath();
+      }
+
+      // ----------------------------
+      // 2. 解剖色彩與教材定義
+      // ----------------------------
+      const C = {
+        ecto: '#38bdf8',
+        endo: '#facc15',
+        meso: '#f43f5e',
+        amnion: '#7dd3fc',
+        allantois: '#fb923c',
+        chorion: '#e879f9',
+        cord: '#c084fc',
+        endoWall: '#be123c',
+        artery: '#3b82f6',
+        vein: '#ef4444',
+        fibrous: '#e2e8f0'
+      };
+
+      const LINEAGES = [
+        {
+          id: 'chorion',
+          name: '滋養細胞與絨毛膜',
+          en: 'Trophoblasts & Chorion',
+          color: C.chorion,
+          contrib: 'no',
+          contribLabel: '不構成胚體（純胚外膜）',
+          origin: '囊胚外圈的滋養細胞（Trophoblasts）與胚外中胚層。',
+          fate: '向右側子宮內膜伸出絨毛膜絨毛，共同組成胎盤以執行保護、營養與氣體交換；分娩時排出。'
+        },
+        {
+          id: 'amnion',
+          name: '羊膜',
+          en: 'Amnion & Amniotic Cavity',
+          color: C.amnion,
+          contrib: 'no',
+          contribLabel: '不構成胚體（純胚外膜）',
+          origin: '內細胞團背側分化出羊膜腔，其底壁與藍色外胚層共壁相連。',
+          fate: '隨頭尾摺疊大幅擴張，沿頭尾兩端向下包覆整個胎兒，並束緊體蒂、卵黃管與尿囊形成臍帶外鞘。'
+        },
+        {
+          id: 'ectoderm',
+          name: '內細胞團（外胚層／胚體）',
+          en: 'Inner Cell Mass / Ectoderm',
+          color: C.ecto,
+          contrib: 'yes',
+          contribLabel: '完全構成胚體',
+          origin: '囊胚內部聚集成團的內細胞團（上胚層分化為外胚層）。',
+          fate: '原本為羊膜腔底壁的扁平胚盤，經頭尾摺疊強烈拱起成 C 字形胚胎，衍生神經系統、表皮與各器官。'
+        },
+        {
+          id: 'endoderm',
+          name: '卵黃囊（內胚層與腸管）',
+          en: 'Yolk Sac / Endoderm & Gut',
+          color: C.endo,
+          contrib: 'partial',
+          contribLabel: '部分構成胚體（併入成腸管）',
+          origin: '內細胞團下胚層衍生之卵黃囊，其頂壁即為黃色內胚層（共壁）。',
+          fate: '摺疊時頂部自然被包入體內形成前腸（肺芽、肝芽）、中腸與後腸；中間掐細成卵黃管。第 10 週中腸拉回腹腔，體外卵黃囊萎縮。'
+        },
+        {
+          id: 'allantois',
+          name: '尿囊（臍尿管／正中臍韌帶）',
+          en: 'Allantois → Urachus → Median Umbilical Lig.',
+          color: C.allantois,
+          contrib: 'partial',
+          contribLabel: '部分構成胚體（形成韌帶）',
+          origin: '由卵黃囊尾端（右側）腹壁直接分岔伸入體蒂的小指狀突起。',
+          fate: '隨尾摺捲到腹側並連至膀胱尖端。管腔閉鎖為白色纖維索：胎兒期稱「臍尿管」，成人為「正中臍韌帶」（膀胱尖端連至肚臍）。'
+        },
+        {
+          id: 'cord',
+          name: '體蒂與臍帶',
+          en: 'Connecting Stalk → Umbilical Cord',
+          color: C.cord,
+          contrib: 'no',
+          contribLabel: '不構成胚體（母胎連結構造）',
+          origin: '位於胚胎最尾端（右側）的胚外中胚層（體蒂），內含尿囊。',
+          fate: '隨尾摺順時針捲向腹側與卵黃管會合，再由擴張的羊膜包覆拉長成螺旋臍帶（2 臍動脈、1 臍靜脈）。'
+        },
+        {
+          id: 'mesoderm',
+          name: '心管與中胚層',
+          en: 'Heart Tube, Pericardial Cavity & Mesoderm',
+          color: C.mesoderm,
+          contrib: 'yes',
+          contribLabel: '部分構成胚體（心臟與中胚層器官）',
+          origin: '原條遷移形成胚內中胚層（頭端造血細胞群／心管）與包覆胚外膜的胚外中胚層。',
+          fate: '頭端心管與心包腔在頭摺過程中向腹側翻轉 180°，最終定位於前腸腹側的胸腔位置。'
+        }
+      ];
+
+      const STAGES = [
+        {
+          idx: 0,
+          targetP: 0.00,
+          badge: '階段 0 / 5 ・ 囊胚期 (Blastocyst)',
+          title: '囊胚與兩大細胞譜系分化',
+          desc: '分裂球分為外圈「滋養細胞（洋紅）」與內部「內細胞團（藍綠/金黃）」。內細胞團開始分化為上胚層（藍）與下胚層（黃），準備形成雙層胚盤。'
+        },
+        {
+          idx: 1,
+          targetP: 0.20,
+          badge: '階段 1 / 5 ・ 對應教科書 圖 A',
+          title: '扁平胚盤與四層胚外膜確立',
+          desc: '藍色外胚層即為羊膜腔底壁、黃色內胚層即為卵黃囊頂壁（嚴格共壁）。左側頭端有造血細胞群與口咽膜；右側尾端有泄殖腔膜、向上後方伸出的體蒂與尿囊。'
+        },
+        {
+          idx: 2,
+          targetP: 0.45,
+          badge: '階段 2 / 5 ・ 對應教科書 圖 B',
+          title: '頭尾摺疊啟動 (Cephalocaudal Folding)',
+          desc: '藍色外胚層向上拱起；頭端向腹側彎曲使心管與心包腔開始翻轉，包入黃色內胚層形成「前腸」；尾端彎曲形成「後腸」，右側體蒂與尿囊開始順時針向腹側捲動。'
+        },
+        {
+          idx: 3,
+          targetP: 0.72,
+          badge: '階段 3 / 5 ・ 對應教科書 圖 C → D',
+          title: '強烈 C 字捲曲、卵黃管掐細與體蒂會合',
+          desc: '心管完全翻轉至胸腹側；前腸長出肺芽與肝芽，卵黃囊開口被腹壁掐細成「卵黃管 (Vitelline duct)」。原本在尾端的體蒂與尿囊已捲到腹側，緊鄰卵黃管會合！'
+        },
+        {
+          idx: 4,
+          targetP: 1.00,
+          badge: '階段 4 / 5 ・ 胎兒期與成體遺跡',
+          title: '臍帶延伸、第 10 週中腸回納與臍尿管',
+          desc: '羊膜完全包覆胎兒並將「體蒂＋尿囊＋卵黃管＋臍血管」束緊拉長成臍帶連向右側胎盤。第 10 週中腸拉回腹腔、體外卵黃囊萎縮；尿囊閉鎖為白色纖維索「臍尿管（成人正中臍韌帶）」。'
+        }
+      ];
+
+      // ----------------------------
+      // 3. 解剖精確關鍵幀幾何控制點 (Strictly Matched Point Counts!)
+      // 座標系：頭端在左 (x < 0)，尾端與胎盤在右 (x > 0)
+      // ----------------------------
+
+      // 3.1 藍色外胚層頂緣 (11 個控制點：由左「口咽膜」沿背側拱起至右「泄殖腔膜」)
+      // 同時也是羊膜腔的底壁 (Shared Wall!)
+      const ECTO_KF = {
+        // 圖 A：水平微拱扁平胚盤
+        k1: [
+          [-92, -16], [-74, -18], [-52, -20], [-28, -21], [0, -22],
+          [28, -21], [52, -20], [74, -18], [92, -16]
+        ],
+        // 圖 B：頭尾開始向腹側彎曲，中段拱起
+        k2: [
+          [-98, 6], [-104, -16], [-78, -36], [-40, -44], [0, -46],
+          [40, -44], [78, -34], [100, -14], [94, 8]
+        ],
+        // 圖 C -> D：強烈 C 字捲曲，頭大尾捲
+        k3: [
+          [-68, 44], [-110, 20], [-116, -34], [-72, -74], [-4, -82],
+          [64, -68], [104, -26], [100, 26], [62, 48]
+        ],
+        // 階段 4：胎兒期 (略向左移，右側留出臍帶延伸至胎盤的空間)
+        k4: [
+          [-94, 34], [-138, 12], [-146, -46], [-102, -94], [-30, -104],
+          [38, -86], [76, -34], [74, 28], [26, 60]
+        ]
+      };
+
+      // 3.2 羊膜頂部外弧 (9 個控制點：由右尾端出發，繞過背側上方，回到左頭端)
+      // 與 ECTO_KF 頭尾相接形成完全封閉的羊膜腔！
+      const AMNION_ROOF_KF = {
+        // 圖 A：緊貼胚盤上方的圓頂羊膜腔
+        k1: [
+          [102, -28], [94, -66], [56, -94], [0, -104], [-56, -94], [-94, -66], [-102, -28]
+        ],
+        // 圖 B：羊膜腔顯著膨大，向頭尾兩端擴張
+        k2: [
+          [124, -12], [128, -84], [76, -138], [0, -152], [-76, -138], [-128, -84], [-126, -10]
+        ],
+        // 圖 C -> D：羊膜大幅向頭尾下方包裹，逼近腹側卵黃管與體蒂
+        k3: [
+          [134, 48], [156, -54], [96, -148], [0, -168], [-98, -148], [-158, -50], [-130, 56]
+        ],
+        // 階段 4：羊膜幾乎貼合外圍絨毛膜，完全包圍胎兒並於右側折返包覆臍帶
+        k4: [
+          [190, 52], [202, -96], [108, -196], [-28, -214], [-164, -172], [-222, -46], [-192, 112]
+        ]
+      };
+
+      // 額外底部包覆點 (僅在 K3 -> K4 讓羊膜從腹側下方繞回臍帶入口)
+      const AMNION_VENTRAL_WRAP = {
+        k1: [[-92, -16], [92, -16]], // 未繞到腹側時直接與外胚層端點重合
+        k2: [[-98, 6], [94, 8]],
+        k3: [[-78, 68], [76, 66]],
+        k4: [[-82, 178], [116, 166]]
+      };
+
+      // 3.3 黃色內胚層 + 腸管 + 卵黃管 + 卵黃囊 + 尿囊 (17 個控制點的單一連續封閉路徑！)
+      // 嚴格共壁：idx 0..6 緊貼外胚層下方(內胚層 -> 前腸/中腸/後腸頂壁)
+      // idx 7..9：後腸尾端 + 向右/腹側伸出的尿囊 (Allantois) 盲端！
+      // idx 10..14：卵黃管右壁 -> 卵黃囊右側 -> 卵黃囊底部 -> 卵黃囊左側 -> 卵黃管左壁
+      // idx 15..16：前腸腹壁 (緊鄰心管後方) 回到口咽膜 idx 0
+      const ENDO_LOOP_KF = {
+        // 圖 A：上方平貼外胚層，下方飽滿大卵黃囊，右側尾端伸出小指狀尿囊
+        k1: [
+          [-90, -10], [-62, -12], [-30, -14], [0, -14], [30, -14], [62, -12], [90, -10], // 0..6 內胚層頂壁
+          [104, -14], [116, -20], [102, -4],                                              // 7..9 尿囊指狀突起(伸入右側體蒂)
+          [116, 48], [92, 116], [0, 134], [-92, 116], [-116, 48],                         // 10..14 大卵黃囊外輪廓
+          [-98, 6], [-92, -4]                                                             // 15..16 回到頭端
+        ],
+        // 圖 B：頭尾開始內摺出前腸與後腸，卵黃囊頸部略縮，尿囊隨體蒂順時針轉向下右
+        k2: [
+          [-92, 4], [-86, -16], [-56, -30], [0, -36], [56, -28], [84, -14], [88, 6],      // 0..6 前腸-中腸-後腸頂壁
+          [94, 14], [114, 18], [92, 22],                                                  // 7..9 尿囊開始向下旋轉
+          [106, 68], [82, 136], [0, 152], [-82, 136], [-104, 66],                         // 10..14 卵黃囊
+          [-78, 16], [-86, 10]                                                            // 15..16 前腸腹壁
+        ],
+        // 圖 C -> D：清晰的前腸/中腸/後腸，中間掐細成卵黃管，下方垂掛卵黃囊，尿囊已捲至腹側緊鄰卵黃管！
+        k3: [
+          [-62, 34], [-88, 6], [-84, -36], [-4, -62], [72, -36], [84, 8], [56, 38],       // 0..6 體內連續腸管頂壁
+          [42, 40], [64, 68], [32, 44],                                                   // 7..9 尿囊從後腸腹側伸入已捲至腹側的體蒂！
+          [18, 66], [48, 138], [0, 174], [-48, 138], [-14, 66],                           // 10..14 細長卵黃管 + 下方卵黃囊
+          [-38, 18], [-54, 30]                                                            // 15..16 前腸腹壁(鄰心管/肝芽)
+        ],
+        // 階段 4：第 10 週中腸回納腹腔，體外卵黃囊大幅萎縮；體內形成完整消化道與膀胱→臍尿管
+        k4: [
+          [-88, 24], [-116, -4], [-112, -52], [-30, -80], [44, -52], [54, 6], [20, 44],   // 0..6 胎兒體內腸管
+          [10, 40], [34, 58], [4, 42],                                                    // 7..9 膀胱區 & 尿囊近端(臍尿管起點)
+          [12, 46], [56, 78], [52, 86], [42, 80], [-2, 34],                               // 10..14 退化萎縮的小卵黃管與殘跡
+          [-64, 8], [-80, 20]                                                             // 15..16 前腸腹壁
+        ]
+      };
+
+      // 3.4 關鍵解剖點追蹤 (心管、口咽膜、泄殖腔膜、體蒂基部與遠端)
+      const LANDMARKS_KF = {
+        k1: {
+          heart: [-110, -8],
+          bucco: [-92, -13],
+          cloaca: [92, -13],
+          stalkBase: [96, -18],
+          stalkTip: [148, -42],
+          lungBud: [-70, -10],
+          liverBud: [-48, -8]
+        },
+        k2: {
+          heart: [-96, 26],
+          bucco: [-95, 5],
+          cloaca: [91, 7],
+          stalkBase: [96, 16],
+          stalkTip: [158, 16],
+          lungBud: [-72, -4],
+          liverBud: [-54, 4]
+        },
+        k3: {
+          heart: [-54, 42],
+          bucco: [-65, 39],
+          cloaca: [59, 43],
+          stalkBase: [46, 52],
+          stalkTip: [132, 74],
+          lungBud: [-54, -4],
+          liverBud: [-30, 14]
+        },
+        k4: {
+          heart: [-78, 32],
+          bucco: [-91, 29],
+          cloaca: [23, 52],
+          stalkBase: [18, 48],
+          stalkTip: [248, 20],
+          lungBud: [-82, -16],
+          liverBud: [-54, 4]
+        }
+      };
+
+      function sampleLandmarks(p) {
+        let a, b, t;
+        if (p <= 0.20) return LANDMARKS_KF.k1;
+        if (p <= 0.45) { a = LANDMARKS_KF.k1; b = LANDMARKS_KF.k2; t = smoothstep(0.20, 0.45, p); }
+        else if (p <= 0.72) { a = LANDMARKS_KF.k2; b = LANDMARKS_KF.k3; t = smoothstep(0.45, 0.72, p); }
+        else { a = LANDMARKS_KF.k3; b = LANDMARKS_KF.k4; t = smoothstep(0.72, 1.00, p); }
+
+        const res = {};
+        for (const key of Object.keys(a)) {
+          res[key] = [lerp(a[key][0], b[key][0], t), lerp(a[key][1], b[key][1], t)];
+        }
+        return res;
+      }
+
+      // ----------------------------
+      // 4. 應用程式狀態 (State)
+      // ----------------------------
+      const state = {
+        progress: 0.20,         // 預設停在圖 A (扁平胚盤)，方便對照經典教科書圖
+        targetProgress: null,
+        isPlaying: false,
+        speed: 1.0,
+        selectedId: null,
+        showChorion: true,
+        embryoOnly: false,
+        showLabels: true,
+        activeInset: 'cord',
+        insetCollapsed: false,
+        modalOpen: false,
+        time: 0,
+        cam: { x: 0, y: 0, zoom: 1, baseScale: 1 },
+        placentaHotspot: { x: 266, y: 10, r: 28, visible: false }
+      };
+
+      const amnionParticles = Array.from({ length: 30 }, (_, i) => ({
+        a: (i / 30) * Math.PI * 2 + Math.random(),
+        rf: 0.2 + Math.random() * 0.65,
+        spd: 0.14 + Math.random() * 0.2,
+        sz: 1.2 + Math.random() * 2.0,
+        ph: Math.random() * Math.PI * 2
+      }));
+
+      // ----------------------------
+      // 5. DOM 參照與 UI 初始化
+      // ----------------------------
+      const mainCanvas = document.getElementById('main-canvas');
+      const ctx = mainCanvas.getContext('2d');
+      const insetCanvas = document.getElementById('inset-canvas');
+      const insetCtx = insetCanvas.getContext('2d');
+      const placentaCanvas = document.getElementById('placenta-canvas');
+      const pCtx = placentaCanvas.getContext('2d');
+
+      const slider = document.getElementById('timeline-slider');
+      const progressReadout = document.getElementById('progress-readout');
+      const btnPlay = document.getElementById('btn-play');
+      const iconPlay = document.getElementById('icon-play');
+      const iconPause = document.getElementById('icon-pause');
+      const stageBadge = document.getElementById('stage-badge');
+      const stageTitle = document.getElementById('stage-title');
+      const stageDesc = document.getElementById('stage-desc');
+      const lineageList = document.getElementById('lineage-list');
+      const lineageDetail = document.getElementById('lineage-detail');
+      const btnClearHighlight = document.getElementById('btn-clear-highlight');
+      const sidePanel = document.getElementById('side-panel');
+      const btnTogglePanel = document.getElementById('btn-toggle-panel');
+      const insetCaption = document.getElementById('inset-caption');
+      const placentaModal = document.getElementById('placenta-modal');
+
+      // 生成右側譜系按鈕
+      LINEAGES.forEach(item => {
+        const btn = document.createElement('button');
+        btn.className = 'lineage-btn';
+        btn.dataset.id = item.id;
+        btn.style.setProperty('--dot-color', item.color);
+        btn.innerHTML = `<span class="dot" style="background:${item.color};color:${item.color};"></span><span>${item.name}</span>`;
+        btn.addEventListener('click', () => {
+          state.selectedId = (state.selectedId === item.id) ? null : item.id;
+          updateLineageUI();
+        });
+        lineageList.appendChild(btn);
+      });
+
+      function updateLineageUI() {
+        document.querySelectorAll('.lineage-btn').forEach(b => {
+          b.classList.toggle('selected', b.dataset.id === state.selectedId);
+        });
+        btnClearHighlight.style.display = state.selectedId ? 'inline' : 'none';
+
+        if (!state.selectedId) {
+          lineageDetail.classList.remove('visible');
+          return;
+        }
+        const item = LINEAGES.find(x => x.id === state.selectedId);
+        if (!item) return;
+
+        document.getElementById('ld-dot').style.background = item.color;
+        document.getElementById('ld-dot').style.color = item.color;
+        document.getElementById('ld-name').textContent = `${item.name}`;
+        document.getElementById('ld-origin').textContent = item.origin;
+        const pCls = item.contrib === 'yes' ? 'pill-yes' : item.contrib === 'partial' ? 'pill-partial' : 'pill-no';
+        document.getElementById('ld-contrib').innerHTML = `<span class="${pCls}">${item.contribLabel}</span>`;
+        document.getElementById('ld-fate').textContent = item.fate;
+        lineageDetail.classList.add('visible');
+      }
+
+      // 取得各結構當前透明度 (結合高亮與「僅顯示構成胚體部分」過濾)
+      function getAlpha(id, isIntraEmbryonic = false) {
+        if (state.embryoOnly) {
+          if (id === 'ectoderm') return 1.0;
+          if ((id === 'endoderm' || id === 'allantois' || id === 'mesoderm') && isIntraEmbryonic) return 1.0;
+          return 0.13;
+        }
+        if (state.selectedId) {
+          return state.selectedId === id ? 1.0 : 0.16;
+        }
+        return 1.0;
+      }
+
+      // ----------------------------
+      // 6. 畫布尺寸與座標轉換
+      // ----------------------------
+      let viewW = window.innerWidth;
+      let viewH = window.innerHeight;
+
+      function resizeMainCanvas() {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        viewW = window.innerWidth;
+        viewH = window.innerHeight;
+        mainCanvas.width = Math.round(viewW * dpr);
+        mainCanvas.height = Math.round(viewH * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        const panelOpen = !sidePanel.classList.contains('collapsed') && viewW > 700;
+        const availW = panelOpen ? viewW - 360 : viewW - 40;
+        const availH = viewH - 210;
+        // 若關閉外圍絨毛膜，自動稍微放大聚焦圖 A–D 特寫
+        const worldW = state.showChorion ? 820 : 520;
+        const worldH = state.showChorion ? 560 : 420;
+        state.cam.baseScale = Math.min(availW / worldW, availH / worldH, 1.55);
+      }
+
+      function resizeInsetCanvas() {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        insetCanvas.width = Math.round(238 * dpr);
+        insetCanvas.height = Math.round(144 * dpr);
+        insetCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+
+      function resizePlacentaCanvas() {
+        const wrap = placentaCanvas.parentElement;
+        if (!wrap) return;
+        const rect = wrap.getBoundingClientRect();
+        if (rect.width < 10) return;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        placentaCanvas.width = Math.round(rect.width * dpr);
+        placentaCanvas.height = Math.round(rect.height * dpr);
+        pCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+
+      function getCenter() {
+        const panelOpen = !sidePanel.classList.contains('collapsed') && viewW > 700;
+        return {
+          cx: panelOpen ? (viewW - 336) * 0.5 : viewW * 0.5,
+          cy: viewH * 0.46
+        };
+      }
+
+      function screenToWorld(sx, sy) {
+        const { cx, cy } = getCenter();
+        const scale = state.cam.baseScale * state.cam.zoom;
+        return {
+          x: (sx - cx - state.cam.x) / scale,
+          y: (sy - cy - state.cam.y) / scale
+        };
+      }
+
+      // ----------------------------
+      // 7. Pointer Events 平移、雙指縮放與胎盤熱區點擊
+      // ----------------------------
+      const pointers = new Map();
+      let lastPinch = null;
+      let dragStart = null;
+      let didMove = false;
+
+      mainCanvas.addEventListener('pointerdown', (e) => {
+        mainCanvas.setPointerCapture(e.pointerId);
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (pointers.size === 1) {
+          dragStart = { x: e.clientX, y: e.clientY };
+          didMove = false;
+        } else if (pointers.size === 2) {
+          const pts = Array.from(pointers.values());
+          lastPinch = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        }
+      });
+
+      mainCanvas.addEventListener('pointermove', (e) => {
+        if (!pointers.has(e.pointerId)) {
+          if (state.placentaHotspot.visible) {
+            const w = screenToWorld(e.clientX, e.clientY);
+            const d = Math.hypot(w.x - state.placentaHotspot.x, w.y - state.placentaHotspot.y);
+            mainCanvas.style.cursor = d <= state.placentaHotspot.r + 10 ? 'pointer' : 'grab';
+          }
+          return;
+        }
+        const prev = pointers.get(e.pointerId);
+        const dx = e.clientX - prev.x;
+        const dy = e.clientY - prev.y;
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+        if (pointers.size === 1) {
+          if (Math.hypot(e.clientX - dragStart.x, e.clientY - dragStart.y) > 5) didMove = true;
+          state.cam.x += dx;
+          state.cam.y += dy;
+        } else if (pointers.size === 2) {
+          didMove = true;
+          const pts = Array.from(pointers.values());
+          const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+          if (lastPinch && lastPinch > 10) {
+            state.cam.zoom = clamp(state.cam.zoom * (dist / lastPinch), 0.5, 3.2);
+          }
+          lastPinch = dist;
+        }
+      });
+
+      function handlePointerUp(e) {
+        if (pointers.size === 1 && !didMove && state.placentaHotspot.visible) {
+          const w = screenToWorld(e.clientX, e.clientY);
+          const d = Math.hypot(w.x - state.placentaHotspot.x, w.y - state.placentaHotspot.y);
+          if (d <= state.placentaHotspot.r + 14) openPlacentaModal();
+        }
+        pointers.delete(e.pointerId);
+        if (pointers.size < 2) lastPinch = null;
+      }
+
+      mainCanvas.addEventListener('pointerup', handlePointerUp);
+      mainCanvas.addEventListener('pointercancel', handlePointerUp);
+
+      mainCanvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        state.cam.zoom = clamp(state.cam.zoom * (e.deltaY < 0 ? 1.1 : 0.91), 0.5, 3.2);
+      }, { passive: false });
+
+      // ----------------------------
+      // 8. 主場景解剖渲染函式
+      // ----------------------------
+
+      function drawGrid() {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.045)';
+        ctx.lineWidth = 1;
+        for (let x = -520; x <= 520; x += 40) {
+          ctx.beginPath(); ctx.moveTo(x, -360); ctx.lineTo(x, 360); ctx.stroke();
+        }
+        for (let y = -360; y <= 360; y += 40) {
+          ctx.beginPath(); ctx.moveTo(-520, y); ctx.lineTo(520, y); ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      // 繪製引導線標註
+      function drawCallout(text, lx, ly, tx, ty, color, alpha = 1) {
+        if (!state.showLabels || alpha < 0.16) return;
+        ctx.save();
+        ctx.globalAlpha = clamp(alpha, 0, 1);
+
+        ctx.beginPath();
+        ctx.moveTo(tx, ty);
+        ctx.lineTo(lx, ly);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.3;
+        ctx.setLineDash([3, 3]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.beginPath();
+        ctx.arc(tx, ty, 3.2, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+
+        ctx.font = '600 11.5px "Inter", "PingFang TC", "Microsoft JhengHei", sans-serif';
+        const w = ctx.measureText(text).width + 14;
+        const h = 21;
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.15;
+        roundRect(ctx, lx - w / 2, ly - h / 2, w, h, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#f8fafc';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, lx, ly + 0.5);
+        ctx.restore();
+      }
+
+      // 繪製摺疊方向弧形箭頭 (對應圖 A -> C 的黑白彎曲箭頭)
+      function drawCurvedArrow(cx, cy, r, startA, endA, ccw, color, alpha) {
+        if (!state.showLabels || alpha < 0.1) return;
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, startA, endA, ccw);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.4;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        // 箭頭尖端
+        const ex = cx + Math.cos(endA) * r;
+        const ey = cy + Math.sin(endA) * r;
+        const tangent = endA + (ccw ? -Math.PI / 2 : Math.PI / 2);
+        ctx.beginPath();
+        ctx.moveTo(ex, ey);
+        ctx.lineTo(ex - Math.cos(tangent - 0.5) * 8, ey - Math.sin(tangent - 0.5) * 8);
+        ctx.moveTo(ex, ey);
+        ctx.lineTo(ex - Math.cos(tangent + 0.5) * 8, ey - Math.sin(tangent + 0.5) * 8);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // 8.1 外圍絨毛膜 (Chorion) 與右側子宮內膜 / 胎盤 (Placenta)
+      function drawChorionAndPlacenta(p) {
+        if (!state.showChorion) {
+          state.placentaHotspot.visible = false;
+          return;
+        }
+
+        const chorionAlpha = getAlpha('chorion', false);
+        const expand = smoothstep(0.0, 0.35, p);
+        const lateGrow = smoothstep(0.55, 1.0, p);
+
+        const rx = lerp(135, 250, expand) + lerp(0, 16, lateGrow);
+        const ry = lerp(135, 224, expand) + lerp(0, 14, lateGrow);
+        const cx = lerp(0, 6, expand);
+        const cy = 0;
+
+        // A. 右側子宮內膜 (Uterine Endometrium)
+        ctx.save();
+        ctx.globalAlpha = chorionAlpha;
+        const rightWall = cx + rx;
+
+        const endoGrad = ctx.createLinearGradient(rightWall - 25, 0, rightWall + 145, 0);
+        endoGrad.addColorStop(0, '#be123c');
+        endoGrad.addColorStop(0.55, '#881337');
+        endoGrad.addColorStop(1, '#4c0519');
+
+        ctx.beginPath();
+        ctx.moveTo(rightWall + 140, -280);
+        ctx.lineTo(rightWall - 18, -280);
+        ctx.bezierCurveTo(rightWall + 28, -165, rightWall + 46 + lateGrow * 12, -85, rightWall + 42 + lateGrow * 14, 0);
+        ctx.bezierCurveTo(rightWall + 46 + lateGrow * 12, 85, rightWall + 28, 165, rightWall - 18, 280);
+        ctx.lineTo(rightWall + 140, 280);
+        ctx.closePath();
+        ctx.fillStyle = endoGrad;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(251, 113, 133, 0.45)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // 母體胎盤血池與螺旋動脈 (右側)
+        const poolAlpha = smoothstep(0.18, 0.72, p);
+        if (poolAlpha > 0.02) {
+          ctx.save();
+          ctx.globalAlpha = chorionAlpha * poolAlpha;
+          ctx.beginPath();
+          ctx.ellipse(rightWall + 14, 0, 24 + lateGrow * 16, 86 + lateGrow * 46, 0, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(159, 18, 57, 0.72)';
+          ctx.fill();
+
+          for (let i = -2; i <= 2; i++) {
+            const ay = i * 40;
+            ctx.beginPath();
+            ctx.moveTo(rightWall + 125, ay);
+            for (let s = 0; s <= 10; s++) {
+              const f = s / 10;
+              ctx.lineTo(lerp(rightWall + 125, rightWall + 18, f), ay + Math.sin(f * Math.PI * 5 + state.time * 2.2 + i) * 5);
+            }
+            ctx.strokeStyle = i % 2 === 0 ? 'rgba(239, 68, 68, 0.78)' : 'rgba(99, 102, 241, 0.6)';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+
+        // B. 絨毛膜腔與絨毛膜絨毛 (Chorionic Villi)
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(232, 121, 249, 0.04)';
+        ctx.fill();
+
+        const villiGrow = smoothstep(0.12, 0.55, p);
+        const leftRegress = smoothstep(0.55, 0.92, p);
+        if (villiGrow > 0.02) {
+          const count = 32;
+          for (let i = 0; i < count; i++) {
+            const a = (i / count) * Math.PI * 2;
+            const ca = Math.cos(a), sa = Math.sin(a);
+            // 右側 (ca > 0.25) 為叢密胎盤絨毛；左側逐漸退化為平滑絨毛膜
+            const isPlacental = ca > 0.25;
+            const factor = isPlacental
+              ? lerp(0.75, 1.5, lateGrow) * smoothstep(0.25, 0.78, ca)
+              : (1 - leftRegress) * 0.45;
+            const len = (12 + 22 * villiGrow) * factor;
+            if (len < 2) continue;
+
+            const bx = cx + ca * rx, by = cy + sa * ry;
+            const sway = Math.sin(state.time * 1.4 + i) * 2 * factor;
+            const tx = bx + ca * len - sa * sway;
+            const ty = by + sa * len + ca * sway;
+
+            ctx.beginPath();
+            ctx.moveTo(bx, by);
+            ctx.lineTo(tx, ty);
+            ctx.strokeStyle = C.chorion;
+            ctx.lineWidth = isPlacental ? 3.2 : 1.7;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+
+            if (isPlacental && len > 15) {
+              const mx = lerp(bx, tx, 0.55), my = lerp(by, ty, 0.55);
+              for (const side of [-1, 1]) {
+                ctx.beginPath();
+                ctx.moveTo(mx, my);
+                ctx.lineTo(mx + (ca * 0.7 - sa * side * 0.65) * len * 0.45, my + (sa * 0.7 + ca * side * 0.65) * len * 0.45);
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#f0abfc';
+                ctx.stroke();
+              }
+            }
+          }
+        }
+
+        // 絨毛膜主環
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+        ctx.strokeStyle = C.chorion;
+        ctx.lineWidth = 3.2;
+        ctx.stroke();
+        ctx.restore();
+
+        // C. 可點擊胎盤微血管放大鏡熱區 (p >= 0.45)
+        const hotShow = smoothstep(0.42, 0.65, p);
+        state.placentaHotspot.visible = hotShow > 0.2;
+        if (hotShow > 0.05) {
+          const hx = rightWall + 14;
+          const hy = 0;
+          state.placentaHotspot.x = hx;
+          state.placentaHotspot.y = hy;
+          const pulse = 1 + Math.sin(state.time * 4) * 0.14;
+
+          ctx.save();
+          ctx.globalAlpha = hotShow;
+          ctx.beginPath();
+          ctx.arc(hx, hy, 23 * pulse, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(232, 121, 249, 0.22)';
+          ctx.fill();
+          ctx.strokeStyle = '#f0abfc';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.arc(hx, hy, 15, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+          ctx.fill();
+          ctx.strokeStyle = '#f5d0fe';
+          ctx.lineWidth = 1.6;
+          ctx.stroke();
+
+          // 放大鏡圖示
+          ctx.beginPath();
+          ctx.arc(hx - 2, hy - 2, 5, 0, Math.PI * 2);
+          ctx.strokeStyle = '#fdf4ff';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(hx + 2, hy + 2);
+          ctx.lineTo(hx + 6.5, hy + 6.5);
+          ctx.stroke();
+
+          ctx.font = '700 10.5px "PingFang TC", sans-serif';
+          ctx.fillStyle = '#f5d0fe';
+          ctx.textAlign = 'center';
+          ctx.fillText('微血管交會', hx, hy + 34);
+          ctx.restore();
+        }
+      }
+
+      // 8.2 階段 0 (p: 0.00 -> 0.20)：囊胚期細胞譜系分化並平滑過渡到圖 A
+      function drawBlastocystStage(p) {
+        const blastAlpha = 1 - smoothstep(0.08, 0.19, p);
+        if (blastAlpha <= 0.01) return;
+
+        const morph = smoothstep(0.0, 0.19, p);
+        ctx.save();
+
+        // 外圈滋養細胞 (Trophoblasts)
+        ctx.save();
+        ctx.globalAlpha = getAlpha('chorion', false) * blastAlpha;
+        const r = lerp(118, 138, morph);
+        const nCells = 28;
+        for (let i = 0; i < nCells; i++) {
+          const a = (i / nCells) * Math.PI * 2;
+          const x = Math.cos(a) * r;
+          const y = Math.sin(a) * r;
+          ctx.beginPath();
+          ctx.ellipse(x, y, 10.5, 6.5, a + Math.PI / 2, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(232, 121, 249, 0.36)';
+          ctx.fill();
+          ctx.strokeStyle = C.chorion;
+          ctx.lineWidth = 1.4;
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.arc(x, y, 2.2, 0, Math.PI * 2);
+          ctx.fillStyle = '#fdf4ff';
+          ctx.fill();
+        }
+        ctx.restore();
+
+        // 內部內細胞團 (Inner Cell Mass -> 上胚層藍 + 下胚層黃)
+        const icmCells = [
+          // 上排 (未來外胚層/上胚層，亮藍)
+          { x: -58, y: -32, type: 'ecto' }, { x: -34, y: -38, type: 'ecto' },
+          { x: -10, y: -42, type: 'ecto' }, { x: 14, y: -40, type: 'ecto' },
+          { x: 38, y: -36, type: 'ecto' }, { x: 60, y: -28, type: 'ecto' },
+          { x: -46, y: -18, type: 'ecto' }, { x: -22, y: -22, type: 'ecto' },
+          { x: 2, y: -22, type: 'ecto' }, { x: 26, y: -20, type: 'ecto' }, { x: 48, y: -16, type: 'ecto' },
+          // 下排 (未來內胚層/下胚層，金黃)
+          { x: -50, y: -2, type: 'endo' }, { x: -26, y: -4, type: 'endo' },
+          { x: 0, y: -4, type: 'endo' }, { x: 26, y: -4, type: 'endo' }, { x: 50, y: -2, type: 'endo' }
+        ];
+
+        icmCells.forEach(cell => {
+          const isEcto = cell.type === 'ecto';
+          ctx.save();
+          ctx.globalAlpha = getAlpha(isEcto ? 'ectoderm' : 'endoderm', true) * blastAlpha;
+          const cx = cell.x;
+          const cy = lerp(cell.y, isEcto ? -22 : -10, morph);
+          ctx.beginPath();
+          ctx.arc(cx, cy, 11, 0, Math.PI * 2);
+          ctx.fillStyle = isEcto ? 'rgba(56, 189, 248, 0.45)' : 'rgba(250, 204, 21, 0.42)';
+          ctx.fill();
+          ctx.strokeStyle = isEcto ? C.ecto : C.endo;
+          ctx.lineWidth = 1.6;
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.arc(cx, cy, 2.8, 0, Math.PI * 2);
+          ctx.fillStyle = '#fff';
+          ctx.fill();
+          ctx.restore();
+        });
+
+        // 囊胚期標註
+        drawCallout('滋養細胞 (Trophoblasts)', -195, -96, -98, -72, C.chorion, blastAlpha * getAlpha('chorion'));
+        drawCallout('內細胞團：上胚層 (藍)', 0, -148, 0, -42, C.ecto, blastAlpha * getAlpha('ectoderm', true));
+        drawCallout('內細胞團：下胚層 (黃)', -190, 38, -50, -2, C.endo, blastAlpha * getAlpha('endoderm', true));
+        drawCallout('囊胚腔 (Blastocoel)', 0, 68, 0, 48, '#94a3b8', blastAlpha);
+
+        ctx.restore();
+      }
+
+      // 8.3 階段 1–4 (p >= 0.12)：嚴格共壁拓撲的頭尾摺疊主結構
+      function drawFoldingAnatomy(p) {
+        const mainAppear = smoothstep(0.10, 0.20, p);
+        if (mainAppear <= 0.01) return;
+
+        const ectoPts = sampleKeyframePts(ECTO_KF, p);
+        const amnionRoofPts = sampleKeyframePts(AMNION_ROOF_KF, p);
+        const endoLoopPts = sampleKeyframePts(ENDO_LOOP_KF, p);
+        const lm = sampleLandmarks(p);
+        const stage4T = smoothstep(0.76, 0.98, p);
+        const lateFold = smoothstep(0.45, 0.85, p);
+
+        ctx.save();
+        ctx.globalAlpha = mainAppear;
+
+        // -----------------------------------------------------------
+        // Layer 1: 羊膜腔 (Amniotic Cavity) — 與藍色外胚層嚴格共壁！
+        // -----------------------------------------------------------
+        const amnionAlpha = getAlpha('amnion', false);
+        ctx.save();
+        ctx.globalAlpha = mainAppear * amnionAlpha;
+
+        // 組合封閉路徑：由外胚層頭端 -> 沿外胚層背側 -> 尾端 -> 沿羊膜頂部外弧回到頭端
+        // 在 Stage 4，羊膜從頭尾下方繞過完全包覆胚胎，直達右側臍帶入口
+        let amnionPoly;
+        if (p < 0.72) {
+          amnionPoly = [...ectoPts, ...amnionRoofPts];
+        } else {
+          const t4 = smoothstep(0.72, 1.0, p);
+          const vWrap = lerpPts(AMNION_VENTRAL_WRAP.k3, AMNION_VENTRAL_WRAP.k4, t4);
+          // 羊膜外緣繞過頭尾下方包住整個胎兒
+          amnionPoly = [
+            vWrap[0],
+            vWrap[1],
+            ...amnionRoofPts
+          ];
+        }
+
+        traceSmoothPath(ctx, amnionPoly, true, 0.52);
+        const amnGrad = ctx.createRadialGradient(-10, -50, 20, 0, -20, 220);
+        amnGrad.addColorStop(0, 'rgba(56, 189, 248, 0.20)');
+        amnGrad.addColorStop(1, 'rgba(14, 165, 233, 0.07)');
+        ctx.fillStyle = amnGrad;
+        ctx.fill();
+
+        // 羊膜外緣的薄層胚外中胚層 (珊瑚紅外邊框，對應圖 A–D 羊膜外的紅線)
+        ctx.strokeStyle = 'rgba(244, 63, 94, 0.55)';
+        ctx.lineWidth = 4.2;
+        ctx.stroke();
+
+        // 羊膜本體內層水藍線
+        ctx.strokeStyle = C.amnion;
+        ctx.lineWidth = 2.0;
+        ctx.stroke();
+
+        // 羊水微粒漂浮 (裁切於羊膜腔內)
+        ctx.save();
+        ctx.clip();
+        amnionParticles.forEach(pt => {
+          const a = pt.a + state.time * pt.spd * 0.3;
+          const rx = lerp(75, 180, lateFold) * pt.rf;
+          const ry = lerp(45, 165, lateFold) * pt.rf;
+          const px = Math.cos(a) * rx - 10 * stage4T;
+          const py = lerp(-55, -15, lateFold) + Math.sin(a) * ry + Math.sin(state.time + pt.ph) * 3;
+          ctx.beginPath();
+          ctx.arc(px, py, pt.sz, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(186, 230, 253, 0.38)';
+          ctx.fill();
+        });
+        ctx.restore();
+        ctx.restore();
+
+        // -----------------------------------------------------------
+        // Layer 2: 體蒂 (Connecting Stalk) → 臍帶 (Umbilical Cord) + 臍血管
+        // -----------------------------------------------------------
+        const cordAlpha = getAlpha('cord', false);
+        ctx.save();
+        ctx.globalAlpha = mainAppear * cordAlpha;
+
+        const sb = lm.stalkBase;
+        const st = lm.stalkTip;
+        const cp1x = lerp(sb[0] + 24, sb[0] + 68, stage4T);
+        const cp1y = lerp(sb[1] - 4, sb[1] + 54, stage4T);
+        const cp2x = lerp(st[0] - 20, st[0] - 72, stage4T);
+        const cp2y = lerp(st[1] + 4, st[1] - 46, stage4T);
+
+        function getCordPt(t) {
+          const mt = 1 - t;
+          return [
+            mt*mt*mt*sb[0] + 3*mt*mt*t*cp1x + 3*mt*t*t*cp2x + t*t*t*st[0],
+            mt*mt*mt*sb[1] + 3*mt*mt*t*cp1y + 3*mt*t*t*cp2y + t*t*t*st[1]
+          ];
+        }
+
+        // 羊膜外鞘包覆體蒂成臍帶 (Stage 3–4 明顯)
+        if (stage4T > 0.05) {
+          ctx.beginPath();
+          ctx.moveTo(sb[0], sb[1]);
+          ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, st[0], st[1]);
+          ctx.strokeStyle = C.amnion;
+          ctx.lineWidth = 24;
+          ctx.lineCap = 'round';
+          ctx.stroke();
+        }
+
+        // 體蒂 / 華頓氏膠主體
+        ctx.beginPath();
+        ctx.moveTo(sb[0], sb[1]);
+        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, st[0], st[1]);
+        ctx.strokeStyle = lerpColor(C.meso, '#6d28d9', stage4T * 0.7);
+        ctx.lineWidth = lerp(22, 19, stage4T);
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        // 臍帶內部螺旋血管 (2 臍動脈藍 + 1 臍靜脈紅，Stage 3.5 -> 4 漸顯)
+        const vGrow = smoothstep(0.65, 0.90, p);
+        if (vGrow > 0.02) {
+          const samples = 40;
+          const amp = 5.5;
+          // 臍動脈 (藍：胎兒 -> 胎盤)
+          ctx.beginPath();
+          for (let i = 0; i <= samples; i++) {
+            const t = i / samples;
+            const pt = getCordPt(t);
+            const pt2 = getCordPt(Math.min(1, t + 0.01));
+            const dx = pt2[0] - pt[0], dy = pt2[1] - pt[1];
+            const len = Math.hypot(dx, dy) || 1;
+            const off = Math.sin(t * Math.PI * 5) * amp;
+            const vx = pt[0] - (dy / len) * off;
+            const vy = pt[1] + (dx / len) * off;
+            if (i === 0) ctx.moveTo(vx, vy); else ctx.lineTo(vx, vy);
+          }
+          ctx.strokeStyle = C.artery;
+          ctx.lineWidth = 2.6 * vGrow;
+          ctx.stroke();
+
+          // 臍靜脈 (紅：胎盤 -> 胎兒)
+          ctx.beginPath();
+          for (let i = 0; i <= samples; i++) {
+            const t = i / samples;
+            const pt = getCordPt(t);
+            const pt2 = getCordPt(Math.min(1, t + 0.01));
+            const dx = pt2[0] - pt[0], dy = pt2[1] - pt[1];
+            const len = Math.hypot(dx, dy) || 1;
+            const off = -Math.sin(t * Math.PI * 5) * amp;
+            const vx = pt[0] - (dy / len) * off;
+            const vy = pt[1] + (dx / len) * off;
+            if (i === 0) ctx.moveTo(vx, vy); else ctx.lineTo(vx, vy);
+          }
+          ctx.strokeStyle = C.vein;
+          ctx.lineWidth = 3.1 * vGrow;
+          ctx.stroke();
+
+          // 動態血球脈衝
+          for (let k = 0; k < 4; k++) {
+            const tA = (state.time * 0.36 + k * 0.25) % 1;
+            const pA = getCordPt(tA);
+            ctx.beginPath(); ctx.arc(pA[0], pA[1], 2.5 * vGrow, 0, Math.PI * 2);
+            ctx.fillStyle = '#93c5fd'; ctx.fill();
+
+            const tV = 1 - ((state.time * 0.36 + k * 0.25 + 0.12) % 1);
+            const pV = getCordPt(tV);
+            ctx.beginPath(); ctx.arc(pV[0], pV[1], 2.9 * vGrow, 0, Math.PI * 2);
+            ctx.fillStyle = '#fca5a5'; ctx.fill();
+          }
+        }
+        ctx.restore();
+
+        // -----------------------------------------------------------
+        // Layer 3: 胚胎體壁中胚層填充 (介於外胚層與內胚層之間)
+        // -----------------------------------------------------------
+        ctx.save();
+        ctx.globalAlpha = mainAppear * getAlpha('mesoderm', true) * 0.48;
+        const bodyFillPts = [...ectoPts, endoLoopPts[6], endoLoopPts[5], endoLoopPts[4], endoLoopPts[3], endoLoopPts[2], endoLoopPts[1], endoLoopPts[0]];
+        traceSmoothPath(ctx, bodyFillPts, true, 0.5);
+        ctx.fillStyle = 'rgba(244, 63, 94, 0.36)';
+        ctx.fill();
+        ctx.restore();
+
+        // -----------------------------------------------------------
+        // Layer 4: 黃色內胚層 + 腸管 + 卵黃管 + 卵黃囊 + 尿囊 (單一連續共壁路徑！)
+        // -----------------------------------------------------------
+        const yolkExtAlpha = getAlpha('endoderm', false);
+        const gutIntAlpha = getAlpha('endoderm', true);
+        const yolkAtrophy = smoothstep(0.84, 0.98, p); // 第 10 週體外卵黃囊萎縮
+
+        // 4A. 體外卵黃囊與卵黃管外層 (含紅橘色胚外中胚層包膜)
+        ctx.save();
+        ctx.globalAlpha = mainAppear * yolkExtAlpha * (1 - yolkAtrophy * 0.85);
+        traceSmoothPath(ctx, endoLoopPts, true, 0.45);
+        const yolkGrad = ctx.createRadialGradient(0, 90, 10, 0, 90, 140);
+        yolkGrad.addColorStop(0, 'rgba(250, 204, 21, 0.24)');
+        yolkGrad.addColorStop(1, 'rgba(234, 179, 8, 0.08)');
+        ctx.fillStyle = yolkGrad;
+        ctx.fill();
+
+        // 卵黃囊外側的珊瑚紅臟壁中胚層 (對應圖 A–D 黃線外的紅線)
+        ctx.strokeStyle = 'rgba(244, 63, 94, 0.72)';
+        ctx.lineWidth = 6.2;
+        ctx.stroke();
+
+        // 內層連續金黃色內胚層壁
+        ctx.strokeStyle = C.endo;
+        ctx.lineWidth = 3.2;
+        ctx.stroke();
+        ctx.restore();
+
+        // 4B. 特別強化「體內腸管段 (前腸 / 中腸 / 後腸)」(確保開啟「僅顯示構成胚體部分」時清晰亮出！)
+        ctx.save();
+        ctx.globalAlpha = mainAppear * gutIntAlpha;
+        const gutRoof = endoLoopPts.slice(0, 7);
+        traceSmoothPath(ctx, gutRoof, false, 0.5);
+        ctx.strokeStyle = C.endo;
+        ctx.lineWidth = 4.6;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        // 第 10 週中腸迴圈生理性臍疝氣與回納示意 (Stage 3.2 -> 4)
+        const midgutLoopVis = smoothstep(0.62, 0.78, p);
+        if (midgutLoopVis > 0.02) {
+          const herniate = Math.sin(clamp((p - 0.65) / 0.25, 0, 1) * Math.PI);
+          const mx = lerp(-12, 16, herniate);
+          const my = lerp(4, 38, herniate);
+          ctx.beginPath();
+          ctx.moveTo(endoLoopPts[2][0] + 10, endoLoopPts[2][1] + 22);
+          ctx.quadraticCurveTo(mx, my, endoLoopPts[4][0] - 12, endoLoopPts[4][1] + 28);
+          ctx.strokeStyle = C.endo;
+          ctx.lineWidth = 5.2 * midgutLoopVis;
+          ctx.stroke();
+          ctx.strokeStyle = '#fef9c3';
+          ctx.lineWidth = 1.6 * midgutLoopVis;
+          ctx.stroke();
+        }
+
+        // 圖 D 肺芽 (Lung bud) 與 肝芽 (Liver bud) 示意 (p >= 0.58)
+        const budVis = smoothstep(0.58, 0.72, p);
+        if (budVis > 0.02) {
+          ctx.save();
+          ctx.globalAlpha = mainAppear * gutIntAlpha * budVis;
+          // 肺芽
+          ctx.beginPath();
+          ctx.arc(lm.lungBud[0], lm.lungBud[1], 5.5, 0, Math.PI * 2);
+          ctx.fillStyle = '#fde047';
+          ctx.fill();
+          ctx.strokeStyle = '#ca8a04';
+          ctx.lineWidth = 1.4;
+          ctx.stroke();
+          // 肝芽
+          ctx.beginPath();
+          ctx.ellipse(lm.liverBud[0], lm.liverBud[1], 8.5, 6, 0.3, 0, Math.PI * 2);
+          ctx.fillStyle = '#eab308';
+          ctx.fill();
+          ctx.strokeStyle = '#fef08a';
+          ctx.lineWidth = 1.4;
+          ctx.stroke();
+          ctx.restore();
+        }
+        ctx.restore();
+
+        // -----------------------------------------------------------
+        // Layer 5: 尿囊 (Allantois) → 膀胱 + 臍尿管 (Urachus / 正中臍韌帶)
+        // -----------------------------------------------------------
+        const allanExtAlpha = getAlpha('allantois', false);
+        const allanIntAlpha = getAlpha('allantois', true);
+        const urachusMorph = smoothstep(0.80, 0.98, p);
+
+        // 5A. 伸入體蒂 / 臍帶的橘紅色尿囊指狀管
+        ctx.save();
+        ctx.globalAlpha = mainAppear * Math.max(allanExtAlpha, allanIntAlpha * 0.6);
+        const aStart = endoLoopPts[7];
+        const aTip = endoLoopPts[8];
+        const aEnd = endoLoopPts[9];
+        ctx.beginPath();
+        ctx.moveTo(aStart[0], aStart[1]);
+        ctx.quadraticCurveTo(aTip[0] + 6, aTip[1], aTip[0], aTip[1]);
+        ctx.quadraticCurveTo(aTip[0] - 4, aTip[1] + 8, aEnd[0], aEnd[1]);
+        ctx.strokeStyle = lerpColor(C.allantois, C.fibrous, urachusMorph);
+        ctx.lineWidth = lerp(5.2, 3.0, urachusMorph);
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        ctx.restore();
+
+        // 5B. 階段 4：體內膀胱尖端 → 白色纖維索「臍尿管 (Urachus)」延續至肚臍
+        if (urachusMorph > 0.05) {
+          ctx.save();
+          ctx.globalAlpha = mainAppear * allanIntAlpha * urachusMorph;
+          const bx = 4, by = 42;
+          // 膀胱
+          ctx.beginPath();
+          ctx.ellipse(bx - 14, by + 6, 9, 7, -0.3, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(251, 146, 60, 0.35)';
+          ctx.fill();
+          ctx.strokeStyle = C.allantois;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          // 白色纖維索：膀胱尖端 -> 肚臍 (stalkBase)
+          ctx.beginPath();
+          ctx.moveTo(bx - 6, by + 2);
+          ctx.lineTo(lm.stalkBase[0], lm.stalkBase[1]);
+          ctx.strokeStyle = C.fibrous;
+          ctx.lineWidth = 3.6;
+          ctx.lineCap = 'round';
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // -----------------------------------------------------------
+        // Layer 6: 藍色外胚層主帶 (Ectoderm — 經典教科書最醒目的亮藍弧線！)
+        // -----------------------------------------------------------
+        ctx.save();
+        ctx.globalAlpha = mainAppear * getAlpha('ectoderm', true);
+        traceSmoothPath(ctx, ectoPts, false, 0.52);
+        // 粗實亮藍外胚層帶
+        ctx.strokeStyle = '#0284c7';
+        ctx.lineWidth = lerp(11, 16, lateFold);
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        ctx.strokeStyle = C.ecto;
+        ctx.lineWidth = lerp(7.5, 11.5, lateFold);
+        ctx.stroke();
+
+        // 階段 4 胎兒眼點示意
+        if (stage4T > 0.15) {
+          ctx.beginPath();
+          ctx.arc(-116, -24, 4.2 * stage4T, 0, Math.PI * 2);
+          ctx.fillStyle = '#0f172a';
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(-117.5, -25.5, 1.3 * stage4T, 0, Math.PI * 2);
+          ctx.fillStyle = '#e0f2fe';
+          ctx.fill();
+        }
+        ctx.restore();
+
+        // -----------------------------------------------------------
+        // Layer 7: 心管與心包腔 (Heart Tube & Pericardial Cavity) — 隨頭摺翻轉至腹側！
+        // -----------------------------------------------------------
+        ctx.save();
+        ctx.globalAlpha = mainAppear * getAlpha('mesoderm', true);
+        const hx = lm.heart[0], hy = lm.heart[1];
+        const beat = 1 + Math.sin(state.time * 7.2) * 0.11;
+
+        // 心包腔 (Pericardial cavity)
+        ctx.beginPath();
+        ctx.arc(hx, hy, 13.5, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(244, 63, 94, 0.22)';
+        ctx.fill();
+        ctx.strokeStyle = '#fda4af';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // 跳動心管 / 造血細胞群
+        ctx.beginPath();
+        ctx.arc(hx, hy, 7.5 * beat, 0, Math.PI * 2);
+        ctx.fillStyle = C.meso;
+        ctx.fill();
+        ctx.strokeStyle = '#ffe4e6';
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+        ctx.restore();
+
+        // -----------------------------------------------------------
+        // Layer 8: 口咽膜 (Buccopharyngeal) 與 泄殖腔膜 (Cloacal Membrane)
+        // -----------------------------------------------------------
+        ctx.save();
+        ctx.globalAlpha = mainAppear * getAlpha('ectoderm', true);
+        // 口咽膜 (左側前腸與外胚層交界)
+        ctx.beginPath();
+        ctx.arc(lm.bucco[0], lm.bucco[1], 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#fef08a';
+        ctx.fill();
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        // 泄殖腔膜 (右側後腸與外胚層交界)
+        ctx.beginPath();
+        ctx.arc(lm.cloaca[0], lm.cloaca[1], 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#fef08a';
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        // -----------------------------------------------------------
+        // Layer 9: 頭尾摺疊動態方向箭頭 (圖 A -> C)
+        // -----------------------------------------------------------
+        const arrowAlpha = smoothstep(0.18, 0.25, p) * (1 - smoothstep(0.76, 0.88, p));
+        if (arrowAlpha > 0.02) {
+          // 頭摺箭頭 (左側，逆時針捲向腹側)
+          drawCurvedArrow(-118, 12, 26, -Math.PI * 0.82, Math.PI * 0.42, true, '#e2e8f0', arrowAlpha * 0.85);
+          // 尾摺箭頭 (右側，順時針捲向腹側)
+          drawCurvedArrow(116, 12, 26, -Math.PI * 0.18, Math.PI * 0.58, false, '#e2e8f0', arrowAlpha * 0.85);
+        }
+
+        // -----------------------------------------------------------
+        // Layer 10: 動態解剖標註
+        // -----------------------------------------------------------
+        drawAnatomyLabels(p, ectoPts, endoLoopPts, lm);
+
+        ctx.restore();
+      }
+
+      function drawAnatomyLabels(p, ectoPts, endoLoopPts, lm) {
+        if (!state.showLabels) return;
+        const ectoA = getAlpha('ectoderm', true);
+        const endoA = getAlpha('endoderm', true);
+        const yolkA = getAlpha('endoderm', false);
+        const amnA = getAlpha('amnion', false);
+        const allanA = getAlpha('allantois', true);
+        const cordA = getAlpha('cord', false);
+        const mesoA = getAlpha('mesoderm', true);
+        const chorA = getAlpha('chorion', false);
+
+        // 外圍絨毛膜與胎盤標註
+        if (state.showChorion) {
+          drawCallout('絨毛膜 (Chorion)', -225, -182, -162, -155, C.chorion, chorA);
+          drawCallout(p > 0.72 ? '胎盤 (絨毛膜＋子宮內膜)' : '子宮內膜 (Endometrium)', 260, -182, 250, -92, '#fb7185', chorA);
+        }
+
+        // 羊膜腔
+        drawCallout('羊膜腔 (Amniotic cavity)', 0, p < 0.4 ? -136 : -198, 0, p < 0.4 ? -96 : -154, C.amnion, amnA);
+
+        // 藍色外胚層
+        drawCallout(p > 0.82 ? '胎兒外胚層 / 胚體' : '外胚層 (Ectoderm)', -168, -118, ectoPts[2][0], ectoPts[2][1], C.ecto, ectoA);
+
+        // 心管與心包腔
+        drawCallout(p < 0.30 ? '造血細胞群 (心原基)' : '心管與心包腔 (翻轉至腹側)', -212, 48, lm.heart[0], lm.heart[1], C.meso, mesoA);
+
+        // 口咽膜 & 泄殖腔膜 (圖 A–C 顯示)
+        if (p < 0.78) {
+          drawCallout('口咽膜', -195, -24, lm.bucco[0], lm.bucco[1], '#fde047', ectoA * 0.9);
+          drawCallout('泄殖腔膜', 178, -56, lm.cloaca[0], lm.cloaca[1], '#fde047', ectoA * 0.9);
+        }
+
+        // 腸管 / 內胚層
+        if (p < 0.35) {
+          drawCallout('內胚層 (卵黃囊頂壁)', 142, -98, endoLoopPts[4][0], endoLoopPts[4][1], C.endo, endoA);
+        } else if (p < 0.85) {
+          drawCallout('前腸 (Foregut)', -188, -68, endoLoopPts[1][0], endoLoopPts[1][1], C.endo, endoA);
+          drawCallout('後腸 (Hindgut)', 176, -104, endoLoopPts[5][0], endoLoopPts[5][1], C.endo, endoA);
+          if (p > 0.60) {
+            drawCallout('肺芽 / 肝芽', -182, 114, lm.liverBud[0], lm.liverBud[1], '#fde047', endoA);
+          }
+        } else {
+          drawCallout('中腸 (第10週拉回腹腔)', -192, -62, endoLoopPts[2][0], endoLoopPts[2][1], C.endo, endoA);
+        }
+
+        // 卵黃管與卵黃囊
+        if (p < 0.88) {
+          drawCallout(p > 0.56 ? '卵黃管 (Vitelline duct) → 卵黃囊' : '卵黃囊 (Yolk sac)', -128, 186, endoLoopPts[12][0], endoLoopPts[12][1], C.endo, yolkA);
+        }
+
+        // 體蒂 → 臍帶
+        const midCordX = (lm.stalkBase[0] + lm.stalkTip[0]) * 0.5;
+        const midCordY = (lm.stalkBase[1] + lm.stalkTip[1]) * 0.5;
+        drawCallout(p > 0.78 ? '臍帶 (Umbilical cord)' : '體蒂 (Connecting stalk)', 195, 128, midCordX, midCordY, C.cord, cordA);
+
+        // 尿囊 → 臍尿管 / 正中臍韌帶
+        if (p < 0.82) {
+          drawCallout('尿囊 (Allantois)', 172, 168, endoLoopPts[8][0], endoLoopPts[8][1], C.allantois, allanA);
+        } else {
+          drawCallout('臍尿管 (Urachus → 成人正中臍韌帶)', 88, 184, 6, 44, C.fibrous, allanA);
+        }
+      }
+
+      // 主渲染管線
+      function renderMainScene() {
+        ctx.clearRect(0, 0, viewW, viewH);
+        const { cx, cy } = getCenter();
+        const scale = state.cam.baseScale * state.cam.zoom;
+
+        ctx.save();
+        ctx.translate(cx + state.cam.x, cy + state.cam.y);
+        ctx.scale(scale, scale);
+
+        drawGrid();
+        drawChorionAndPlacenta(state.progress);
+        drawBlastocystStage(state.progress);
+        drawFoldingAnatomy(state.progress);
+
+        ctx.restore();
+      }
+
+      // ----------------------------
+      // 9. 左下角微觀小視窗渲染 (臍帶橫切面 / 成人正中臍韌帶)
+      // ----------------------------
+      function renderInsetScene() {
+        if (state.insetCollapsed) return;
+        const w = 238, h = 144;
+        insetCtx.clearRect(0, 0, w, h);
+
+        if (state.activeInset === 'cord') {
+          const cx = 78, cy = 72, r = 50;
+          const regress = smoothstep(0.72, 1.0, state.progress);
+
+          // 羊膜外鞘 + 華頓氏膠
+          insetCtx.beginPath();
+          insetCtx.arc(cx, cy, r, 0, Math.PI * 2);
+          insetCtx.fillStyle = 'rgba(192, 132, 252, 0.22)';
+          insetCtx.fill();
+          insetCtx.strokeStyle = C.amnion;
+          insetCtx.lineWidth = 3;
+          insetCtx.stroke();
+
+          // 1 條臍靜脈 (紅，管腔較大)
+          insetCtx.beginPath();
+          insetCtx.ellipse(cx, cy + 16, 15, 11, 0, 0, Math.PI * 2);
+          insetCtx.fillStyle = 'rgba(239, 68, 68, 0.45)';
+          insetCtx.fill();
+          insetCtx.strokeStyle = C.vein;
+          insetCtx.lineWidth = 2.2;
+          insetCtx.stroke();
+
+          // 2 條臍動脈 (藍)
+          [[-18, -14], [18, -14]].forEach(([dx, dy]) => {
+            insetCtx.beginPath();
+            insetCtx.arc(cx + dx, cy + dy, 9.5, 0, Math.PI * 2);
+            insetCtx.fillStyle = 'rgba(59, 130, 246, 0.45)';
+            insetCtx.fill();
+            insetCtx.strokeStyle = C.artery;
+            insetCtx.lineWidth = 2.2;
+            insetCtx.stroke();
+          });
+
+          // 卵黃管 (金黃) 與 尿囊 (橘紅 -> 白)
+          insetCtx.beginPath();
+          insetCtx.arc(cx - 6, cy - 33, lerp(5.5, 1.6, regress), 0, Math.PI * 2);
+          insetCtx.fillStyle = C.endo;
+          insetCtx.fill();
+
+          insetCtx.beginPath();
+          insetCtx.arc(cx + 8, cy - 31, lerp(5.5, 2.0, regress), 0, Math.PI * 2);
+          insetCtx.fillStyle = lerpColor(C.allantois, C.fibrous, regress);
+          insetCtx.fill();
+
+          // 右側迷你圖例
+          const leg = [
+            { c: C.amnion, t: '羊膜外鞘' },
+            { c: C.cord, t: '華頓氏膠' },
+            { c: C.artery, t: '臍動脈 (×2)' },
+            { c: C.vein, t: '臍靜脈 (×1)' },
+            { c: C.endo, t: '卵黃管 (退化)' },
+            { c: C.allantois, t: '尿囊 (閉鎖)' }
+          ];
+          insetCtx.font = '600 10.5px "PingFang TC", sans-serif';
+          insetCtx.textBaseline = 'middle';
+          leg.forEach((l, i) => {
+            const ly = 21 + i * 20;
+            insetCtx.beginPath();
+            insetCtx.arc(146, ly, 4, 0, Math.PI * 2);
+            insetCtx.fillStyle = l.c;
+            insetCtx.fill();
+            insetCtx.fillStyle = '#e2e8f0';
+            insetCtx.fillText(l.t, 155, ly);
+          });
+
+          insetCaption.textContent = '羊膜包覆「體蒂＋卵黃管＋尿囊」形成臍帶，內含 2 條臍動脈與 1 條臍靜脈。';
+        } else {
+          // 成人尿囊遺跡：膀胱尖端 -> 正中臍韌帶 -> 肚臍內側壁
+          insetCtx.beginPath();
+          insetCtx.moveTo(42, 14);
+          insetCtx.quadraticCurveTo(35, 62, 46, 132);
+          insetCtx.strokeStyle = 'rgba(148, 163, 184, 0.55)';
+          insetCtx.lineWidth = 5.5;
+          insetCtx.lineCap = 'round';
+          insetCtx.stroke();
+
+          // 肚臍
+          insetCtx.beginPath();
+          insetCtx.arc(40, 34, 6, 0, Math.PI * 2);
+          insetCtx.fillStyle = '#38bdf8';
+          insetCtx.fill();
+
+          // 膀胱
+          insetCtx.beginPath();
+          insetCtx.ellipse(98, 108, 28, 20, -0.15, 0, Math.PI * 2);
+          insetCtx.fillStyle = 'rgba(251, 146, 60, 0.24)';
+          insetCtx.fill();
+          insetCtx.strokeStyle = C.allantois;
+          insetCtx.lineWidth = 2.2;
+          insetCtx.stroke();
+
+          // 正中臍韌帶 (白色纖維索)
+          insetCtx.beginPath();
+          insetCtx.moveTo(80, 92);
+          insetCtx.quadraticCurveTo(56, 68, 42, 36);
+          insetCtx.strokeStyle = C.fibrous;
+          insetCtx.lineWidth = 3.8;
+          insetCtx.stroke();
+
+          insetCtx.font = '700 11px "PingFang TC", sans-serif';
+          insetCtx.fillStyle = '#7dd3fc';
+          insetCtx.fillText('肚臍 (Umbilicus)', 54, 32);
+
+          insetCtx.fillStyle = '#f8fafc';
+          insetCtx.fillText('正中臍韌帶', 76, 60);
+          insetCtx.font = '500 9.5px sans-serif';
+          insetCtx.fillStyle = '#94a3b8';
+          insetCtx.fillText('Median umbilical lig.', 76, 73);
+
+          insetCtx.font = '700 11px "PingFang TC", sans-serif';
+          insetCtx.fillStyle = '#fdba74';
+          insetCtx.fillText('膀胱 (Bladder)', 134, 112);
+
+          insetCaption.textContent = '尿囊閉鎖成纖維索：胎兒期為「臍尿管 (Urachus)」，成人稱「正中臍韌帶」。';
+        }
+      }
+
+      // ----------------------------
+      // 10. 胎盤微血管交會微觀動畫 (Modal Canvas)
+      // ----------------------------
+      const diffParticles = Array.from({ length: 40 }, (_, i) => ({
+        type: i % 2 === 0 ? 'o2' : 'co2',
+        phase: Math.random(),
+        branch: i % 3,
+        speed: 0.16 + Math.random() * 0.12,
+        jitter: (Math.random() - 0.5) * 14
+      }));
+
+      function renderPlacentaMicroScene() {
+        if (!state.modalOpen) return;
+        const wrap = placentaCanvas.parentElement;
+        if (!wrap) return;
+        const w = wrap.clientWidth, h = wrap.clientHeight;
+        if (w < 10 || h < 10) return;
+
+        pCtx.clearRect(0, 0, w, h);
+        pCtx.save();
+        pCtx.scale(w / 800, h / 450);
+
+        // 中央絨毛間隙母體血池
+        const poolGrad = pCtx.createLinearGradient(150, 0, 640, 0);
+        poolGrad.addColorStop(0, '#4c0519');
+        poolGrad.addColorStop(0.5, '#7f1d1d');
+        poolGrad.addColorStop(1, '#3b071c');
+        pCtx.fillStyle = poolGrad;
+        pCtx.fillRect(140, 0, 520, 450);
+
+        // 左側：母體子宮內膜 + 螺旋動脈 + 母體靜脈
+        const matGrad = pCtx.createLinearGradient(0, 0, 210, 0);
+        matGrad.addColorStop(0, '#4c0519');
+        matGrad.addColorStop(1, '#9f1239');
+        pCtx.beginPath();
+        pCtx.moveTo(0, 0);
+        pCtx.lineTo(185, 0);
+        pCtx.bezierCurveTo(212, 115, 174, 225, 200, 325);
+        pCtx.bezierCurveTo(212, 380, 195, 420, 185, 450);
+        pCtx.lineTo(0, 450);
+        pCtx.closePath();
+        pCtx.fillStyle = matGrad;
+        pCtx.fill();
+        pCtx.strokeStyle = '#fb7185';
+        pCtx.lineWidth = 2.5;
+        pCtx.stroke();
+
+        // 母體螺旋動脈 (亮紅噴注)
+        [115, 290].forEach((ay, idx) => {
+          pCtx.beginPath();
+          pCtx.moveTo(0, ay);
+          for (let i = 0; i <= 14; i++) {
+            const f = i / 14;
+            pCtx.lineTo(f * 195, ay + Math.sin(f * Math.PI * 6 + state.time * 2.5) * 9);
+          }
+          pCtx.strokeStyle = '#ef4444';
+          pCtx.lineWidth = 10;
+          pCtx.lineCap = 'round';
+          pCtx.stroke();
+          pCtx.strokeStyle = '#fca5a5';
+          pCtx.lineWidth = 3;
+          pCtx.stroke();
+
+          const jp = (state.time * 0.72 + idx * 0.5) % 1;
+          pCtx.beginPath();
+          pCtx.arc(204 + jp * 78, ay, 8 + jp * 22, -0.7, 0.7);
+          pCtx.strokeStyle = `rgba(252, 165, 165, ${(1 - jp) * 0.68})`;
+          pCtx.lineWidth = 2.4;
+          pCtx.stroke();
+        });
+
+        // 母體子宮靜脈 (深藍紫回流)
+        [205, 380].forEach(vy => {
+          pCtx.beginPath();
+          pCtx.moveTo(192, vy);
+          pCtx.lineTo(0, vy);
+          pCtx.strokeStyle = '#4f46e5';
+          pCtx.lineWidth = 11;
+          pCtx.lineCap = 'round';
+          pCtx.stroke();
+          pCtx.strokeStyle = '#818cf8';
+          pCtx.lineWidth = 3;
+          pCtx.stroke();
+        });
+
+        // 右側：胎兒絨毛膜板與 3 株絨毛膜絨毛
+        const fetGrad = pCtx.createLinearGradient(620, 0, 800, 0);
+        fetGrad.addColorStop(0, '#831843');
+        fetGrad.addColorStop(1, '#312e81');
+        pCtx.beginPath();
+        pCtx.moveTo(800, 0);
+        pCtx.lineTo(640, 0);
+        pCtx.bezierCurveTo(618, 120, 628, 320, 640, 450);
+        pCtx.lineTo(800, 450);
+        pCtx.closePath();
+        pCtx.fillStyle = fetGrad;
+        pCtx.fill();
+        pCtx.strokeStyle = '#f0abfc';
+        pCtx.lineWidth = 2.5;
+        pCtx.stroke();
+
+        const villiY = [110, 230, 350];
+        villiY.forEach((vy, idx) => {
+          const sway = Math.sin(state.time * 1.4 + idx * 1.3) * 4;
+          pCtx.beginPath();
+          pCtx.moveTo(632, vy - 28);
+          pCtx.bezierCurveTo(540, vy - 34, 470, vy - 56 + sway, 375, vy - 34 + sway);
+          pCtx.bezierCurveTo(328, vy - 22 + sway, 328, vy + 22 + sway, 375, vy + 34 + sway);
+          pCtx.bezierCurveTo(470, vy + 56 + sway, 540, vy + 34, 632, vy + 28);
+          pCtx.closePath();
+          pCtx.fillStyle = 'rgba(232, 121, 249, 0.25)';
+          pCtx.fill();
+          pCtx.strokeStyle = '#f0abfc';
+          pCtx.lineWidth = 4;
+          pCtx.stroke();
+
+          // 胎兒微血管迴圈 (上：臍動脈藍 -> 末端紫 -> 下：臍靜脈紅)
+          const capGrad = pCtx.createLinearGradient(355, vy - 18, 355, vy + 18);
+          capGrad.addColorStop(0, '#3b82f6');
+          capGrad.addColorStop(0.5, '#a855f7');
+          capGrad.addColorStop(1, '#ef4444');
+
+          pCtx.beginPath();
+          pCtx.moveTo(790, vy - 12);
+          pCtx.lineTo(540, vy - 12);
+          pCtx.bezierCurveTo(445, vy - 24 + sway, 360, vy - 18 + sway, 360, vy + sway);
+          pCtx.bezierCurveTo(360, vy + 18 + sway, 445, vy + 24 + sway, 540, vy + 12);
+          pCtx.lineTo(790, vy + 12);
+          pCtx.strokeStyle = capGrad;
+          pCtx.lineWidth = 6.5;
+          pCtx.lineCap = 'round';
+          pCtx.stroke();
+        });
+
+        // 擴散微粒 (O2/養分 母->胎；CO2/廢物 胎->母)
+        diffParticles.forEach(pt => {
+          const t = (state.time * pt.speed + pt.phase) % 1;
+          const vy = villiY[pt.branch];
+          if (pt.type === 'o2') {
+            const x = lerp(218, 660, t);
+            const y = vy + pt.jitter * (1 - t * 0.5) + Math.sin(t * Math.PI * 3) * 8;
+            pCtx.beginPath();
+            pCtx.arc(x, y, 4.2, 0, Math.PI * 2);
+            pCtx.fillStyle = t < 0.35 ? '#fde047' : '#38bdf8';
+            pCtx.shadowColor = '#38bdf8';
+            pCtx.shadowBlur = 8;
+            pCtx.fill();
+            pCtx.shadowBlur = 0;
+          } else {
+            const x = lerp(620, 175, t);
+            const y = vy - 14 + pt.jitter * 0.6 + Math.cos(t * Math.PI * 3) * 7;
+            pCtx.beginPath();
+            pCtx.arc(x, y, 3.6, 0, Math.PI * 2);
+            pCtx.fillStyle = '#cbd5e1';
+            pCtx.fill();
+          }
+        });
+
+        // 標註
+        pCtx.font = '700 15px "PingFang TC", sans-serif';
+        pCtx.fillStyle = '#ffe4e6';
+        pCtx.fillText('母體面 (子宮內膜)', 16, 32);
+        pCtx.textAlign = 'center';
+        pCtx.fillStyle = '#f5d0fe';
+        pCtx.fillText('絨毛間隙 (母體血池)', 308, 32);
+        pCtx.textAlign = 'right';
+        pCtx.fillStyle = '#e0e7ff';
+        pCtx.fillText('胎兒面 (絨毛膜絨毛)', 784, 32);
+
+        pCtx.textAlign = 'left';
+        pCtx.font = '600 12px "PingFang TC", sans-serif';
+        pCtx.fillStyle = '#fca5a5';
+        pCtx.fillText('母體螺旋動脈 →', 14, 96);
+        pCtx.fillStyle = '#a5b4fc';
+        pCtx.fillText('← 母體子宮靜脈', 14, 186);
+
+        pCtx.textAlign = 'right';
+        pCtx.fillStyle = '#93c5fd';
+        pCtx.fillText('← 胎兒臍動脈 (缺氧血)', 784, 92);
+        pCtx.fillStyle = '#fca5a5';
+        pCtx.fillText('胎兒臍靜脈 (充氧血) →', 784, 138);
+
+        pCtx.textAlign = 'center';
+        pCtx.fillStyle = '#f0abfc';
+        pCtx.fillText('▲ 胎盤屏障：滋養層上皮＋胎兒微血管壁 (母子血液不直接混合)', 460, 424);
+
+        pCtx.restore();
+      }
+
+      // ----------------------------
+      // 11. UI 事件綁定與同步
+      // ----------------------------
+      function getStageIdx(p) {
+        if (p < 0.12) return 0;
+        if (p < 0.34) return 1;
+        if (p < 0.58) return 2;
+        if (p < 0.86) return 3;
+        return 4;
+      }
+
+      function syncTimelineUI() {
+        slider.value = Math.round(state.progress * 1000);
+        progressReadout.textContent = `${Math.round(state.progress * 100)}%`;
+
+        const idx = getStageIdx(state.progress);
+        const st = STAGES[idx];
+        stageBadge.textContent = st.badge;
+        stageTitle.textContent = st.title;
+        stageDesc.textContent = st.desc;
+
+        document.querySelectorAll('.stage-btn').forEach(b => {
+          b.classList.toggle('active', Number(b.dataset.stage) === idx);
+        });
+      }
+
+      function setPlaying(play) {
+        state.isPlaying = play;
+        iconPlay.style.display = play ? 'none' : 'block';
+        iconPause.style.display = play ? 'block' : 'none';
+      }
+
+      btnPlay.addEventListener('click', () => {
+        if (state.progress >= 0.995 && !state.isPlaying) state.progress = 0;
+        state.targetProgress = null;
+        setPlaying(!state.isPlaying);
+      });
+
+      slider.addEventListener('input', () => {
+        state.targetProgress = null;
+        setPlaying(false);
+        state.progress = Number(slider.value) / 1000;
+        syncTimelineUI();
+      });
+
+      document.querySelectorAll('.speed-btn').forEach(b => {
+        b.addEventListener('click', () => {
+          state.speed = Number(b.dataset.speed);
+          document.querySelectorAll('.speed-btn').forEach(x => x.classList.remove('active'));
+          b.classList.add('active');
+        });
+      });
+
+      document.querySelectorAll('.stage-btn').forEach(b => {
+        b.addEventListener('click', () => {
+          setPlaying(false);
+          state.targetProgress = STAGES[Number(b.dataset.stage)].targetP;
+        });
+      });
+
+      function bindToggle(el, key, onChange) {
+        el.addEventListener('click', () => {
+          state[key] = !state[key];
+          el.classList.toggle('on', state[key]);
+          el.setAttribute('aria-checked', String(state[key]));
+          if (onChange) onChange();
+        });
+      }
+
+      bindToggle(document.getElementById('toggle-chorion'), 'showChorion', resizeMainCanvas);
+      bindToggle(document.getElementById('toggle-embryo-only'), 'embryoOnly');
+      bindToggle(document.getElementById('toggle-labels'), 'showLabels');
+
+      btnClearHighlight.addEventListener('click', () => { state.selectedId = null; updateLineageUI(); });
+      document.getElementById('ld-close').addEventListener('click', () => { state.selectedId = null; updateLineageUI(); });
+
+      btnTogglePanel.addEventListener('click', () => {
+        const c = sidePanel.classList.toggle('collapsed');
+        btnTogglePanel.classList.toggle('active', !c);
+        resizeMainCanvas();
+      });
+
+      document.getElementById('btn-zoom-in').addEventListener('click', () => { state.cam.zoom = clamp(state.cam.zoom * 1.2, 0.5, 3.2); });
+      document.getElementById('btn-zoom-out').addEventListener('click', () => { state.cam.zoom = clamp(state.cam.zoom / 1.2, 0.5, 3.2); });
+      document.getElementById('btn-reset-view').addEventListener('click', () => { state.cam.x = 0; state.cam.y = 0; state.cam.zoom = 1; });
+
+      document.querySelectorAll('.inset-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          state.activeInset = tab.dataset.inset;
+          document.querySelectorAll('.inset-tab').forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+          state.insetCollapsed = false;
+          document.getElementById('inset-body').style.display = 'flex';
+        });
+      });
+
+      document.getElementById('btn-collapse-inset').addEventListener('click', () => {
+        state.insetCollapsed = !state.insetCollapsed;
+        document.getElementById('inset-body').style.display = state.insetCollapsed ? 'none' : 'flex';
+        document.getElementById('btn-collapse-inset').textContent = state.insetCollapsed ? '▴' : '▾';
+      });
+
+      function openPlacentaModal() {
+        state.modalOpen = true;
+        placentaModal.classList.add('open');
+        requestAnimationFrame(resizePlacentaCanvas);
+      }
+
+      function closePlacentaModal() {
+        state.modalOpen = false;
+        placentaModal.classList.remove('open');
+      }
+
+      document.getElementById('btn-placenta-micro').addEventListener('click', openPlacentaModal);
+      document.getElementById('btn-close-modal').addEventListener('click', closePlacentaModal);
+      placentaModal.addEventListener('click', (e) => { if (e.target === placentaModal) closePlacentaModal(); });
+
+      window.addEventListener('keydown', (e) => {
+        if (e.code === 'Space' && !state.modalOpen) { e.preventDefault(); btnPlay.click(); }
+        else if (e.code === 'Escape' && state.modalOpen) closePlacentaModal();
+      });
+
+      window.addEventListener('resize', () => {
+        resizeMainCanvas();
+        if (state.modalOpen) resizePlacentaCanvas();
+      });
+
+      // ----------------------------
+      // 12. 主動畫迴圈 (60 FPS)
+      // ----------------------------
+      let lastTs = 0;
+      function animate(ts) {
+        try {
+          if (!lastTs) lastTs = ts;
+          const dt = Math.min((ts - lastTs) / 1000, 0.05);
+          lastTs = ts;
+          state.time += dt;
+
+          if (state.isPlaying) {
+            state.progress += dt * 0.065 * state.speed;
+            if (state.progress >= 1) {
+              state.progress = 1;
+              setPlaying(false);
+            }
+            syncTimelineUI();
+          } else if (state.targetProgress !== null) {
+            const diff = state.targetProgress - state.progress;
+            if (Math.abs(diff) < 0.002) {
+              state.progress = state.targetProgress;
+              state.targetProgress = null;
+            } else {
+              state.progress += diff * Math.min(1, dt * 7);
+            }
+            syncTimelineUI();
+          }
+
+          renderMainScene();
+          renderInsetScene();
+          renderPlacentaMicroScene();
+        } catch (err) {
+          console.error('Render loop error:', err);
+        }
+        requestAnimationFrame(animate);
+      }
+
+      window.onload = () => {
+        resizeMainCanvas();
+        resizeInsetCanvas();
+        syncTimelineUI();
+        requestAnimationFrame(animate);
+      };
+    })();
+  </script>
+</body>
+</html>
