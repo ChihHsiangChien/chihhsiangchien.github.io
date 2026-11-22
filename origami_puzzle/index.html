@@ -2130,6 +2130,8 @@
       canvas: null,
       ctx: null,
       cellSize: 90,
+      isAnimating: false,
+      activeFoldAnimation: null,
 
       init() {
         this.canvas = document.getElementById('origamiCanvas');
@@ -2230,22 +2232,240 @@
         const paperOriginX = tableOriginX + StateStore.anchorX * this.cellSize;
         const paperOriginY = tableOriginY + StateStore.anchorY * this.cellSize;
 
+        if (this.activeFoldAnimation) {
+          this.renderFoldAnimation(ctx, paperOriginX, paperOriginY);
+        } else {
+          // Standard static paper rendering
+          for (let x = 0; x < currentW; x++) {
+            for (let y = 0; y < currentH; y++) {
+              const stack = StateStore.grid[x][y];
+              if (stack && stack.length > 0) {
+                const px = paperOriginX + x * this.cellSize;
+                const py = paperOriginY + y * this.cellSize;
+                this.renderCellStack(ctx, px, py, stack, x, y);
+              }
+            }
+          }
+          this.renderCreaseLines(ctx, paperOriginX, paperOriginY);
+        }
+
+        ctx.restore();
+        this.updateHUD();
+      },
+      animateFold(action, onComplete, duration = 380) {
+        if (this.isAnimating) {
+          if (this.activeFoldAnimation && typeof this.activeFoldAnimation.onComplete === 'function') {
+            this.activeFoldAnimation.onComplete();
+          }
+        }
+
+        this.isAnimating = true;
+        const startTime = performance.now();
+
+        const currentGrid = StateStore.grid;
+        const currentW = currentGrid.length;
+        const currentH = currentGrid[0] ? currentGrid[0].length : 0;
+        const { type, line, dir, style } = action;
+
+        const stationaryCells = [];
+        const movingCells = [];
+
         for (let x = 0; x < currentW; x++) {
           for (let y = 0; y < currentH; y++) {
-            const stack = StateStore.grid[x][y];
-            if (stack && stack.length > 0) {
-              const px = paperOriginX + x * this.cellSize;
-              const py = paperOriginY + y * this.cellSize;
-              this.renderCellStack(ctx, px, py, stack, x, y);
+            const stack = currentGrid[x][y];
+            if (!stack || stack.length === 0) continue;
+
+            let isMoving = false;
+            if (type === 'V') {
+              if (dir === 'L2R' && x < line) isMoving = true;
+              else if (dir === 'R2L' && x >= line) isMoving = true;
+            } else if (type === 'H') {
+              if (dir === 'T2B' && y < line) isMoving = true;
+              else if (dir === 'B2T' && y >= line) isMoving = true;
+            }
+
+            if (isMoving) {
+              const flippedStack = [];
+              for (let i = stack.length - 1; i >= 0; i--) {
+                const item = { ...stack[i] };
+                item.face = (item.face === 'front') ? 'back' : 'front';
+                if (type === 'V') {
+                  item.rot = (360 - item.rot) % 360;
+                  item.mirrored = !item.mirrored;
+                } else {
+                  item.rot = (180 - item.rot + 360) % 360;
+                  item.mirrored = !item.mirrored;
+                }
+                flippedStack.push(item);
+              }
+              movingCells.push({ x, y, stack, flippedStack });
+            } else {
+              stationaryCells.push({ x, y, stack });
             }
           }
         }
 
-        // 3. Crease / Fold Lines rendered at current paper boundary
-        this.renderCreaseLines(ctx, paperOriginX, paperOriginY);
+        this.activeFoldAnimation = {
+          action,
+          stationaryCells,
+          movingCells,
+          progress: 0,
+          onComplete
+        };
 
+        const stepAnim = (now) => {
+          if (!this.activeFoldAnimation) return;
+          const elapsed = now - startTime;
+          const rawP = Math.min(elapsed / duration, 1.0);
+          this.activeFoldAnimation.progress = rawP;
+          this.render();
+
+          if (rawP < 1.0) {
+            requestAnimationFrame(stepAnim);
+          } else {
+            this.activeFoldAnimation = null;
+            this.isAnimating = false;
+            if (typeof onComplete === 'function') {
+              onComplete();
+            }
+          }
+        };
+
+        requestAnimationFrame(stepAnim);
+      },
+
+      renderFoldAnimation(ctx, paperOriginX, paperOriginY) {
+        const anim = this.activeFoldAnimation;
+        if (!anim) return;
+
+        const { action, stationaryCells, movingCells, progress } = anim;
+        const { type, line, dir, style } = action;
+        const p = progress;
+        // Cubic ease in-out
+        const easeP = (p < 0.5) ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+        const theta = easeP * Math.PI;
+        const cosT = Math.cos(theta);
+        const sinT = Math.sin(theta);
+        const cellSize = this.cellSize;
+
+        const drawStationary = () => {
+          for (const cell of stationaryCells) {
+            const px = paperOriginX + cell.x * cellSize;
+            const py = paperOriginY + cell.y * cellSize;
+            this.renderCellStack(ctx, px, py, cell.stack, cell.x, cell.y);
+          }
+        };
+
+        const drawMoving = () => {
+          const isFirstHalf = (p < 0.5);
+          const alpha = Math.PI - theta;
+          const currentScale = isFirstHalf ? cosT : Math.cos(alpha);
+          const liftPerspective = 1.0 + 0.08 * sinT;
+
+          ctx.save();
+
+          // Crease hinge coordinate
+          const creasePx = paperOriginX + (type === 'V' ? line * cellSize : 0);
+          const creasePy = paperOriginY + (type === 'H' ? line * cellSize : 0);
+
+          // Dynamic drop shadow when lifting
+          if (style === 'valley') {
+            ctx.shadowColor = `rgba(0, 0, 0, ${0.30 * sinT})`;
+            ctx.shadowBlur = 8 + 24 * sinT;
+            ctx.shadowOffsetX = (type === 'V' ? (dir === 'L2R' ? 12 : -12) : 0) * sinT;
+            ctx.shadowOffsetY = 10 + 16 * sinT;
+          } else {
+            ctx.shadowColor = `rgba(0, 0, 0, ${0.16 * sinT})`;
+            ctx.shadowBlur = 4 + 10 * sinT;
+          }
+
+          for (const cell of movingCells) {
+            let cellCenterX, cellCenterY, scaleX, scaleY;
+            const stackToDraw = isFirstHalf ? cell.stack : cell.flippedStack;
+
+            if (type === 'V') {
+              const d1 = cell.x * cellSize - line * cellSize;
+              const d2 = (cell.x + 1) * cellSize - line * cellSize;
+              let x1, x2;
+              if (isFirstHalf) {
+                x1 = creasePx + d1 * cosT;
+                x2 = creasePx + d2 * cosT;
+              } else {
+                x1 = creasePx - d1 * Math.cos(alpha);
+                x2 = creasePx - d2 * Math.cos(alpha);
+              }
+              const cellLeft = Math.min(x1, x2);
+              const cellW = Math.max(Math.abs(x2 - x1), 0.5);
+              cellCenterX = cellLeft + cellW / 2;
+              cellCenterY = paperOriginY + cell.y * cellSize + cellSize / 2;
+              scaleX = currentScale;
+              scaleY = liftPerspective;
+            } else {
+              const d1 = cell.y * cellSize - line * cellSize;
+              const d2 = (cell.y + 1) * cellSize - line * cellSize;
+              let y1, y2;
+              if (isFirstHalf) {
+                y1 = creasePy + d1 * cosT;
+                y2 = creasePy + d2 * cosT;
+              } else {
+                y1 = creasePy - d1 * Math.cos(alpha);
+                y2 = creasePy - d2 * Math.cos(alpha);
+              }
+              const cellTop = Math.min(y1, y2);
+              const cellH = Math.max(Math.abs(y2 - y1), 0.5);
+              cellCenterX = paperOriginX + cell.x * cellSize + cellSize / 2;
+              cellCenterY = cellTop + cellH / 2;
+              scaleX = liftPerspective;
+              scaleY = currentScale;
+            }
+
+            // Render transformed cell
+            ctx.save();
+            ctx.translate(cellCenterX, cellCenterY);
+            ctx.scale(Math.max(scaleX, 0.01), Math.max(scaleY, 0.01));
+
+            this.renderCellStack(ctx, -cellSize / 2, -cellSize / 2, stackToDraw, cell.x, cell.y);
+
+            // Subtle surface reflection lighting
+            if (sinT > 0.04) {
+              ctx.fillStyle = isFirstHalf ? `rgba(255, 255, 255, ${0.14 * sinT})` : `rgba(0, 0, 0, ${0.12 * sinT})`;
+              ctx.beginPath();
+              ctx.roundRect(-cellSize / 2 + 3, -cellSize / 2 + 3, cellSize - 6, cellSize - 6, 8);
+              ctx.fill();
+            }
+
+            ctx.restore();
+          }
+
+          ctx.restore();
+        };
+
+        if (style === 'mountain') {
+          drawMoving();
+          drawStationary();
+        } else {
+          drawStationary();
+          drawMoving();
+        }
+
+        // Animated crease line hinge highlight
+        ctx.save();
+        ctx.strokeStyle = (style === 'valley') ? '#dc2626' : '#2563eb';
+        ctx.lineWidth = 3;
+        ctx.shadowColor = (style === 'valley') ? 'rgba(220, 38, 38, 0.4)' : 'rgba(37, 99, 235, 0.4)';
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        if (type === 'V') {
+          const lx = paperOriginX + line * cellSize;
+          ctx.moveTo(lx, paperOriginY);
+          ctx.lineTo(lx, paperOriginY + StateStore.grid[0].length * cellSize);
+        } else {
+          const ly = paperOriginY + line * cellSize;
+          ctx.moveTo(paperOriginX, ly);
+          ctx.lineTo(paperOriginX + StateStore.grid.length * cellSize, ly);
+        }
+        ctx.stroke();
         ctx.restore();
-        this.updateHUD();
       },
 
       renderCellStack(ctx, px, py, stack, gridX, gridY) {
@@ -2720,18 +2940,22 @@
       },
 
       executeFold(action) {
+        if (CanvasRenderer.isAnimating) return;
+
         const nextGrid = FoldEngine.applyFold(StateStore.grid, action);
         if (!nextGrid) {
           alert('此折線超出邊界或不符合目前折疊規則！');
           return;
         }
 
-        StateStore.foldHistory.push(action);
-        StateStore.currentStepIndex = StateStore.foldHistory.length;
-        StateStore.anchorX += (nextGrid.shiftX || 0);
-        StateStore.anchorY += (nextGrid.shiftY || 0);
-        StateStore.grid = nextGrid;
-        CanvasRenderer.render();
+        CanvasRenderer.animateFold(action, () => {
+          StateStore.foldHistory.push(action);
+          StateStore.currentStepIndex = StateStore.foldHistory.length;
+          StateStore.anchorX += (nextGrid.shiftX || 0);
+          StateStore.anchorY += (nextGrid.shiftY || 0);
+          StateStore.grid = nextGrid;
+          CanvasRenderer.render();
+        }, 380);
       }
     };
 
@@ -3356,13 +3580,15 @@
         if (btnPlay) btnPlay.innerText = '⏸';
 
         let step = 0;
-        setTimeout(() => {
+        const playNextStep = () => {
           if (!StateStore.isPlaying) return;
+          if (step < res.path.length) {
+            const action = res.path[step];
+            const nextGrid = FoldEngine.applyFold(StateStore.grid, action);
+            const desc = this.formatActionDescription(action);
+            this.showToast(`<b>第 ${step + 1} / ${res.path.length} 步：</b>${desc}`, 0);
 
-          StateStore.playTimer = setInterval(() => {
-            if (step < res.path.length) {
-              const action = res.path[step];
-              const nextGrid = FoldEngine.applyFold(StateStore.grid, action);
+            CanvasRenderer.animateFold(action, () => {
               StateStore.anchorX += (nextGrid.shiftX || 0);
               StateStore.anchorY += (nextGrid.shiftY || 0);
               StateStore.grid = nextGrid;
@@ -3370,17 +3596,18 @@
               step++;
               CanvasRenderer.render();
 
-              const desc = this.formatActionDescription(action);
-              this.showToast(`<b>第 ${step} / ${res.path.length} 步：</b>${desc}`, 0);
-            } else {
-              clearInterval(StateStore.playTimer);
-              StateStore.playTimer = null;
-              StateStore.isPlaying = false;
-              if (btnPlay) btnPlay.innerText = '▶';
-              this.showToast(`🎉 折疊完成！已成功拼出「${candName}」！`, 4000);
-            }
-          }, 950);
-        }, 500);
+              if (step < res.path.length && StateStore.isPlaying) {
+                StateStore.playTimer = setTimeout(playNextStep, 420);
+              } else if (step >= res.path.length) {
+                StateStore.isPlaying = false;
+                if (btnPlay) btnPlay.innerText = '▶';
+                this.showToast(`🎉 折疊完成！已成功拼出「${candName}」！`, 4000);
+              }
+            }, 380);
+          }
+        };
+
+        StateStore.playTimer = setTimeout(playNextStep, 600);
       },
 
       loadDirectPath(candidateIndex) {
@@ -3626,47 +3853,74 @@
         });
 
         document.getElementById('btnStepNext').addEventListener('click', () => {
+          if (CanvasRenderer.isAnimating) return;
           if (StateStore.currentStepIndex < StateStore.foldHistory.length) {
             const action = StateStore.foldHistory[StateStore.currentStepIndex];
-            StateStore.grid = FoldEngine.applyFold(StateStore.grid, action);
-            StateStore.currentStepIndex++;
-            CanvasRenderer.render();
+            const nextGrid = FoldEngine.applyFold(StateStore.grid, action);
+            CanvasRenderer.animateFold(action, () => {
+              StateStore.anchorX += (nextGrid.shiftX || 0);
+              StateStore.anchorY += (nextGrid.shiftY || 0);
+              StateStore.grid = nextGrid;
+              StateStore.currentStepIndex++;
+              CanvasRenderer.render();
+            }, 360);
           }
         });
 
         document.getElementById('btnStepLast').addEventListener('click', () => {
+          if (CanvasRenderer.isAnimating) return;
+          if (StateStore.playTimer) clearTimeout(StateStore.playTimer);
+          StateStore.isPlaying = false;
+          btnPlay.innerText = '▶';
           while (StateStore.currentStepIndex < StateStore.foldHistory.length) {
             const action = StateStore.foldHistory[StateStore.currentStepIndex];
-            StateStore.grid = FoldEngine.applyFold(StateStore.grid, action);
+            const nextGrid = FoldEngine.applyFold(StateStore.grid, action);
+            StateStore.anchorX += (nextGrid.shiftX || 0);
+            StateStore.anchorY += (nextGrid.shiftY || 0);
+            StateStore.grid = nextGrid;
             StateStore.currentStepIndex++;
           }
           CanvasRenderer.render();
         });
 
         const btnPlay = document.getElementById('btnStepPlay');
+        const playNextStep = () => {
+          if (!StateStore.isPlaying) return;
+          if (StateStore.currentStepIndex < StateStore.foldHistory.length) {
+            const action = StateStore.foldHistory[StateStore.currentStepIndex];
+            const nextGrid = FoldEngine.applyFold(StateStore.grid, action);
+            CanvasRenderer.animateFold(action, () => {
+              StateStore.anchorX += (nextGrid.shiftX || 0);
+              StateStore.anchorY += (nextGrid.shiftY || 0);
+              StateStore.grid = nextGrid;
+              StateStore.currentStepIndex++;
+              CanvasRenderer.render();
+              if (StateStore.isPlaying && StateStore.currentStepIndex < StateStore.foldHistory.length) {
+                StateStore.playTimer = setTimeout(playNextStep, 400);
+              } else {
+                StateStore.isPlaying = false;
+                btnPlay.innerText = '▶';
+              }
+            }, 360);
+          } else {
+            StateStore.isPlaying = false;
+            btnPlay.innerText = '▶';
+          }
+        };
+
         btnPlay.addEventListener('click', () => {
           if (StateStore.isPlaying) {
-            clearInterval(StateStore.playTimer);
+            if (StateStore.playTimer) clearTimeout(StateStore.playTimer);
             StateStore.isPlaying = false;
             btnPlay.innerText = '▶';
           } else {
             if (StateStore.currentStepIndex >= StateStore.foldHistory.length) {
               StateStore.resetFoldState();
+              CanvasRenderer.render();
             }
             StateStore.isPlaying = true;
             btnPlay.innerText = '⏸';
-            StateStore.playTimer = setInterval(() => {
-              if (StateStore.currentStepIndex < StateStore.foldHistory.length) {
-                const action = StateStore.foldHistory[StateStore.currentStepIndex];
-                StateStore.grid = FoldEngine.applyFold(StateStore.grid, action);
-                StateStore.currentStepIndex++;
-                CanvasRenderer.render();
-              } else {
-                clearInterval(StateStore.playTimer);
-                StateStore.isPlaying = false;
-                btnPlay.innerText = '▶';
-              }
-            }, 800);
+            playNextStep();
           }
         });
 
