@@ -1,0 +1,3084 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>人類聽覺傳導、耳蝸前庭階與鼓階迴路（圖2）與 3D 結構模擬</title>
+
+<!-- Three.js ES Module Importmap -->
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+</script>
+
+<style>
+  :root {
+    --bg-dark: #0b1120;
+    --panel-bg: rgba(15, 23, 42, 0.94);
+    --accent: #38bdf8;
+    --accent-hover: #0ea5e9;
+    --accent-glow: rgba(56, 189, 248, 0.35);
+    --text-main: #f8fafc;
+    --text-sub: #cbd5e1;
+    --border-color: rgba(148, 163, 184, 0.22);
+    --gold: #fbbf24;
+    --pink: #f472b6;
+    --purple: #a78bfa;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body, html {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: var(--bg-dark);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif;
+    color: var(--text-main);
+    user-select: none;
+  }
+
+  #app {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    flex-direction: row;
+  }
+
+  /* 主視覺區（支援 2D 畫布與 3D Three.js 並排或切換） */
+  #stage-area {
+    flex: 1;
+    display: flex;
+    position: relative;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  #canvas-wrapper {
+    flex: 1;
+    position: relative;
+    height: 100%;
+    overflow: hidden;
+    touch-action: none;
+    background: radial-gradient(circle at 50% 50%, #162238 0%, #090d16 100%);
+  }
+
+  canvas#simCanvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+  }
+  canvas#simCanvas:active {
+    cursor: grabbing;
+  }
+
+  /* Three.js 3D 耳蝸全立體視窗（可分割並排或全畫面） */
+  #three-wrapper {
+    width: 0;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+    background: radial-gradient(circle at 50% 45%, #16253f 0%, #070b14 100%);
+    border-left: 1px solid var(--border-color);
+    transition: width 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+  }
+  #three-wrapper.open-split {
+    width: 54%;
+  }
+  #three-wrapper.open-full {
+    width: 100%;
+  }
+  #canvas-wrapper.hidden-2d {
+    display: none;
+  }
+
+  #three-container {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    position: relative;
+    touch-action: none;
+  }
+
+  /* 3D 視窗上方控制列與教學說明橫幅 */
+  .three-topbar {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    z-index: 15;
+    pointer-events: none;
+  }
+  .three-topbar-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .three-title-pill {
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(56, 189, 248, 0.5);
+    color: #bae6fd;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 6px 12px;
+    border-radius: 8px;
+    pointer-events: auto;
+  }
+  .three-explain-banner {
+    background: rgba(15, 23, 42, 0.9);
+    backdrop-filter: blur(8px);
+    border-left: 3px solid var(--gold);
+    border-top: 1px solid var(--border-color);
+    border-right: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+    color: #e2e8f0;
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 6px 10px;
+    border-radius: 7px;
+    pointer-events: auto;
+  }
+  .three-explain-banner strong {
+    color: var(--gold);
+  }
+  .three-actions {
+    display: flex;
+    gap: 5px;
+    pointer-events: auto;
+    flex-wrap: wrap;
+  }
+  .three-btn {
+    background: rgba(15, 23, 42, 0.88);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 5px 9px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: all 0.18s;
+  }
+  .three-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .three-btn.active {
+    background: rgba(56, 189, 248, 0.25);
+    border-color: var(--accent);
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+  }
+
+  /* 3D 專屬頻率音位對應控制器 (Tonotopic Frequency Bar) */
+  .three-freq-panel {
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(251, 191, 36, 0.45);
+    border-radius: 8px;
+    padding: 7px 11px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    pointer-events: auto;
+  }
+  .freq-badge {
+    font-size: 12px;
+    font-weight: 700;
+    color: #fef08a;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .freq-btn-group {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .freq-btn {
+    background: rgba(30, 41, 59, 0.85);
+    border: 1px solid var(--border-color);
+    color: var(--text-sub);
+    padding: 3px 7px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.18s;
+  }
+  .freq-btn:hover {
+    border-color: var(--gold);
+    color: var(--gold);
+  }
+  .freq-btn.active {
+    background: rgba(251, 191, 36, 0.22);
+    border-color: var(--gold);
+    color: #ffffff;
+    box-shadow: 0 0 8px rgba(251, 191, 36, 0.35);
+  }
+  .freq-slider-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    color: var(--text-sub);
+  }
+
+  /* 3D 底部控制列與圖例 */
+  .three-bottom-panel {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    right: 10px;
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 8px 12px;
+    z-index: 15;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .three-ctrl-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 11.5px;
+    color: var(--text-sub);
+  }
+  .slider-group {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .three-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+    font-size: 11px;
+    color: #cbd5e1;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .legend-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  /* 3D 空間錨點 HTML 標籤 */
+  #three-labels {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    z-index: 10;
+  }
+  .label-3d {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    background: rgba(15, 23, 42, 0.92);
+    border: 1.5px solid rgba(148, 163, 184, 0.45);
+    color: #f8fafc;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.55);
+    transition: opacity 0.15s;
+  }
+  .label-3d.peak-highlight {
+    background: rgba(220, 38, 38, 0.92) !important;
+    border-color: #fca5a5 !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 14px rgba(239, 68, 68, 0.75);
+    transform: translate(-50%, -50%) scale(1.08);
+  }
+
+  /* 2D 畫布角落提示與按鈕 */
+  #floating-open-btn {
+    position: absolute;
+    bottom: 18px;
+    right: 18px;
+    z-index: 20;
+    background: var(--accent);
+    color: #0f172a;
+    border: none;
+    border-radius: 999px;
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 700;
+    box-shadow: 0 4px 16px var(--accent-glow);
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    gap: 6px;
+  }
+
+  #gesture-hint {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    background: rgba(15, 23, 42, 0.72);
+    backdrop-filter: blur(6px);
+    border: 1px solid var(--border-color);
+    color: var(--text-sub);
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 12;
+  }
+
+  #top-right-bar {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 12;
+  }
+
+  #view-badge {
+    background: rgba(56, 189, 248, 0.15);
+    border: 1px solid rgba(56, 189, 248, 0.45);
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 8px;
+    pointer-events: none;
+  }
+
+  #quick-3d-btn {
+    background: linear-gradient(135deg, #0284c7, #6366f1);
+    border: 1px solid rgba(165, 180, 252, 0.5);
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 6px 13px;
+    border-radius: 8px;
+    cursor: pointer;
+    box-shadow: 0 3px 12px rgba(99, 102, 241, 0.35);
+    transition: transform 0.18s, filter 0.18s;
+  }
+  #quick-3d-btn:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.12);
+  }
+
+  /* 右側整合說明與控制面板 */
+  #control-panel {
+    width: 375px;
+    height: 100%;
+    background: var(--panel-bg);
+    border-left: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    z-index: 30;
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  #control-panel.collapsed {
+    width: 0 !important;
+    border-left: none;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .panel-inner {
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    height: 100%;
+    overflow-y: auto;
+    min-width: 345px;
+  }
+
+  .panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 9px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .panel-title {
+    font-size: 15.5px;
+    font-weight: 700;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .collapse-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    border-radius: 6px;
+    padding: 4px 9px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .step-indicator {
+    display: flex;
+    gap: 4px;
+  }
+  .step-dot {
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.15);
+    cursor: pointer;
+    transition: background 0.25s;
+  }
+  .step-dot.active {
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent-glow);
+  }
+  .step-dot.done {
+    background: rgba(56, 189, 248, 0.45);
+  }
+
+  .desc-card {
+    background: rgba(30, 41, 59, 0.72);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 11px 13px;
+  }
+  .step-title {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: var(--gold);
+    margin-bottom: 6px;
+  }
+  .step-text {
+    font-size: 13px;
+    line-height: 1.62;
+    color: var(--text-sub);
+  }
+  .step-text strong {
+    color: #fff;
+    font-weight: 600;
+  }
+  .step-text .tag-highlight {
+    color: #38bdf8;
+    font-weight: 600;
+  }
+  .step-text .tag-synapse {
+    color: #f472b6;
+    font-weight: 600;
+  }
+
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .group-label {
+    font-size: 11.5px;
+    color: #94a3b8;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 6px;
+  }
+
+  .ctrl-btn {
+    flex: 1;
+    background: rgba(30, 41, 59, 0.9);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    padding: 8px 8px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    transition: all 0.18s;
+  }
+  .ctrl-btn:hover {
+    border-color: var(--accent);
+    background: rgba(56, 189, 248, 0.12);
+  }
+  .ctrl-btn.primary {
+    background: var(--accent);
+    color: #0f172a;
+    border-color: var(--accent);
+  }
+  .ctrl-btn.active-toggle {
+    background: rgba(56, 189, 248, 0.22);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .section-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+  .tab-btn {
+    background: rgba(15, 23, 42, 0.82);
+    border: 1px solid var(--border-color);
+    color: var(--text-sub);
+    padding: 7px 6px;
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.2s;
+  }
+  .tab-btn:hover {
+    border-color: rgba(251, 191, 36, 0.5);
+  }
+  .tab-btn.active {
+    background: rgba(251, 191, 36, 0.18);
+    border-color: var(--gold);
+    color: var(--gold);
+  }
+  .tab-btn.circuit-tab {
+    grid-column: span 2;
+    background: rgba(14, 165, 233, 0.18);
+    border-color: rgba(56, 189, 248, 0.5);
+    color: #bae6fd;
+  }
+  .tab-btn.circuit-tab.active {
+    background: rgba(14, 165, 233, 0.35);
+    border-color: #38bdf8;
+    color: #ffffff;
+  }
+  .tab-btn.three-tab {
+    grid-column: span 2;
+    background: rgba(99, 102, 241, 0.18);
+    border-color: rgba(129, 140, 248, 0.5);
+    color: #c7d2fe;
+  }
+  .tab-btn.three-tab.active {
+    background: rgba(99, 102, 241, 0.35);
+    border-color: #818cf8;
+    color: #ffffff;
+  }
+
+  @media (max-width: 900px) {
+    #app {
+      flex-direction: column;
+    }
+    #stage-area {
+      flex-direction: column;
+    }
+    #three-wrapper.open-split {
+      width: 100%;
+      height: 56%;
+      border-left: none;
+      border-top: 1px solid var(--border-color);
+    }
+    #control-panel {
+      width: 100%;
+      height: 310px;
+      border-left: none;
+      border-top: 1px solid var(--border-color);
+    }
+    #control-panel.collapsed {
+      width: 100% !important;
+      height: 0 !important;
+    }
+    .panel-inner {
+      min-width: unset;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <!-- 主視覺舞台區：包含 2D 全景解剖畫布 + 3D Three.js 全立體耳蝸結構視窗 -->
+  <div id="stage-area">
+    <div id="canvas-wrapper">
+      <canvas id="simCanvas"></canvas>
+      <div id="gesture-hint">🖐️ 拖曳平移 ｜ 滾輪/雙指縮放</div>
+      <div id="top-right-bar">
+        <div id="view-badge">視角：圖2. 前庭階與鼓階完整傳導迴路</div>
+        <button id="quick-3d-btn" title="開啟或關閉 Three.js 3D 耳蝸全立體模型">🧊 3D 耳蝸全立體結構</button>
+      </div>
+      <button id="floating-open-btn" title="展開說明與控制面板">⚙️ 顯示控制與說明</button>
+    </div>
+
+    <!-- Three.js 3D 耳蝸全立體結構視窗（支援頻率音位對應、雙層流體迴路與行波演示） -->
+    <div id="three-wrapper">
+      <div class="three-topbar">
+        <div class="three-topbar-row">
+          <div class="three-title-pill">🧊 Three.js 耳蝸全立體結構・前庭階與鼓階迴路（圖2）與頻率音位</div>
+          <div class="three-actions">
+            <button class="three-btn active" id="mode-straight-btn" title="將耳蝸管拉直展開為 3D 立體雙層迴路直管（對照圖2）">📏 拉直展開 3D (圖2模式)</button>
+            <button class="three-btn" id="view-fig2-btn" title="切換至圖2展開流體迴路標準側視角（左鐙骨/卵圓窗 ➔ 上前庭階 ➔ 右耳蝸孔 ➔ 下鼓階 ➔ 圓窗）">🌊 圖2流體視角</button>
+            <button class="three-btn" id="mode-spiral-btn" title="將完整 3D 雙層管腔與神經捲曲回 2.5 圈螺旋耳蝸">🐚 螺旋捲曲 3D</button>
+            <button class="three-btn" id="view-cutface-btn" title="鏡頭特寫對準基部橫切面（看清前庭階、中階、鼓階與雙極神經元）">🔍 切面特寫</button>
+            <button class="three-btn" id="expand-3d-btn" title="切換 3D 視窗大小">⤢ 全畫面 3D</button>
+            <button class="three-btn" id="close-3d-btn" title="關閉 3D 視窗">✕</button>
+          </div>
+        </div>
+
+        <!-- 頻率音位對應（Tonotopic Organization）互動控制列 -->
+        <div class="three-freq-panel">
+          <div class="freq-badge">
+            <span>🔊 聲波頻率：</span>
+            <span id="freq-display-val" style="color:#38bdf8;">8,000 Hz (高頻)</span>
+          </div>
+          <div class="freq-btn-group">
+            <button class="freq-btn active" data-freq="16000">高頻 16kHz (近基部)</button>
+            <button class="freq-btn" data-freq="8000">高頻 8kHz</button>
+            <button class="freq-btn" data-freq="2000">中頻 2kHz (中段)</button>
+            <button class="freq-btn" data-freq="500">中低頻 500Hz</button>
+            <button class="freq-btn" data-freq="100">低頻 100Hz (近頂部)</button>
+            <button class="freq-btn" id="sweep-freq-btn">🔄 自動掃頻演示</button>
+          </div>
+          <div class="freq-slider-wrap">
+            <span>微調：</span>
+            <input type="range" id="freq-slider" min="0" max="100" value="72" style="width:105px;accent-color:#38bdf8;">
+            <label style="display:flex;align-items:center;gap:3px;cursor:pointer;margin-left:4px;">
+              <input type="checkbox" id="tone-audio-chk" style="accent-color:#38bdf8;"> 播放純音
+            </label>
+          </div>
+        </div>
+
+        <div class="three-explain-banner" id="three-explain-text">
+          <strong>🌊 3D 前庭階與鼓室階流體迴路（圖2立體重現）：</strong>鐙骨推入<strong>卵圓窗</strong> ➔ 壓力波沿<strong>前庭階（上腔）</strong>向前推進 ➔ 壓迫<strong>基底膜與柯帝器</strong>產生行波 ➔ 在頂部<strong>耳蝸孔（Helicotrema）</strong>連通轉向 ➔ 沿<strong>鼓室階（下腔）</strong>回流 ➔ 推動<strong>圓窗</strong>向外凸出釋放壓力！
+        </div>
+      </div>
+
+      <div id="three-container">
+        <div id="three-labels"></div>
+      </div>
+
+      <div class="three-bottom-panel">
+        <div class="three-ctrl-row">
+          <span>🔄 左鍵旋轉 ｜ 右鍵平移 ｜ 滾輪縮放</span>
+          <div class="slider-group">
+            <span>捲曲程度 (拉直 ➔ 螺旋)：</span>
+            <input type="range" id="coil-morph-slider" min="0" max="100" value="0" style="width:95px;accent-color:#38bdf8;">
+          </div>
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+            <input type="checkbox" id="toggle-3d-shell" checked style="accent-color:#38bdf8;"> 半透明外壁
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+            <input type="checkbox" id="toggle-perilymph-flow" checked style="accent-color:#38bdf8;"> 🌊 外淋巴流體波動畫
+          </label>
+        </div>
+        <div class="three-legend">
+          <span class="legend-item"><i class="legend-dot" style="background:#38bdf8"></i>卵圓窗／前庭階 (推進)</span>
+          <span class="legend-item"><i class="legend-dot" style="background:#4ade80"></i>耳蝸孔 (Helicotrema 轉向)</span>
+          <span class="legend-item"><i class="legend-dot" style="background:#0369a1"></i>鼓室階／圓窗 (回流釋壓)</span>
+          <span class="legend-item"><i class="legend-dot" style="background:#fbbf24"></i>基底膜與柯帝器 (行波)</span>
+          <span class="legend-item"><i class="legend-dot" style="background:#ef4444"></i>🔴 共振最大位移</span>
+          <span class="legend-item"><i class="legend-dot" style="background:#d946ef"></i>雙極神經元 (羅森塔氏管)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右側說明與控制面板 -->
+  <aside id="control-panel">
+    <div class="panel-inner">
+      <div class="panel-header">
+        <div class="panel-title">👂 聽覺傳導與流體迴路</div>
+        <button class="collapse-btn" id="collapse-btn">隱藏 ✕</button>
+      </div>
+
+      <!-- 8 步驟進度點 -->
+      <div class="step-indicator" id="step-dots"></div>
+
+      <!-- 動態說明區 -->
+      <div class="desc-card">
+        <div class="step-title" id="step-title">載入中...</div>
+        <div class="step-text" id="step-text"></div>
+      </div>
+
+      <!-- 流程控制 -->
+      <div class="control-group">
+        <div class="group-label">教學步驟導覽 (Step-by-Step)</div>
+        <div class="btn-row">
+          <button class="ctrl-btn" id="prev-step-btn">◀ 上一步</button>
+          <button class="ctrl-btn primary" id="auto-play-btn">▶ 自動循環</button>
+          <button class="ctrl-btn" id="next-step-btn">下一步 ▶</button>
+        </div>
+      </div>
+
+      <!-- 解剖橫切面與新視覺化專區快速聚焦 -->
+      <div class="control-group">
+        <div class="group-label">解剖視角與微觀機制快速切換</div>
+        <div class="section-tabs">
+          <button class="tab-btn circuit-tab active" data-focus="circuit">🌊 圖2：前庭階與鼓階展開迴路</button>
+          <button class="tab-btn" data-focus="ear">① 全耳與 2.5 圈螺旋耳蝸 (切線 A-A')</button>
+          <button class="tab-btn" data-focus="cochlea">② 耳蝸徑向橫切面</button>
+          <button class="tab-btn" data-focus="corti">③ 柯帝器與帶狀突觸</button>
+          <button class="tab-btn" data-focus="pathway">④ 腦幹核團與聽皮質</button>
+          <button class="tab-btn three-tab" id="tab-3d-btn">🧊 開啟／切換 Three.js 3D 耳蝸全立體視圖 (拉直／螺旋)</button>
+        </div>
+      </div>
+
+      <!-- 畫面與標籤設定 -->
+      <div class="control-group">
+        <div class="group-label">畫面與標籤設定</div>
+        <div class="btn-row">
+          <button class="ctrl-btn active-toggle" id="toggle-labels-btn">🏷️ 標籤：顯示</button>
+          <button class="ctrl-btn" id="zoom-in-btn">＋ 放大</button>
+          <button class="ctrl-btn" id="zoom-out-btn">－ 縮小</button>
+          <button class="ctrl-btn" id="reset-cam-btn">⟲ 重置</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- ==========================================
+     模組 1：2D 互動解剖畫布（包含完整的「圖2：前庭階 ➔ 耳蝸孔 ➔ 鼓階 ➔ 圓窗」流體傳導迴路）
+=========================================== -->
+<script>
+(() => {
+  const canvas = document.getElementById('simCanvas');
+  const ctx = canvas.getContext('2d');
+  const wrapper = document.getElementById('canvas-wrapper');
+
+  const panel = document.getElementById('control-panel');
+  const collapseBtn = document.getElementById('collapse-btn');
+  const openBtn = document.getElementById('floating-open-btn');
+  const stepTitleEl = document.getElementById('step-title');
+  const stepTextEl = document.getElementById('step-text');
+  const stepDotsContainer = document.getElementById('step-dots');
+  const prevStepBtn = document.getElementById('prev-step-btn');
+  const nextStepBtn = document.getElementById('next-step-btn');
+  const autoPlayBtn = document.getElementById('auto-play-btn');
+  const toggleLabelsBtn = document.getElementById('toggle-labels-btn');
+  const zoomInBtn = document.getElementById('zoom-in-btn');
+  const zoomOutBtn = document.getElementById('zoom-out-btn');
+  const resetCamBtn = document.getElementById('reset-cam-btn');
+  const viewBadge = document.getElementById('view-badge');
+  const tabBtns = document.querySelectorAll('.tab-btn[data-focus]');
+
+  const STEPS = [
+    {
+      title: '步驟 1／8：外耳收集聲波與鼓膜振動',
+      text: '外界產生的<strong>聲波（sound waves）</strong>由<strong>耳廓（auricle）</strong>收集，沿<strong>外耳道（external auditory canal）</strong>傳入，撞擊外耳與中耳交界的<strong>鼓膜（tympanic membrane）</strong>產生機械振動。',
+      focus: 'ear',
+      leftView: 'ear',
+      cam: { x: 440, y: 260, zoom: 1.6 }
+    },
+    {
+      title: '步驟 2／8：聽小骨槓桿放大敲擊卵圓窗（進入內耳）',
+      text: '鼓膜振動帶動<strong>鎚骨（malleus）、砧骨（incus）、鐙骨（stapes）</strong>。鐙骨底板敲擊內耳的<strong>卵圓窗（oval window）</strong>，將機械振動傳入<strong>前庭階（scala vestibuli）</strong>。',
+      focus: 'ear',
+      leftView: 'ear',
+      cam: { x: 580, y: 260, zoom: 1.75 }
+    },
+    {
+      title: '步驟 3／8：前庭階推進 ➔ 柯帝器與基底膜振動 ➔ 鼓階回流（圖2核心）',
+      text: '如<strong>圖2示意圖</strong>所示：液體不可壓縮，鐙骨推入<strong>卵圓窗</strong>使外淋巴壓力波沿<strong>前庭階（上腔）</strong>向前推進，壓迫<strong>基底膜與柯帝器（organ of Corti）</strong>；壓力波到達頂端<strong>耳蝸孔（helicotrema）</strong>連通轉向，沿<strong>鼓階（scala tympani）</strong>回流，最後推動<strong>圓窗（round window）</strong>向外凸出釋放壓力！',
+      focus: 'circuit',
+      leftView: 'circuit',
+      cam: { x: 620, y: 255, zoom: 1.45 }
+    },
+    {
+      title: '步驟 4／8：耳蝸徑向橫切面與三腔室關係',
+      text: '觀察<strong>耳蝸徑向橫切面</strong>：上方為<strong>前庭階</strong>、下方為<strong>鼓室階</strong>（皆含外淋巴），中央為充滿內淋巴的<strong>中階／耳蝸管</strong>。在基底膜上方坐落著關鍵聽覺受器——<strong>柯帝器</strong>。',
+      focus: 'cochlea',
+      cam: { x: 1220, y: 235, zoom: 1.95 }
+    },
+    {
+      title: '步驟 5／8：機械轉導與內毛細胞帶狀突觸釋放麩胺酸',
+      text: '基底膜振動使毛細胞頂端的<strong>靜纖毛（stereocilia）</strong>偏折，開啟機械敏感通道產生去極化，促使特化的<span class="tag-synapse">帶狀突觸（ribbon synapse）</span>胞吐釋放<strong>麩胺酸（Glutamate）</strong>！',
+      focus: 'corti',
+      cam: { x: 1110, y: 615, zoom: 1.85 }
+    },
+    {
+      title: '步驟 6／8：羅森塔氏管與雙極螺旋神經節神經元接手',
+      text: '螺旋神經節神經元位於耳蝸軸<strong>羅森塔氏管（Rosenthal\'s canal）</strong>內，為<strong>雙極神經元</strong>。其<strong>周圍突起</strong>接收毛細胞訊號；<strong>中樞軸突</strong>則匯集成<strong>前庭蝸神經（CN VIII）耳蝸神經支</strong>。',
+      focus: 'cochlea',
+      cam: { x: 1055, y: 255, zoom: 2.35 }
+    },
+    {
+      title: '步驟 7／8：抵達腦幹起點（橋腦延髓交界 ➔ 耳蝸神經核）',
+      text: 'CN VIII 耳蝸神經軸突在<strong>橋腦與延髓交界處</strong>進入腦幹，首先投射至<strong>耳蝸神經核（分為腹側 VCN 與背側 DCN）</strong>，再上行至<strong>上橄欖核（SOC）</strong>進行音源定位。',
+      focus: 'pathway',
+      cam: { x: 450, y: 645, zoom: 1.65 }
+    },
+    {
+      title: '步驟 8／8：上行聽覺路徑至大腦顳葉聽覺皮質',
+      text: '訊號經<strong>外側蹄系（LL）➔ 下丘（IC）➔ 視丘內膝狀體（MGB）</strong>，最終抵達<strong>大腦顳葉的聽覺皮質</strong>產生聽覺（也可開啟 3D 觀察立體音位行波）。',
+      focus: 'overview',
+      cam: { x: 760, y: 430, zoom: 0.92 }
+    }
+  ];
+
+  const WORLD_W = 1540;
+  const WORLD_H = 860;
+
+  let currentStep = 0;
+  let showLabels = true;
+  let isAutoCycle = false;
+  let autoTimer = 0;
+  let simTime = 0;
+  let leftViewMode = 'circuit'; // 'circuit' (圖2展開迴路) 或 'ear' (① 全耳與2.5圈螺旋耳蝸)
+
+  let cam = { x: 620, y: 310, zoom: 1.45 };
+  let targetCam = { x: 620, y: 310, zoom: 1.45 };
+  let isAnimatingCam = true;
+  let baseScale = 1;
+
+  STEPS.forEach((_, idx) => {
+    const dot = document.createElement('div');
+    dot.className = 'step-dot';
+    dot.title = `跳至步驟 ${idx + 1}`;
+    dot.addEventListener('click', () => {
+      stopAutoCycle();
+      setStep(idx);
+    });
+    stepDotsContainer.appendChild(dot);
+  });
+
+  function updateStepUI() {
+    const s = STEPS[currentStep];
+    stepTitleEl.textContent = s.title;
+    stepTextEl.innerHTML = s.text;
+
+    const dots = stepDotsContainer.querySelectorAll('.step-dot');
+    dots.forEach((d, idx) => {
+      d.classList.toggle('active', idx === currentStep);
+      d.classList.toggle('done', idx < currentStep);
+    });
+
+    tabBtns.forEach(btn => {
+      if (btn.dataset.focus === 'circuit') {
+        btn.classList.toggle('active', (s.focus === 'circuit' && leftViewMode === 'circuit') || (s.focus === 'ear' && leftViewMode === 'circuit'));
+      } else if (btn.dataset.focus === 'ear') {
+        btn.classList.toggle('active', (s.focus === 'ear' && leftViewMode === 'ear') || (s.focus === 'circuit' && leftViewMode === 'ear'));
+      } else {
+        btn.classList.toggle('active', btn.dataset.focus === s.focus);
+      }
+    });
+
+    const badgeMap = {
+      circuit: '視角：圖2. 前庭階與鼓階完整傳導迴路（卵圓窗 ➔ 圓窗）',
+      ear: '視角：① 全耳解剖與 2.5 圈螺旋耳蝸（含徑向切線 A–A\'）',
+      cochlea: '視角：② 耳蝸徑向橫切面與羅森塔氏管',
+      corti: '視角：③ 柯帝器與帶狀突觸',
+      pathway: '視角：④ 腦幹核團與聽皮質',
+      overview: '視角：全流程總覽'
+    };
+    if (s.focus === 'ear' || s.focus === 'circuit') {
+      viewBadge.textContent = (leftViewMode === 'circuit') ? badgeMap.circuit : badgeMap.ear;
+    } else {
+      viewBadge.textContent = badgeMap[s.focus] || badgeMap.overview;
+    }
+  }
+
+  function setStep(idx) {
+    currentStep = (idx + STEPS.length) % STEPS.length;
+    const s = STEPS[currentStep];
+    if (s.leftView) leftViewMode = s.leftView;
+    targetCam = { ...s.cam };
+    isAnimatingCam = true;
+    updateStepUI();
+  }
+
+  function focusSection(section) {
+    stopAutoCycle();
+    if (section === 'circuit') {
+      leftViewMode = 'circuit';
+      currentStep = 2;
+      targetCam = { x: 620, y: 255, zoom: 1.35 };
+    } else if (section === 'ear') {
+      leftViewMode = 'ear';
+      currentStep = 1;
+      targetCam = { x: 440, y: 260, zoom: 1.5 };
+    } else if (section === 'cochlea') {
+      currentStep = 3;
+      targetCam = { x: 1145, y: 240, zoom: 1.95 };
+    } else if (section === 'corti') {
+      currentStep = 4;
+      targetCam = { x: 1185, y: 620, zoom: 1.82 };
+    } else if (section === 'pathway') {
+      currentStep = 6;
+      targetCam = { x: 455, y: 645, zoom: 1.55 };
+    }
+    isAnimatingCam = true;
+    updateStepUI();
+  }
+
+  function stopAutoCycle() {
+    if (isAutoCycle) {
+      isAutoCycle = false;
+      autoPlayBtn.textContent = '▶ 自動循環';
+      autoPlayBtn.classList.remove('active-toggle');
+    }
+  }
+
+  collapseBtn.addEventListener('click', () => {
+    panel.classList.add('collapsed');
+    openBtn.style.display = 'flex';
+    setTimeout(() => {
+      resizeCanvas();
+      if (window.resizeCochlea3D) window.resizeCochlea3D();
+    }, 320);
+  });
+
+  openBtn.addEventListener('click', () => {
+    panel.classList.remove('collapsed');
+    openBtn.style.display = 'none';
+    setTimeout(() => {
+      resizeCanvas();
+      if (window.resizeCochlea3D) window.resizeCochlea3D();
+    }, 320);
+  });
+
+  prevStepBtn.addEventListener('click', () => {
+    stopAutoCycle();
+    setStep(currentStep - 1);
+  });
+
+  nextStepBtn.addEventListener('click', () => {
+    stopAutoCycle();
+    setStep(currentStep + 1);
+  });
+
+  autoPlayBtn.addEventListener('click', () => {
+    isAutoCycle = !isAutoCycle;
+    autoTimer = 0;
+    autoPlayBtn.textContent = isAutoCycle ? '⏸ 暫停循環' : '▶ 自動循環';
+    autoPlayBtn.classList.toggle('active-toggle', isAutoCycle);
+  });
+
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => focusSection(btn.dataset.focus));
+  });
+
+  toggleLabelsBtn.addEventListener('click', () => {
+    showLabels = !showLabels;
+    toggleLabelsBtn.textContent = showLabels ? '🏷️ 標籤：顯示' : '🏷️ 標籤：隱藏';
+    toggleLabelsBtn.classList.toggle('active-toggle', showLabels);
+    const threeLabels = document.getElementById('three-labels');
+    if (threeLabels) threeLabels.style.display = showLabels ? 'block' : 'none';
+  });
+
+  zoomInBtn.addEventListener('click', () => {
+    isAnimatingCam = true;
+    targetCam = { x: cam.x, y: cam.y, zoom: Math.min(5.5, cam.zoom * 1.28) };
+  });
+
+  zoomOutBtn.addEventListener('click', () => {
+    isAnimatingCam = true;
+    targetCam = { x: cam.x, y: cam.y, zoom: Math.max(0.55, cam.zoom / 1.28) };
+  });
+
+  resetCamBtn.addEventListener('click', () => {
+    targetCam = { ...STEPS[currentStep].cam };
+    isAnimatingCam = true;
+  });
+
+  let viewW = 800, viewH = 600, dpr = 1;
+  function resizeCanvas() {
+    const rect = wrapper.getBoundingClientRect();
+    viewW = Math.max(100, rect.width);
+    viewH = Math.max(100, rect.height);
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = viewW * dpr;
+    canvas.height = viewH * dpr;
+    baseScale = Math.min(viewW / WORLD_W, viewH / WORLD_H) * 0.95;
+  }
+  window.addEventListener('resize', resizeCanvas);
+  window.trigger2DResize = resizeCanvas;
+
+  const pointers = new Map();
+  let prevPinchDist = 0;
+  let prevPinchMid = null;
+
+  function screenToWorld(sx, sy) {
+    const s = baseScale * cam.zoom;
+    return {
+      x: cam.x + (sx - viewW / 2) / s,
+      y: cam.y + (sy - viewH / 2) / s
+    };
+  }
+
+  function worldToScreen(wx, wy) {
+    const s = baseScale * cam.zoom;
+    return {
+      x: viewW / 2 + (wx - cam.x) * s,
+      y: viewH / 2 + (wy - cam.y) * s
+    };
+  }
+
+  let downPos = { x: 0, y: 0 };
+  canvas.addEventListener('pointerdown', e => {
+    downPos = { x: e.clientX, y: e.clientY };
+    canvas.setPointerCapture(e.pointerId);
+    const rect = canvas.getBoundingClientRect();
+    pointers.set(e.pointerId, { x: e.clientX - rect.left, y: e.clientY - rect.top });
+    isAnimatingCam = false;
+
+    if (pointers.size === 2) {
+      const pts = Array.from(pointers.values());
+      prevPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      prevPinchMid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+    }
+  });
+
+  canvas.addEventListener('pointermove', e => {
+    if (!pointers.has(e.pointerId)) return;
+    const rect = canvas.getBoundingClientRect();
+    const curr = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const prev = pointers.get(e.pointerId);
+    pointers.set(e.pointerId, curr);
+
+    if (pointers.size === 1) {
+      const s = baseScale * cam.zoom;
+      cam.x -= (curr.x - prev.x) / s;
+      cam.y -= (curr.y - prev.y) / s;
+      clampCam();
+    } else if (pointers.size === 2) {
+      const pts = Array.from(pointers.values());
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+
+      if (prevPinchDist > 10) {
+        const worldBefore = screenToWorld(prevPinchMid.x, prevPinchMid.y);
+        const factor = dist / prevPinchDist;
+        cam.zoom = Math.max(0.55, Math.min(5.5, cam.zoom * factor));
+        const sNew = baseScale * cam.zoom;
+        cam.x = worldBefore.x - (mid.x - viewW / 2) / sNew;
+        cam.y = worldBefore.y - (mid.y - viewH / 2) / sNew;
+        clampCam();
+      }
+      prevPinchDist = dist;
+      prevPinchMid = mid;
+    }
+  });
+
+  function removePointer(e) {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) {
+      prevPinchDist = 0;
+      prevPinchMid = null;
+    }
+  }
+  canvas.addEventListener('pointerup', removePointer);
+  canvas.addEventListener('pointercancel', removePointer);
+
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    isAnimatingCam = false;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const worldPt = screenToWorld(mx, my);
+    const factor = e.deltaY < 0 ? 1.13 : 1 / 1.13;
+    cam.zoom = Math.max(0.55, Math.min(5.5, cam.zoom * factor));
+    const sNew = baseScale * cam.zoom;
+    cam.x = worldPt.x - (mx - viewW / 2) / sNew;
+    cam.y = worldPt.y - (my - viewH / 2) / sNew;
+    clampCam();
+  }, { passive: false });
+
+  function clampCam() {
+    cam.x = Math.max(-100, Math.min(WORLD_W + 100, cam.x));
+    cam.y = Math.max(-100, Math.min(WORLD_H + 100, cam.y));
+  }
+
+  // 點擊左上方切換按鈕膠囊（切換「圖2展開傳導迴路」與「① 全耳2.5圈螺旋耳蝸」）
+  canvas.addEventListener('click', e => {
+    if (Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) > 7) return;
+    const rect = canvas.getBoundingClientRect();
+    const clickWorld = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+    if (clickWorld.x >= 590 && clickWorld.x <= 845 && clickWorld.y >= 40 && clickWorld.y <= 85) {
+      leftViewMode = (leftViewMode === 'circuit') ? 'ear' : 'circuit';
+      updateStepUI();
+    }
+  });
+
+  let labelQueue = [];
+  function addLabel(wx, wy, ox, oy, text, color = '#f8fafc', highlight = false, minZoom = 0) {
+    if (!showLabels || cam.zoom < minZoom) return;
+    labelQueue.push({ wx, wy, ox, oy, text, color, highlight });
+  }
+
+  function drawRoundedRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
+  // ==========================================
+  // 【新增核心重點】區塊 ①：完全呈現使用者上傳「圖2」的耳蝸展開與前庭階／鼓階流體迴路！
+  // (外耳 ➔ 鼓膜 ➔ 鎚/砧/鐙骨 ➔ 卵圓窗 ➔ 前庭階 ➔ 柯帝器與基底膜 ➔ 耳蝸孔 ➔ 鼓階 ➔ 圓窗)
+  // ==========================================
+  function drawFigure2FluidCircuit() {
+    const vibPhase = simTime * 7.5;
+    const stapesDisplacement = Math.sin(vibPhase) * 7.0; // 鐙骨推動位移
+
+    ctx.save();
+    drawRoundedRect(ctx, 35, 35, 810, 420, 20);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.65)';
+    ctx.fill();
+    ctx.strokeStyle = (currentStep <= 2) ? 'rgba(56, 189, 248, 0.65)' : 'rgba(148, 163, 184, 0.2)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = 'bold 16.5px sans-serif';
+    ctx.fillText('🌊 圖2：外耳／中耳與耳蝸展開傳導迴路（前庭階 ➔ 耳蝸孔 ➔ 鼓階 ➔ 圓窗）', 55, 66);
+
+    // 切換按鈕膠囊 (World 座標 x: 605, y: 46, w: 225, h: 30)
+    drawRoundedRect(ctx, 605, 46, 225, 30, 8);
+    ctx.fillStyle = 'rgba(251, 191, 36, 0.22)';
+    ctx.fill();
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 12.5px sans-serif';
+    ctx.fillText('🐚 切換至：① 2.5圈螺旋耳蝸 ➔', 615, 66);
+
+    // 1. 外耳廓與外耳道 (Orange)
+    ctx.save();
+    ctx.fillStyle = '#ea580c';
+    ctx.strokeStyle = '#f97316';
+    ctx.lineWidth = 3;
+
+    // 耳廓 (Auricle)
+    ctx.beginPath();
+    ctx.moveTo(115, 115);
+    ctx.bezierCurveTo(90, 85, 45, 125, 55, 185);
+    ctx.bezierCurveTo(65, 235, 78, 275, 115, 290);
+    ctx.lineTo(135, 275);
+    ctx.bezierCurveTo(105, 255, 95, 215, 95, 175);
+    ctx.bezierCurveTo(95, 135, 125, 135, 115, 115);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // 外耳道 (External auditory canal - 漏斗管)
+    ctx.fillStyle = '#c2410c';
+    ctx.beginPath();
+    ctx.moveTo(115, 235);
+    ctx.quadraticCurveTo(205, 255, 275, 230);
+    ctx.lineTo(275, 305);
+    ctx.quadraticCurveTo(205, 295, 115, 280);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // 聲波波形動畫
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    for (let x = 120; x <= 265; x += 3) {
+      const y = 268 + Math.sin(x * 0.09 - vibPhase) * 11;
+      if (x === 120) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // 2. 鼓膜 (Tympanic membrane)
+    const tympX = 278;
+    const tympDeflect = stapesDisplacement * 0.7;
+    ctx.strokeStyle = '#fde047';
+    ctx.lineWidth = 4.5;
+    ctx.beginPath();
+    ctx.moveTo(tympX, 222);
+    ctx.quadraticCurveTo(tympX + 6 + tympDeflect, 268, tympX, 314);
+    ctx.stroke();
+
+    // 3. 中耳鼓室 (Pink 腔體)
+    ctx.save();
+    ctx.fillStyle = 'rgba(219, 39, 119, 0.45)';
+    ctx.strokeStyle = '#db2777';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(278, 205);
+    ctx.bezierCurveTo(320, 165, 410, 155, 435, 215);
+    ctx.lineTo(435, 345);
+    ctx.bezierCurveTo(395, 385, 310, 375, 278, 330);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // 三小骨：鎚骨 (Malleus)、砧骨 (Incus)、鐙骨 (Stapes)
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 2;
+
+    // 鎚骨
+    const mShift = stapesDisplacement * 0.6;
+    ctx.beginPath();
+    ctx.moveTo(tympX + 4 + tympDeflect, 268);
+    ctx.lineTo(322 + mShift, 205);
+    ctx.arc(326 + mShift, 200, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // 砧骨
+    const iShift = stapesDisplacement * 0.75;
+    ctx.beginPath();
+    ctx.moveTo(332 + mShift, 202);
+    ctx.lineTo(375 + iShift, 212);
+    ctx.lineTo(365 + iShift, 255);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // 鐙骨 (Stapes) 與鐙骨底板敲擊卵圓窗
+    const stapesX = 372 + stapesDisplacement;
+    ctx.strokeStyle = '#fef08a';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.moveTo(stapesX, 255);
+    ctx.lineTo(432 + stapesDisplacement, 245);
+    ctx.moveTo(stapesX, 255);
+    ctx.lineTo(432 + stapesDisplacement, 265);
+    ctx.moveTo(432 + stapesDisplacement, 240);
+    ctx.lineTo(432 + stapesDisplacement, 270); // 鐙骨底板
+    ctx.stroke();
+    ctx.restore();
+
+    // 4. 【核心展示】：耳蝸展開的雙層 U 型流體迴路（圖2樣式）
+    // 上層：前庭階 (Scala vestibuli)
+    // 中隔：基底膜與柯帝器 (Organ of Corti)
+    // 頂部末端：耳蝸孔 (Helicotrema) 流體連通
+    // 下層：鼓階 (Scala tympani) ➔ 圓窗 (Round window)
+    const cochleaStartX = 440;
+    const cochleaY = 255;
+    const cochleaLen = 330;
+
+    ctx.save();
+    // 卵圓窗膜 (隨鐙骨推入，內凹)
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(cochleaStartX, 240);
+    ctx.quadraticCurveTo(cochleaStartX + 4 + stapesDisplacement, 255, cochleaStartX, 270);
+    ctx.stroke();
+
+    // 圓窗膜 (液體不可壓縮，當鐙骨推入時，圓窗同步向外凸出釋放壓力！)
+    const roundWindowBulge = -stapesDisplacement * 0.95;
+    ctx.strokeStyle = '#a855f7';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(cochleaStartX, 305);
+    ctx.quadraticCurveTo(cochleaStartX - 4 + roundWindowBulge, 320, cochleaStartX, 335);
+    ctx.stroke();
+
+    // 耳蝸外側骨迷路 U 形展開管壁 (藍色外壁)
+    ctx.strokeStyle = '#0284c7';
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    // 上壁 (前庭階頂)
+    ctx.moveTo(cochleaStartX, 235);
+    ctx.quadraticCurveTo(600, 220, 715, 235);
+    ctx.bezierCurveTo(775, 245, 785, 335, 715, 345);
+    // 下壁 (鼓階底)
+    ctx.quadraticCurveTo(600, 355, cochleaStartX, 340);
+    ctx.stroke();
+
+    // 腔室內淋巴液背景漸層
+    const fluidGrad = ctx.createLinearGradient(cochleaStartX, 235, 780, 350);
+    fluidGrad.addColorStop(0, 'rgba(14, 165, 233, 0.35)');
+    fluidGrad.addColorStop(0.5, 'rgba(56, 189, 248, 0.45)');
+    fluidGrad.addColorStop(1, 'rgba(2, 132, 199, 0.35)');
+    ctx.fillStyle = fluidGrad;
+    ctx.beginPath();
+    ctx.moveTo(cochleaStartX, 235);
+    ctx.quadraticCurveTo(600, 220, 715, 235);
+    ctx.bezierCurveTo(775, 245, 785, 335, 715, 345);
+    ctx.quadraticCurveTo(600, 355, cochleaStartX, 340);
+    ctx.closePath();
+    ctx.fill();
+
+    // 中央中隔：基底膜 (Basilar Membrane) 與 柯帝器 (Organ of Corti)
+    // 中隔不封到底，保留頂端「耳蝸孔 (Helicotrema)」供流體連通！
+    const bmEndY = 290;
+    const bmEndX = 715;
+
+    // 基底膜行波起伏
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 4.5;
+    ctx.beginPath();
+    ctx.moveTo(cochleaStartX, 288);
+    for (let x = cochleaStartX; x <= bmEndX; x += 10) {
+      const u = (x - cochleaStartX) / (bmEndX - cochleaStartX);
+      const wave = Math.sin(u * 14 - vibPhase) * 5.5 * Math.sin(u * Math.PI);
+      ctx.lineTo(x, 288 + wave);
+    }
+    ctx.stroke();
+
+    // 柯帝器 (Organ of Corti - 綠色＋粉紅顆粒覆蓋在基底膜上)
+    ctx.fillStyle = '#22c55e';
+    ctx.strokeStyle = '#15803d';
+    ctx.lineWidth = 2;
+    for (let x = cochleaStartX + 20; x <= bmEndX - 15; x += 22) {
+      const u = (x - cochleaStartX) / (bmEndX - cochleaStartX);
+      const wave = Math.sin(u * 14 - vibPhase) * 5.5 * Math.sin(u * Math.PI);
+      ctx.beginPath();
+      ctx.rect(x - 6, 280 + wave, 12, 6);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // 動態紅色流體壓力波箭頭（完全符合圖2中紅色推進箭頭）
+    ctx.strokeStyle = '#ef4444';
+    ctx.fillStyle = '#ef4444';
+    ctx.lineWidth = 2.5;
+
+    // 前庭階向前流動的 4 個紅色箭頭
+    for (let i = 0; i < 4; i++) {
+      const arrowProgress = ((simTime * 0.65 + i * 0.25) % 1);
+      const ax = cochleaStartX + 25 + arrowProgress * (bmEndX - cochleaStartX - 20);
+      const ay = 255 + Math.sin(ax * 0.02) * 4;
+
+      ctx.beginPath();
+      ctx.moveTo(ax - 12, ay); ctx.lineTo(ax + 8, ay);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(ax + 8, ay); ctx.lineTo(ax, ay - 4); ctx.lineTo(ax, ay + 4);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // 耳蝸孔 (Helicotrema) 頂部 U 轉箭頭
+    const loopPhase = (simTime * 0.65) % 1;
+    const loopAng = -Math.PI * 0.45 + loopPhase * Math.PI * 0.9;
+    const lax = bmEndX + Math.cos(loopAng) * 22;
+    const lay = 290 + Math.sin(loopAng) * 26;
+    ctx.beginPath();
+    ctx.arc(lax, lay, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 鼓階向後回流圓窗的 4 個紅色箭頭
+    for (let i = 0; i < 4; i++) {
+      const arrowProgress = ((simTime * 0.65 + i * 0.25) % 1);
+      const ax = bmEndX - 15 - arrowProgress * (bmEndX - cochleaStartX - 20);
+      const ay = 322 + Math.sin(ax * 0.02) * 4;
+
+      ctx.beginPath();
+      ctx.moveTo(ax + 12, ay); ctx.lineTo(ax - 8, ay);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(ax - 8, ay); ctx.lineTo(ax, ay - 4); ctx.lineTo(ax, ay + 4);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // 註冊圖2標籤
+    addLabel(85, 155, -35, -28, '耳 (auricle)', '#f97316');
+    addLabel(195, 245, -20, -32, '外耳道 (external auditory canal)', '#cbd5e1');
+    addLabel(278, 318, -25, 42, '鼓膜 (tympanic membrane)', '#fde047');
+    addLabel(325, 185, -20, -38, '鎚骨 (malleus)', '#ffffff');
+    addLabel(375, 195, 15, -38, '砧骨 (incus)', '#ffffff');
+    addLabel(405, 275, -25, 38, '鐙骨 (stapes)', '#fef08a');
+    addLabel(440, 245, -15, -42, '卵圓窗 (oval window 鐙骨推入)', '#38bdf8', true);
+    addLabel(440, 325, -15, 42, '圓窗 (round window 凸出釋壓)', '#a855f7', true);
+    addLabel(585, 248, 0, -32, '前庭階 (scala vestibuli 淋巴向前推進)', '#38bdf8', true);
+    addLabel(605, 285, 25, 26, '柯帝器與基底膜 (organ of Corti / basilar membrane)', '#22c55e', true);
+    addLabel(735, 290, 48, 0, '耳蝸孔 (helicotrema 頂端相通)', '#fde047', true);
+    addLabel(585, 325, 0, 36, '鼓階 (scala tympani 淋巴回流向圓窗)', '#0369a1', true);
+    ctx.restore();
+  }
+
+  // ==========================================
+  // 區塊 ①-B：全耳解剖與 2.5 圈螺旋耳蝸（含徑向切線 A–A' 指向 ②）
+  // ==========================================
+  function drawWholeEarSection(amps) {
+    const phase = simTime * 6.5;
+    const vib = Math.sin(phase) * amps.middleEar;
+
+    ctx.save();
+    drawRoundedRect(ctx, 35, 35, 810, 420, 20);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.65)';
+    ctx.fill();
+    ctx.strokeStyle = (currentStep <= 2) ? 'rgba(56, 189, 248, 0.65)' : 'rgba(148, 163, 184, 0.2)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // 標題
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = 'bold 16.5px sans-serif';
+    ctx.fillText('① 全耳解剖與 2.5 圈螺旋耳蝸（含徑向切線 A–A\' 取樣線）', 55, 66);
+
+    // 切換按鈕膠囊 (World 座標 x: 605, y: 46, w: 225, h: 30)
+    drawRoundedRect(ctx, 605, 46, 225, 30, 8);
+    ctx.fillStyle = 'rgba(14, 165, 233, 0.22)';
+    ctx.fill();
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = '#bae6fd';
+    ctx.font = 'bold 12.5px sans-serif';
+    ctx.fillText('🌊 切換至：圖2 展開傳導迴路 ➔', 615, 66);
+
+    // 外耳/中耳/內耳 分區虛線與底標
+    ctx.save();
+    ctx.setLineDash([5, 5]);
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(345, 90); ctx.lineTo(345, 430); // 外耳｜中耳
+    ctx.moveTo(480, 90); ctx.lineTo(480, 430); // 中耳｜內耳
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.font = 'bold 12.5px sans-serif';
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText('【外耳】', 200, 420);
+    ctx.fillText('【中耳】', 390, 420);
+    ctx.fillText('【內耳（半規管與 2.5 圈耳蝸）】', 550, 420);
+
+    // 外耳廓 Pinna
+    ctx.save();
+    const pinnaGrad = ctx.createLinearGradient(90, 150, 180, 390);
+    pinnaGrad.addColorStop(0, '#f3b39c');
+    pinnaGrad.addColorStop(0.5, '#df957b');
+    pinnaGrad.addColorStop(1, '#c87a60');
+    ctx.fillStyle = pinnaGrad;
+    ctx.strokeStyle = '#f8cbb8';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(175, 220);
+    ctx.bezierCurveTo(175, 145, 100, 130, 98, 220);
+    ctx.bezierCurveTo(95, 300, 110, 380, 155, 370);
+    ctx.bezierCurveTo(175, 365, 175, 325, 172, 295);
+    ctx.lineTo(155, 285);
+    ctx.bezierCurveTo(138, 285, 130, 230, 160, 225);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // 耳廓內摺輪廓
+    ctx.strokeStyle = 'rgba(130, 60, 45, 0.55)';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(152, 175);
+    ctx.bezierCurveTo(120, 175, 118, 270, 140, 325);
+    ctx.stroke();
+    ctx.restore();
+
+    // 外耳道
+    ctx.save();
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.7)';
+    ctx.beginPath();
+    ctx.moveTo(165, 225);
+    ctx.quadraticCurveTo(250, 235, 345, 220);
+    ctx.lineTo(345, 295);
+    ctx.quadraticCurveTo(250, 285, 165, 295);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = '#e09f87';
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(172, 225); ctx.quadraticCurveTo(250, 235, 342, 220);
+    ctx.moveTo(172, 295); ctx.quadraticCurveTo(250, 285, 342, 295);
+    ctx.stroke();
+    ctx.restore();
+
+    // 聲波漣漪
+    ctx.save();
+    for (let i = 0; i < 5; i++) {
+      const p = ((simTime * 0.85 + i / 5) % 1);
+      const wx = 65 + p * 275;
+      const alpha = Math.sin(p * Math.PI) * 0.75;
+      ctx.strokeStyle = `rgba(56, 189, 248, ${alpha.toFixed(3)})`;
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.arc(wx, 260, 26, -0.6, 0.6);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // 鼓膜 (Tympanic membrane)
+    const drumDeflect = vib * 7.0;
+    ctx.strokeStyle = '#fde047';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(345, 220);
+    ctx.quadraticCurveTo(350 + drumDeflect, 258, 345, 295);
+    ctx.stroke();
+
+    // 中耳聽骨鏈 (鎚骨、砧骨、鐙骨)
+    const mShift = vib * 4.5;
+    const sShift = vib * 5.5;
+
+    ctx.save();
+    ctx.fillStyle = '#f8fafc';
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 2;
+
+    // 鎚骨
+    ctx.beginPath();
+    ctx.moveTo(348 + drumDeflect * 0.8, 258);
+    ctx.lineTo(368 + mShift * 0.6, 215);
+    ctx.arc(374 + mShift * 0.6, 212, 9, Math.PI, Math.PI * 2.8);
+    ctx.lineTo(354 + drumDeflect * 0.8, 260);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // 砧骨
+    ctx.beginPath();
+    ctx.arc(390 + mShift * 0.7, 212, 9, 0, Math.PI * 2);
+    ctx.moveTo(394 + mShift * 0.7, 218);
+    ctx.lineTo(412 + sShift * 0.85, 245);
+    ctx.lineTo(404 + sShift * 0.85, 248);
+    ctx.lineTo(384 + mShift * 0.7, 218);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // 鐙骨
+    const stX = 412 + sShift;
+    ctx.strokeStyle = '#fef08a';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(stX, 246);
+    ctx.lineTo(stX + 28, 237);
+    ctx.moveTo(stX, 246);
+    ctx.lineTo(stX + 28, 255);
+    ctx.moveTo(stX + 28, 233);
+    ctx.lineTo(stX + 28, 259); // 鐙骨底板
+    ctx.stroke();
+    ctx.restore();
+
+    // 內耳：前庭 + 半規管雙環 + 2.5 圈螺旋耳蝸
+    ctx.save();
+    // 半規管
+    ctx.strokeStyle = '#7dd3fc';
+    ctx.lineWidth = 7;
+    ctx.globalAlpha = 0.45;
+    ctx.beginPath();
+    ctx.arc(485, 185, 28, Math.PI * 0.7, Math.PI * 2.1);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(510, 198, 22, Math.PI * 1.0, Math.PI * 2.3);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // 前庭與卵圓窗
+    ctx.fillStyle = '#0284c7';
+    ctx.beginPath();
+    ctx.ellipse(475, 246, 35, 22, 0.1, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 2.5 圈螺旋耳蝸本體
+    const cx = 585, cy = 270;
+    // 繪製蝸殼漸層螺旋管
+    for (let t = 0; t < Math.PI * 5.0; t += 0.08) {
+      const r = 68 * (1 - t / (Math.PI * 5.6));
+      const x = cx + Math.cos(t + 2.1) * r;
+      const y = cy + Math.sin(t + 2.1) * r;
+      const tubeR = 19 * (1 - t / (Math.PI * 7.0));
+
+      const waveGlow = amps.lymph * 0.5 * (0.5 + 0.5 * Math.sin(t * 2.5 - simTime * 7));
+      ctx.fillStyle = `rgb(${Math.round(20 + waveGlow * 80)}, ${Math.round(100 + waveGlow * 120)}, ${Math.round(180 + waveGlow * 75)})`;
+      ctx.beginPath();
+      ctx.arc(x, y, tubeR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 螺旋輪廓線
+    ctx.strokeStyle = '#7dd3fc';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    for (let t = 0; t < Math.PI * 5.0; t += 0.07) {
+      const r = 68 * (1 - t / (Math.PI * 5.6));
+      const x = cx + Math.cos(t + 2.1) * r;
+      const y = cy + Math.sin(t + 2.1) * r;
+      if (t === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    // 中央耳蝸軸 (Modiolus) 與 羅森塔氏管
+    ctx.fillStyle = '#475569';
+    ctx.beginPath();
+    ctx.arc(cx - 3, cy + 2, 16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#e879f9';
+    ctx.beginPath();
+    ctx.arc(cx - 3, cy + 2, 7, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 前庭蝸神經 (CN VIII 耳蝸支) 由耳蝸軸向下穿出
+    ctx.strokeStyle = '#facc15';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(cx - 3, cy + 18);
+    ctx.quadraticCurveTo(cx - 5, 360, cx - 25, 410);
+    ctx.stroke();
+
+    // ★ 關鍵：徑向橫切取樣線 A–A'（內側 A 耳蝸軸 ➔ 外側 A' 外壁）
+    ctx.save();
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 3.0;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    // 從耳蝸軸 (A) 往第一圈基部外側壁 (A') 徑向切出
+    const cutAx = cx - 10, cutAy = cy + 22;
+    const cutApx = cx + 58, cutApy = cy + 62;
+    ctx.moveTo(cutAx, cutAy);
+    ctx.lineTo(cutApx, cutApy);
+    ctx.stroke();
+    ctx.restore();
+
+    // 標註 A 與 A'
+    ctx.fillStyle = '#facc15';
+    ctx.font = 'bold 13px sans-serif';
+    ctx.fillText('A (內側軸)', cutAx - 22, cutAy - 8);
+    ctx.fillText("A' (外側壁)", cutApx + 6, cutApy + 14);
+
+    // 指引箭頭虛線指向右側 ② 號卡片
+    ctx.save();
+    ctx.strokeStyle = 'rgba(251, 191, 36, 0.65)';
+    ctx.lineWidth = 2.2;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    ctx.moveTo(cutApx + 10, cutApy);
+    ctx.quadraticCurveTo(740, cutApy - 10, 875, 235);
+    ctx.stroke();
+
+    // 箭頭
+    ctx.fillStyle = '#fbbf24';
+    ctx.beginPath();
+    ctx.moveTo(875, 235); ctx.lineTo(860, 228); ctx.lineTo(860, 242);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    ctx.restore();
+
+    // 註冊全耳標籤
+    addLabel(120, 195, -35, -28, '耳廓 (Pinna / Auricle)', '#f8cbb8');
+    addLabel(240, 260, 0, -32, '外耳道 (External canal)', '#cbd5e1');
+    addLabel(345, 275, -25, 38, '鼓膜 (Tympanic membrane)', '#fde047');
+    addLabel(380, 190, 0, -32, '鎚骨與砧骨 (Ossicles)', '#ffffff');
+    addLabel(440, 246, 15, -34, '鐙骨推入卵圓窗', '#fef08a');
+    addLabel(495, 165, 0, -28, '半規管 (Semicircular canals)', '#7dd3fc');
+    addLabel(585, 230, 45, -34, '2.5 圈螺旋耳蝸 (Cochlea)', '#38bdf8', true);
+    addLabel((cutAx + cutApx) / 2, (cutAy + cutApy) / 2, 25, 32, "橫切取樣線 A–A' ➔ 指向右側 ②", '#fbbf24', true);
+    addLabel(cx - 25, 410, -10, 25, '前庭蝸神經 CN VIII (耳蝸神經支)', '#facc15', true);
+
+    ctx.restore();
+  }
+
+  // 區塊 ②：耳蝸單圈徑向橫切面
+  function drawCochleaCrossSection(amps) {
+    const cx = 1235, cy = 235, R = 132;
+    const wave = Math.sin(simTime * 6.5) * amps.lymph;
+
+    ctx.save();
+    drawRoundedRect(ctx, 875, 35, 630, 390, 20);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.68)';
+    ctx.fill();
+    ctx.strokeStyle = (currentStep === 3 || currentStep === 5) ? 'rgba(251, 191, 36, 0.65)' : 'rgba(148, 163, 184, 0.18)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#fbbf24';
+    ctx.font = 'bold 17px sans-serif';
+    ctx.fillText("② 耳蝸單圈徑向橫切面 A–A'（左：內側耳蝸軸／羅森塔氏管 ➔ 右：外側壁）", 895, 66);
+
+    ctx.font = 'bold 12.5px sans-serif';
+    ctx.fillStyle = '#c084fc';
+    ctx.fillText('◀ 內側 A（耳蝸軸 Modiolus／羅森塔氏管側）', 895, 90);
+    ctx.fillStyle = '#38bdf8';
+    ctx.fillText("外側 A'（螺旋韌帶／血管紋側）▶", 1285, 90);
+
+    ctx.fillStyle = '#334155';
+    ctx.strokeStyle = '#64748b';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.roundRect(905, cy - 85, 215, 175, 18);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#334155';
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R + 11, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.clip();
+
+    ctx.fillStyle = '#0c4a6e';
+    ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+
+    ctx.fillStyle = '#083344';
+    ctx.beginPath();
+    ctx.moveTo(cx - R + 30, cy + 26);
+    ctx.quadraticCurveTo(cx + 12, cy + 26 + wave * 9, cx + R, cy + 24);
+    ctx.lineTo(cx + R, cy + R);
+    ctx.lineTo(cx - R, cy + R);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#0284c7';
+    ctx.beginPath();
+    ctx.moveTo(cx - R + 42, cy + 24);
+    ctx.lineTo(cx + R - 14, cy - 70);
+    ctx.lineTo(cx + R, cy + 24);
+    ctx.quadraticCurveTo(cx + 12, cy + 26 + wave * 9, cx - R + 42, cy + 24);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#be123c';
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, -0.52, 0.18);
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = '#e11d48';
+    ctx.stroke();
+
+    ctx.fillStyle = '#64748b';
+    ctx.beginPath();
+    ctx.moveTo(cx - R, cy - 12);
+    ctx.lineTo(cx - R + 52, cy + 16);
+    ctx.lineTo(cx - R + 52, cy + 32);
+    ctx.lineTo(cx - R, cy + 48);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = '#bae6fd';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(cx - R + 48, cy + 18);
+    ctx.lineTo(cx + R - 12, cy - 70);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 4.5;
+    ctx.beginPath();
+    ctx.moveTo(cx - R + 50, cy + 25);
+    ctx.quadraticCurveTo(cx + 22, cy + 25 + wave * 9, cx + R - 4, cy + 24);
+    ctx.stroke();
+
+    const cortiY = cy + 23 + wave * 6.5;
+    ctx.fillStyle = '#f472b6';
+    ctx.beginPath();
+    ctx.roundRect(cx - 16, cortiY - 22, 68, 21, 6);
+    ctx.fill();
+
+    ctx.strokeStyle = '#fde047';
+    ctx.lineWidth = 3.2;
+    ctx.beginPath();
+    ctx.moveTo(cx - 48, cy + 12);
+    ctx.quadraticCurveTo(cx - 4, cortiY - 26, cx + 42, cortiY - 22);
+    ctx.stroke();
+    ctx.restore();
+
+    const rcX = 1035, rcY = cy + 18;
+    ctx.save();
+    ctx.fillStyle = 'rgba(88, 28, 135, 0.48)';
+    ctx.strokeStyle = currentStep === 5 ? '#e879f9' : '#a855f7';
+    ctx.lineWidth = currentStep === 5 ? 3 : 2;
+    ctx.beginPath();
+    ctx.ellipse(rcX, rcY, 54, 46, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    const sgnOffsets = [-22, 0, 22];
+    sgnOffsets.forEach((dyOffset, idx) => {
+      const sy = rcY + dyOffset;
+      const sx = rcX + (idx === 1 ? 4 : -4);
+
+      ctx.strokeStyle = '#f472b6';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(cx - 8, cy + 20);
+      ctx.quadraticCurveTo(cx - 85, cy + 20 + dyOffset * 0.4, sx + 14, sy);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#fde047';
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.moveTo(sx - 14, sy);
+      ctx.quadraticCurveTo(955, sy + dyOffset * 0.2, 912, cy + 55);
+      ctx.stroke();
+
+      ctx.fillStyle = currentStep === 5 ? '#d946ef' : '#a855f7';
+      ctx.strokeStyle = '#fdf4ff';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, 14, 8.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#3b0764';
+      ctx.beginPath();
+      ctx.arc(sx, sy, 4, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.restore();
+
+    addLabel(cx - 10, cy - 72, -10, -32, '前庭階 (外淋巴)', '#bae6fd', currentStep === 3, 1.1);
+    addLabel(cx + 55, cy - 18, 58, -16, '中階／耳蝸管 (高 K⁺ 內淋巴)', '#38bdf8', currentStep === 3, 1.1);
+    addLabel(cx + 5, cy + 84, 15, 36, '鼓室階 (外淋巴)', '#94a3b8', currentStep === 3, 1.1);
+    addLabel(rcX, rcY - 44, -25, -42, "羅森塔氏管 (Rosenthal's canal)", '#e879f9', currentStep === 5);
+    addLabel(rcX, rcY + 2, -38, 56, '螺旋神經節雙極神經元', '#f0abfc', currentStep === 5);
+    ctx.restore();
+  }
+
+  // 區塊 ③：柯帝器微觀橫切面
+  function drawCortiAndRibbonSynapse(amps) {
+    const bx = 910, by = 685;
+    const bw = 290;
+    const wave = Math.sin(simTime * 6.5) * amps.hairCell;
+    const dy = wave * 11;
+
+    ctx.save();
+    drawRoundedRect(ctx, 875, 445, 630, 380, 20);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.76)';
+    ctx.fill();
+    ctx.strokeStyle = (currentStep === 4) ? 'rgba(244, 114, 182, 0.75)' : 'rgba(148, 163, 184, 0.18)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#f472b6';
+    ctx.font = 'bold 17px sans-serif';
+    ctx.fillText('③ 機械轉導（靜纖毛偏折）與內毛細胞帶狀突觸（Ribbon Synapse）釋放麩胺酸', 895, 476);
+
+    const getBaseY = (x) => {
+      const t = Math.max(0, Math.min(1, (x - 915) / (bw - 10)));
+      return by + 2 * (1 - t) * t * (dy * 1.35);
+    };
+
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(925, by);
+    ctx.quadraticCurveTo(1055, by + dy * 1.35, bx + bw, by);
+    ctx.stroke();
+
+    const hairCells = [
+      { x: 978, isIHC: true, label: '內毛細胞 (IHC)' },
+      { x: 1068, isIHC: false, label: '外毛細胞 1' },
+      { x: 1110, isIHC: false, label: '外毛細胞 2' },
+      { x: 1152, isIHC: false, label: '外毛細胞 3' }
+    ];
+
+    const bendX = -wave * 10.5;
+    const isDepolarized = wave < -0.1 && amps.hairCell > 0.25;
+
+    hairCells.forEach((hc) => {
+      const cyBase = getBaseY(hc.x);
+      const cellTop = cyBase - 62;
+
+      ctx.fillStyle = isDepolarized ? (hc.isIHC ? '#fb7185' : '#f43f5e') : (hc.isIHC ? '#ec4899' : '#be185d');
+      ctx.strokeStyle = isDepolarized ? '#fef08a' : '#fbcfe8';
+      ctx.lineWidth = hc.isIHC ? 2.4 : 1.5;
+      ctx.beginPath();
+      if (hc.isIHC) ctx.roundRect(hc.x - 14, cellTop, 28, 48, 12);
+      else ctx.roundRect(hc.x - 10, cellTop, 20, 48, 8);
+      ctx.fill();
+      ctx.stroke();
+    });
+
+    const zoomX = 1345;
+    const zoomTopY = 588;
+    const zoomBotY = 715;
+
+    // 帶狀突觸
+    const ribX = zoomX, ribY = zoomBotY - 24;
+    ctx.fillStyle = '#fb923c';
+    ctx.strokeStyle = '#fef08a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(ribX, ribY, 11, 18, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    addLabel(1065, 574, -20, -34, '覆膜 (Tectorial membrane)', '#7dd3fc', currentStep === 4);
+    addLabel(978, getBaseY(978) - 35, -52, -25, '內毛細胞 (IHC)', '#fb7185', currentStep === 4);
+    addLabel(1358, 690, 62, -12, '帶狀突觸 (Ribbon Synapse)', '#fb923c', currentStep === 4);
+    addLabel(1355, 728, 62, 14, '釋放麩胺酸 (Glutamate)', '#fbbf24', currentStep === 4);
+    ctx.restore();
+  }
+
+  // 區塊 ④：中樞聽覺傳導路徑
+  function drawAscendingBrainstemPathway(amps) {
+    ctx.save();
+    drawRoundedRect(ctx, 35, 475, 810, 350, 20);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+    ctx.fill();
+    ctx.strokeStyle = currentStep >= 6 ? 'rgba(167, 139, 250, 0.75)' : 'rgba(148, 163, 184, 0.18)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#c084fc';
+    ctx.font = 'bold 17px sans-serif';
+    ctx.fillText('④ 腦幹起點（耳蝸神經核）與中樞聽覺上行路徑（CN VIII ➔ 腦幹核團 ➔ 視丘 MGB ➔ 顳葉聽覺皮質）', 55, 506);
+
+    const stations = [
+      { id: 'cn8', x: 115, y: 715, r: 24, title: '前庭蝸神經 (CN VIII)', sub: '耳蝸神經支', color: '#fde047' },
+      { id: 'cn',  x: 245, y: 715, r: 32, title: '耳蝸神經核 (CN)', sub: '腹側VCN/背側DCN', color: '#38bdf8' },
+      { id: 'soc', x: 380, y: 715, r: 26, title: '上橄欖核 (SOC)', sub: '音源定位', color: '#34d399' },
+      { id: 'll',  x: 485, y: 655, r: 22, title: '外側蹄系 (LL)', sub: '上行纖維束', color: '#60a5fa' },
+      { id: 'ic',  x: 565, y: 590, r: 26, title: '下丘 (IC)', sub: '聽覺中樞', color: '#a78bfa' },
+      { id: 'mgb', x: 660, y: 645, r: 26, title: '視丘內膝狀體 (MGB)', sub: '轉接核', color: '#fb923c' },
+      { id: 'ac',  x: 755, y: 580, r: 38, title: '大腦顳葉聽覺皮質', sub: 'Auditory Cortex', color: '#f472b6' }
+    ];
+
+    stations.forEach((st) => {
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+      ctx.strokeStyle = st.color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(st.x, st.y, st.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = st.color;
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(st.title.split(' ')[0], st.x, st.y + 4);
+    });
+
+    addLabel(115, 742, 0, 32, '① 前庭蝸神經 (CN VIII)', '#fde047', currentStep === 6);
+    addLabel(245, 680, -15, -45, '② 耳蝸神經核 (腹側VCN／背側DCN)', '#38bdf8', currentStep === 6);
+    addLabel(755, 540, -15, -32, '⑦ 大腦顳葉聽覺皮質 (產生聽覺)', '#f472b6', currentStep >= 7);
+    ctx.restore();
+  }
+
+  function renderScreenLabels() {
+    if (!showLabels || labelQueue.length === 0) return;
+
+    ctx.save();
+    ctx.font = '600 12.5px -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif';
+    ctx.textBaseline = 'middle';
+
+    labelQueue.forEach(lbl => {
+      const anchor = worldToScreen(lbl.wx, lbl.wy);
+      if (anchor.x < -80 || anchor.x > viewW + 80 || anchor.y < -80 || anchor.y > viewH + 80) return;
+
+      const boxCenterX = anchor.x + lbl.ox;
+      const boxCenterY = anchor.y + lbl.oy;
+
+      const metrics = ctx.measureText(lbl.text);
+      const padX = 8, boxH = 24;
+      const boxW = metrics.width + padX * 2;
+      const bx = Math.max(6, Math.min(viewW - boxW - 6, boxCenterX - boxW / 2));
+      const by = Math.max(6, Math.min(viewH - boxH - 6, boxCenterY - boxH / 2));
+
+      ctx.strokeStyle = lbl.highlight ? lbl.color : 'rgba(203, 213, 225, 0.5)';
+      ctx.lineWidth = lbl.highlight ? 2 : 1.2;
+      ctx.beginPath();
+      ctx.moveTo(anchor.x, anchor.y);
+      ctx.lineTo(bx + boxW / 2, by + boxH / 2);
+      ctx.stroke();
+
+      ctx.fillStyle = lbl.color;
+      ctx.beginPath();
+      ctx.arc(anchor.x, anchor.y, lbl.highlight ? 3.8 : 2.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      drawRoundedRect(ctx, bx, by, boxW, boxH, 6);
+      ctx.fillStyle = lbl.highlight ? 'rgba(15, 23, 42, 0.95)' : 'rgba(15, 23, 42, 0.82)';
+      ctx.fill();
+      ctx.strokeStyle = lbl.highlight ? lbl.color : 'rgba(148, 163, 184, 0.35)';
+      ctx.lineWidth = lbl.highlight ? 1.8 : 1;
+      ctx.stroke();
+
+      ctx.fillStyle = lbl.highlight ? '#ffffff' : lbl.color;
+      ctx.fillText(lbl.text, bx + padX, by + boxH / 2 + 0.5);
+    });
+
+    ctx.restore();
+  }
+
+  let lastTimestamp = performance.now();
+  function animate(now) {
+    const dt = Math.min(0.05, (now - lastTimestamp) / 1000);
+    lastTimestamp = now;
+    simTime += dt;
+
+    if (isAutoCycle) {
+      autoTimer += dt;
+      if (autoTimer >= 5.2) {
+        autoTimer = 0;
+        setStep(currentStep + 1);
+      }
+    }
+
+    if (isAnimatingCam) {
+      const lerp = 1 - Math.pow(0.0015, dt);
+      cam.x += (targetCam.x - cam.x) * lerp;
+      cam.y += (targetCam.y - cam.y) * lerp;
+      cam.zoom += (targetCam.zoom - cam.zoom) * lerp;
+      if (
+        Math.abs(targetCam.x - cam.x) < 0.3 &&
+        Math.abs(targetCam.y - cam.y) < 0.3 &&
+        Math.abs(targetCam.zoom - cam.zoom) < 0.003
+      ) {
+        cam = { ...targetCam };
+        isAnimatingCam = false;
+      }
+    }
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, viewW, viewH);
+
+    labelQueue = [];
+
+    ctx.save();
+    const s = baseScale * cam.zoom;
+    ctx.translate(viewW / 2, viewH / 2);
+    ctx.scale(s, s);
+    ctx.translate(-cam.x, -cam.y);
+
+    const amps = {
+      middleEar: currentStep >= 1 ? 1.0 : 0.4,
+      lymph: currentStep >= 2 ? 1.0 : 0.2,
+      hairCell: currentStep >= 3 ? 1.0 : 0.2,
+      nerve: currentStep >= 5 ? 1.0 : 0.25
+    };
+
+    if (leftViewMode === 'circuit') {
+      drawFigure2FluidCircuit();
+    } else {
+      drawWholeEarSection(amps);
+    }
+    drawCochleaCrossSection(amps);
+    drawCortiAndRibbonSynapse(amps);
+    drawAscendingBrainstemPathway(amps);
+
+    ctx.restore();
+
+    renderScreenLabels();
+    requestAnimationFrame(animate);
+  }
+
+  resizeCanvas();
+  setStep(2);
+  cam = { ...STEPS[2].cam };
+  requestAnimationFrame(animate);
+})();
+</script>
+
+<!-- ==========================================
+     模組 2：Three.js 3D 全立體耳蝸結構（精準切線、流體迴路與頻率音位演示）
+=========================================== -->
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const threeWrapper = document.getElementById('three-wrapper');
+const canvasWrapper = document.getElementById('canvas-wrapper');
+const container = document.getElementById('three-container');
+const labelsContainer = document.getElementById('three-labels');
+const explainBanner = document.getElementById('three-explain-text');
+
+const quick3DBtn = document.getElementById('quick-3d-btn');
+const tab3DBtn = document.getElementById('tab-3d-btn');
+const close3DBtn = document.getElementById('close-3d-btn');
+const expand3DBtn = document.getElementById('expand-3d-btn');
+const modeStraightBtn = document.getElementById('mode-straight-btn');
+const viewFig2Btn = document.getElementById('view-fig2-btn');
+const modeSpiralBtn = document.getElementById('mode-spiral-btn');
+const viewCutfaceBtn = document.getElementById('view-cutface-btn');
+const coilMorphSlider = document.getElementById('coil-morph-slider');
+const toggleShellChk = document.getElementById('toggle-3d-shell');
+const toggleFlowChk = document.getElementById('toggle-perilymph-flow');
+
+const freqDisplayVal = document.getElementById('freq-display-val');
+const freqSlider = document.getElementById('freq-slider');
+const freqBtns = document.querySelectorAll('.freq-btn[data-freq]');
+const sweepFreqBtn = document.getElementById('sweep-freq-btn');
+const toneAudioChk = document.getElementById('tone-audio-chk');
+
+let is3DOpen = false;
+let is3DFull = false;
+
+let morphFactor = 0.0;
+let targetMorphFactor = 0.0;
+
+let currentFreq = 8000;
+let targetFreq = 8000;
+let isSweeping = false;
+let sweepDir = 1;
+
+let scene, camera, renderer, controls;
+let cochleaGroup, dynamicGroup;
+let resonanceRingMesh = null;
+let bmMeshObj = null;
+let cortiMeshObj = null;
+let bmOriginalPositions = null;
+let cortiOriginalPositions = null;
+const labelAnchors = [];
+let simClock = 0;
+let needsRebuild = true;
+
+let actionPulseMeshes = [];
+let stapesGroupObj = null;
+let stapesFootplateMesh = null;
+let roundWindowMembraneObj = null;
+let helicoCurveObj = null;
+let perilymphSVParticles = [];
+let perilymphSTParticles = [];
+let perilymphApexParticles = [];
+
+// Web Audio API
+let audioCtx = null;
+let oscNode = null;
+let gainNode = null;
+
+function updateAudioTone(freq) {
+  if (!toneAudioChk.checked) {
+    if (oscNode && gainNode) gainNode.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
+    return;
+  }
+  if (!audioCtx) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass) {
+      audioCtx = new AudioContextClass();
+      oscNode = audioCtx.createOscillator();
+      gainNode = audioCtx.createGain();
+      oscNode.type = 'sine';
+      gainNode.gain.setValueAtTime(0.06, audioCtx.currentTime);
+      oscNode.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      oscNode.start();
+    }
+  }
+  if (audioCtx && oscNode && gainNode) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    oscNode.frequency.setTargetAtTime(Math.max(40, Math.min(18000, freq)), audioCtx.currentTime, 0.04);
+    gainNode.gain.setTargetAtTime(0.06, audioCtx.currentTime, 0.05);
+  }
+}
+
+toneAudioChk.addEventListener('change', () => {
+  if (toneAudioChk.checked) updateAudioTone(currentFreq);
+  else if (gainNode && audioCtx) gainNode.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
+});
+
+function freqToU(freq) {
+  const f = Math.max(20, Math.min(20000, freq));
+  const u = (Math.log10(20000) - Math.log10(f)) / (Math.log10(20000) - Math.log10(20));
+  return Math.max(0.06, Math.min(0.92, u));
+}
+
+function uToFreq(u) {
+  const clampedU = Math.max(0, Math.min(1, u));
+  const logF = Math.log10(20000) - clampedU * (Math.log10(20000) - Math.log10(20));
+  return Math.round(Math.pow(10, logF));
+}
+
+function setFrequency(f, updateUI = true) {
+  currentFreq = Math.max(20, Math.min(20000, f));
+  targetFreq = currentFreq;
+  if (updateUI) {
+    freqDisplayVal.textContent = `${currentFreq.toLocaleString()} Hz (${getFreqRegionText(currentFreq)})`;
+    const uVal = freqToU(currentFreq);
+    freqSlider.value = Math.round(uVal * 100);
+    freqBtns.forEach(b => {
+      const bf = parseInt(b.dataset.freq, 10);
+      b.classList.toggle('active', Math.abs(bf - currentFreq) < 50);
+    });
+  }
+  updateAudioTone(currentFreq);
+}
+
+function getFreqRegionText(f) {
+  if (f >= 10000) return '極高頻・近卵圓窗基部 (窄而硬)';
+  if (f >= 4000)  return '高頻・耳蝸下段基底';
+  if (f >= 1500)  return '中高頻・中段螺旋';
+  if (f >= 500)   return '中低頻・中上段';
+  return '低頻・近耳蝸盲端頂部 (寬而軟)';
+}
+
+// =========================================================
+// 【切面與正交幾何系統】：嚴格正交坐標系 (eR, eY, eT)，徹底解決螺旋切面翻轉與偏折問題
+// =========================================================
+function evalCenter(u, morph) {
+  // 拉直模式：沿 Z 軸筆直延伸（u: 0.0 基部 Z=-4.9 ➔ u: 1.0 頂部 Z=+4.9，與圖2方向完美一致）
+  const straightCenter = new THREE.Vector3(0.0, 0.0, -4.9 + u * 9.8);
+  // 螺旋模式：圓錐螺旋線（2.5 圈，基部在下，頂部在上）
+  const theta = 0.4 + u * (Math.PI * 4.6);
+  const R = 4.25 * (1 - 0.58 * u) + 0.65;
+  const spiralCenter = new THREE.Vector3(R * Math.cos(theta), -2.2 + u * 4.8, R * Math.sin(theta));
+  return new THREE.Vector3().lerpVectors(straightCenter, spiralCenter, morph);
+}
+
+function getFrameAt(u, morph) {
+  const center = evalCenter(u, morph);
+
+  // 數值微積分求真實空間切線向量 eT (沿管腔中心前進方向，嚴格正交系第 3 軸)
+  const delta = 0.002;
+  const pNext = evalCenter(Math.min(1.0, u + delta), morph);
+  const pPrev = evalCenter(Math.max(0.0, u - delta), morph);
+  const eT = new THREE.Vector3().subVectors(pNext, pPrev).normalize();
+
+  // 徑向向量 eR：內側(蝸軸/羅森塔氏管 -X) 指向外側壁 (+X)
+  const straightER = new THREE.Vector3(1, 0, 0);
+  const theta = 0.4 + u * (Math.PI * 4.6);
+  const spiralER = new THREE.Vector3(Math.cos(theta), 0, Math.sin(theta));
+  let eR = new THREE.Vector3().lerpVectors(straightER, spiralER, morph);
+
+  // Gram-Schmidt 正交化：徹底消除 eR 沿 eT 的分量，保證 eR 絕對垂直於 eT
+  eR.sub(eT.clone().multiplyScalar(eR.dot(eT))).normalize();
+
+  // 向上垂直向量 eY = eT × eR（保證右手系，Y > 0 朝向前庭階/頂側）
+  const eY = new THREE.Vector3().crossVectors(eT, eR).normalize();
+
+  const rTube = 1.45 * (1 - 0.42 * u);
+  return { center, eR, eY, eT, rTube, theta };
+}
+
+function mapLocalTo3D(u, xLocal, yLocal, morph) {
+  const { center, eR, eY, rTube } = getFrameAt(u, morph);
+  return center.clone()
+    .addScaledVector(eR, xLocal * rTube)
+    .addScaledVector(eY, yLocal * rTube);
+}
+
+function createExtrudedSideGeometry(profilePts, uStart, uEnd, segU, morph, isClosedLoop = true) {
+  const nP = profilePts.length;
+  const positions = [];
+  const indices = [];
+
+  for (let i = 0; i <= segU; i++) {
+    const u = uStart + (i / segU) * (uEnd - uStart);
+    for (let j = 0; j < nP; j++) {
+      const pt3 = mapLocalTo3D(u, profilePts[j][0], profilePts[j][1], morph);
+      positions.push(pt3.x, pt3.y, pt3.z);
+    }
+  }
+
+  const loopCount = isClosedLoop ? nP : nP - 1;
+  for (let i = 0; i < segU; i++) {
+    for (let j = 0; j < loopCount; j++) {
+      const nextJ = (j + 1) % nP;
+      const a = i * nP + j;
+      const b = (i + 1) * nP + j;
+      const c = (i + 1) * nP + nextJ;
+      const d = i * nP + nextJ;
+      indices.push(a, b, d);
+      indices.push(b, c, d);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// 建立前端橫切面：嚴格使用右手正交基底 (eR, eY, eT)，保證 det = +1，徹底杜絕旋轉翻轉或法向量偏折！
+function createCleanCutFaceMesh(u, morph) {
+  const { center, eR, eY, eT, rTube } = getFrameAt(u, morph);
+  const faceGroup = new THREE.Group();
+
+  // 正交基底 (eR, eY, eT) 保證行列式為 +1，微小後移 -0.003 避免與管壁產生 Z-fighting
+  const faceMatrix = new THREE.Matrix4().makeBasis(eR, eY, eT);
+  faceGroup.position.copy(center).addScaledVector(eT, -0.003);
+  faceGroup.quaternion.setFromRotationMatrix(faceMatrix);
+  faceGroup.scale.set(rTube, rTube, rTube);
+
+  function makeChamberMesh(pts, color, opacity = 1.0, edgeColor = 0xffffff) {
+    const s = new THREE.Shape();
+    const n = (pts[pts.length - 1][0] === pts[0][0] && pts[pts.length - 1][1] === pts[0][1]) ? pts.length - 1 : pts.length;
+    s.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < n; i++) s.lineTo(pts[i][0], pts[i][1]);
+    s.closePath();
+    const geo = new THREE.ShapeGeometry(s);
+    const mat = new THREE.MeshStandardMaterial({
+      color,
+      roughness: 0.25,
+      metalness: 0.08,
+      side: THREE.DoubleSide,
+      transparent: opacity < 1.0,
+      opacity
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+
+    // 銳利邊緣線，保證醫學解剖輪廓分明
+    const edges = new THREE.EdgesGeometry(geo);
+    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: edgeColor, linewidth: 1.5 }));
+    mesh.add(line);
+    return mesh;
+  }
+
+  // 1. 前庭階 (Scala vestibuli) - 上腔外淋巴（深藍）
+  faceGroup.add(makeChamberMesh(PROFILES.svPts, 0x0284c7, 0.95, 0x7dd3fc));
+
+  // 2. 中階 / 耳蝸管 (Scala media) - 內淋巴（天藍）
+  faceGroup.add(makeChamberMesh(PROFILES.smPts, 0x38bdf8, 0.95, 0xbae6fd));
+
+  // 3. 鼓室階 (Scala tympani) - 下腔外淋巴（鈷藍）
+  faceGroup.add(makeChamberMesh(PROFILES.stPts, 0x075985, 0.95, 0x38bdf8));
+
+  // 4. 骨螺旋板 (Osseous spiral lamina)
+  faceGroup.add(makeChamberMesh(PROFILES.oslPts, 0x94a3b8, 0.98, 0xcbd5e1));
+
+  // 5. 基底膜 (Basilar membrane)
+  faceGroup.add(makeChamberMesh(PROFILES.bmPts, 0xfacc15, 1.0, 0xfef08a));
+
+  // 6. 柯帝器 (Organ of Corti)
+  faceGroup.add(makeChamberMesh(PROFILES.cortiPts, 0xf472b6, 1.0, 0xfbcfe8));
+
+  // 7. 覆膜 (Tectorial membrane)
+  faceGroup.add(makeChamberMesh(PROFILES.tmPts, 0x7dd3fc, 0.92, 0xe0f2fe));
+
+  // 8. 羅森塔氏管 (Rosenthal's canal)
+  faceGroup.add(makeChamberMesh(PROFILES.rcPts, 0xd946ef, 0.95, 0xf0abfc));
+
+  // 9. 骨外壁 (Bony shell ring)
+  const ringGeo = new THREE.RingGeometry(0.95, 1.05, 48);
+  const ringMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.5, side: THREE.DoubleSide });
+  faceGroup.add(new THREE.Mesh(ringGeo, ringMat));
+
+  return faceGroup;
+}
+
+const PROFILES = {
+  svPts: [
+    [-0.40, 0.04], [0.82, 0.52], [0.70, 0.65], [0.45, 0.82], [0.10, 0.94],
+    [-0.30, 0.90], [-0.65, 0.70], [-0.85, 0.45], [-0.93, 0.15], [-0.40, 0.04]
+  ],
+  smPts: [
+    [-0.38, 0.01], [0.93, 0.00], [0.94, 0.20], [0.88, 0.38], [0.82, 0.50], [-0.38, 0.01]
+  ],
+  stPts: [
+    [-0.40, -0.05], [0.93, -0.05], [0.85, -0.40], [0.60, -0.72], [0.25, -0.91],
+    [-0.20, -0.92], [-0.60, -0.72], [-0.85, -0.42], [-0.93, -0.15], [-0.40, -0.05]
+  ],
+  shellPts: (() => {
+    const pts = [];
+    for (let a = -0.22; a <= Math.PI * 1.48; a += 0.14) {
+      pts.push([Math.cos(a + Math.PI * 0.55) * 1.04, Math.sin(a + Math.PI * 0.55) * 1.04]);
+    }
+    for (let a = Math.PI * 1.48; a >= -0.22; a -= 0.14) {
+      pts.push([Math.cos(a + Math.PI * 0.55) * 0.96, Math.sin(a + Math.PI * 0.55) * 0.96]);
+    }
+    return pts;
+  })(),
+  oslPts: [
+    [-1.08, 0.06], [-0.38, 0.03], [-0.38, -0.06], [-1.08, -0.11]
+  ],
+  rmPts: [
+    [-0.38, 0.02], [0.82, 0.51]
+  ],
+  bmPts: [
+    [-0.38, 0.00], [0.93, -0.01], [0.93, -0.04], [-0.38, -0.03]
+  ],
+  cortiPts: [
+    [-0.16, 0.01], [-0.10, 0.16], [0.44, 0.16], [0.48, 0.01]
+  ],
+  tmPts: [
+    [-0.34, 0.06], [-0.22, 0.22], [0.46, 0.22], [0.46, 0.17], [-0.20, 0.15], [-0.34, 0.03]
+  ],
+  rcPts: (() => {
+    const pts = [];
+    for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
+      pts.push([-1.20 + Math.cos(a) * 0.18, -0.03 + Math.sin(a) * 0.18]);
+    }
+    return pts;
+  })()
+};
+
+function rebuild3DCochleaMesh() {
+  if (!dynamicGroup) return;
+
+  while (dynamicGroup.children.length > 0) {
+    const child = dynamicGroup.children[0];
+    if (child.isGroup) {
+      child.traverse(obj => {
+        if (obj.geometry) obj.geometry.dispose();
+      });
+    } else if (child.geometry) {
+      child.geometry.dispose();
+    }
+    dynamicGroup.remove(child);
+  }
+  actionPulseMeshes = [];
+  bmMeshObj = null;
+  cortiMeshObj = null;
+  stapesGroupObj = null;
+  stapesFootplateMesh = null;
+  roundWindowMembraneObj = null;
+  helicoCurveObj = null;
+  perilymphSVParticles = [];
+  perilymphSTParticles = [];
+  perilymphApexParticles = [];
+
+  const uStart = 0.04;
+  const uEnd = 0.96;
+  const segU = 56;
+  const showShellAndChambers = toggleShellChk.checked;
+
+  // 1. 乾淨前端切面（採用嚴格右手正交坐標系，det = +1，徹底無偏折與無翻轉）
+  const cleanCutFace = createCleanCutFaceMesh(uStart, morphFactor);
+  dynamicGroup.add(cleanCutFace);
+
+  // 2. 側面 3D 三大腔室與骨外壁
+  if (showShellAndChambers) {
+    const svGeo = createExtrudedSideGeometry(PROFILES.svPts, uStart, uEnd, segU, morphFactor, true);
+    dynamicGroup.add(new THREE.Mesh(svGeo, new THREE.MeshPhysicalMaterial({
+      color: 0x0ea5e9, transparent: true, opacity: 0.18, roughness: 0.2, depthWrite: false, side: THREE.DoubleSide
+    })));
+
+    const smGeo = createExtrudedSideGeometry(PROFILES.smPts, uStart, uEnd, segU, morphFactor, true);
+    dynamicGroup.add(new THREE.Mesh(smGeo, new THREE.MeshPhysicalMaterial({
+      color: 0x38bdf8, transparent: true, opacity: 0.25, roughness: 0.2, depthWrite: false, side: THREE.DoubleSide
+    })));
+
+    const stGeo = createExtrudedSideGeometry(PROFILES.stPts, uStart, uEnd, segU, morphFactor, true);
+    dynamicGroup.add(new THREE.Mesh(stGeo, new THREE.MeshPhysicalMaterial({
+      color: 0x0369a1, transparent: true, opacity: 0.20, roughness: 0.2, depthWrite: false, side: THREE.DoubleSide
+    })));
+
+    const shellGeo = createExtrudedSideGeometry(PROFILES.shellPts, uStart, uEnd, segU, morphFactor, true);
+    dynamicGroup.add(new THREE.Mesh(shellGeo, new THREE.MeshStandardMaterial({
+      color: 0x64748b, transparent: true, opacity: 0.26, roughness: 0.5, depthWrite: false, side: THREE.DoubleSide
+    })));
+  }
+
+  // 3. 骨螺旋板
+  const oslGeo = createExtrudedSideGeometry(PROFILES.oslPts, uStart, uEnd, segU, morphFactor, true);
+  dynamicGroup.add(new THREE.Mesh(oslGeo, new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.45, side: THREE.DoubleSide })));
+
+  // 4. 前庭膜 (Reissner's membrane)
+  const rmGeo = createExtrudedSideGeometry(PROFILES.rmPts, uStart, uEnd, segU, morphFactor, false);
+  dynamicGroup.add(new THREE.Mesh(rmGeo, new THREE.MeshStandardMaterial({
+    color: 0xbae6fd, emissive: 0x0284c7, emissiveIntensity: 0.25, transparent: true, opacity: 0.75, side: THREE.DoubleSide
+  })));
+
+  // 5. 基底膜 (Basilar membrane)
+  const bmGeo = createExtrudedSideGeometry(PROFILES.bmPts, uStart, uEnd, segU, morphFactor, true);
+  bmMeshObj = new THREE.Mesh(bmGeo, new THREE.MeshStandardMaterial({
+    color: 0xfbbf24, emissive: 0xd97706, emissiveIntensity: 0.45, roughness: 0.3, side: THREE.DoubleSide
+  }));
+  bmOriginalPositions = new Float32Array(bmGeo.attributes.position.array);
+  dynamicGroup.add(bmMeshObj);
+
+  // 6. 柯帝氏器 (Organ of Corti)
+  const cortiGeo = createExtrudedSideGeometry(PROFILES.cortiPts, uStart, uEnd, segU, morphFactor, true);
+  cortiMeshObj = new THREE.Mesh(cortiGeo, new THREE.MeshStandardMaterial({
+    color: 0xf472b6, emissive: 0xdb2777, emissiveIntensity: 0.38, roughness: 0.35, side: THREE.DoubleSide
+  }));
+  cortiOriginalPositions = new Float32Array(cortiGeo.attributes.position.array);
+  dynamicGroup.add(cortiMeshObj);
+
+  // 7. 覆膜 (Tectorial membrane)
+  const tmGeo = createExtrudedSideGeometry(PROFILES.tmPts, uStart, uEnd, segU, morphFactor, true);
+  dynamicGroup.add(new THREE.Mesh(tmGeo, new THREE.MeshStandardMaterial({
+    color: 0x7dd3fc, transparent: true, opacity: 0.65, roughness: 0.2, side: THREE.DoubleSide
+  })));
+
+  // 8. 羅森塔氏管 (Rosenthal's canal)
+  const rcGeo = createExtrudedSideGeometry(PROFILES.rcPts, uStart, uEnd, segU, morphFactor, true);
+  dynamicGroup.add(new THREE.Mesh(rcGeo, new THREE.MeshPhysicalMaterial({
+    color: 0xa855f7, transparent: true, opacity: 0.38, roughness: 0.25, depthWrite: false, side: THREE.DoubleSide
+  })));
+
+  // 9. 【核心圖2結構】：鐙骨底板與卵圓窗（位於前庭階入口）
+  const { center: startCenter, eR: startER, eY: startEY, eT: startET, rTube: startRTube } = getFrameAt(uStart, morphFactor);
+  const svEntrance = startCenter.clone().addScaledVector(startER, 0.20 * startRTube).addScaledVector(startEY, 0.52 * startRTube);
+  
+  stapesGroupObj = new THREE.Group();
+  stapesGroupObj.position.copy(svEntrance).addScaledVector(startET, -0.015);
+  stapesGroupObj.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(startER, startEY, startET));
+  
+  const owRing = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.03, 10, 24), new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 0.4 }));
+  stapesGroupObj.add(owRing);
+  
+  const footplate = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.20, 0.035, 16), new THREE.MeshStandardMaterial({ color: 0xfef08a, roughness: 0.25 }));
+  footplate.geometry.rotateX(Math.PI / 2);
+  stapesGroupObj.add(footplate);
+  stapesFootplateMesh = footplate;
+
+  const stapesArch1 = new THREE.Mesh(new THREE.TubeGeometry(new THREE.LineCurve3(new THREE.Vector3(-0.14, 0, 0), new THREE.Vector3(0, 0, -0.38)), 4, 0.024, 6, false), new THREE.MeshStandardMaterial({ color: 0xfde047 }));
+  const stapesArch2 = new THREE.Mesh(new THREE.TubeGeometry(new THREE.LineCurve3(new THREE.Vector3(0.14, 0, 0), new THREE.Vector3(0, 0, -0.38)), 4, 0.024, 6, false), new THREE.MeshStandardMaterial({ color: 0xfde047 }));
+  stapesGroupObj.add(stapesArch1);
+  stapesGroupObj.add(stapesArch2);
+
+  const stapesHead = new THREE.Mesh(new THREE.SphereGeometry(0.065, 10, 10), new THREE.MeshStandardMaterial({ color: 0xfacc15 }));
+  stapesHead.position.set(0, 0, -0.38);
+  stapesGroupObj.add(stapesHead);
+  dynamicGroup.add(stapesGroupObj);
+
+  // 10. 【核心圖2結構】：圓窗與柔性外凸膜（位於鼓階出口）
+  const stExit = startCenter.clone().addScaledVector(startER, 0.20 * startRTube).addScaledVector(startEY, -0.52 * startRTube);
+  const rwGroup = new THREE.Group();
+  rwGroup.position.copy(stExit).addScaledVector(startET, -0.015);
+  rwGroup.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(startER, startEY, startET));
+
+  const rwRing = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.03, 10, 24), new THREE.MeshStandardMaterial({ color: 0xa855f7, emissive: 0x7e22ce, emissiveIntensity: 0.4 }));
+  rwGroup.add(rwRing);
+
+  const rwMembrane = new THREE.Mesh(new THREE.CircleGeometry(0.20, 20), new THREE.MeshStandardMaterial({ color: 0xc084fc, roughness: 0.2, side: THREE.DoubleSide }));
+  rwGroup.add(rwMembrane);
+  roundWindowMembraneObj = rwMembrane;
+  dynamicGroup.add(rwGroup);
+
+  // 11. 【核心圖2結構】：頂部耳蝸孔（Helicotrema）連通穹窿迴路
+  const { center: endCenter, eR: endER, eY: endEY, eT: endET, rTube: endRTube } = getFrameAt(uEnd, morphFactor);
+  const svApex = mapLocalTo3D(uEnd, 0.20, 0.48, morphFactor);
+  const stApex = mapLocalTo3D(uEnd, 0.20, -0.48, morphFactor);
+  const apexDomePt = endCenter.clone().addScaledVector(endET, 0.42 * endRTube).addScaledVector(endER, 0.20 * endRTube);
+  helicoCurveObj = new THREE.CatmullRomCurve3([svApex, apexDomePt, stApex]);
+  const helicoGeo = new THREE.TubeGeometry(helicoCurveObj, 16, 0.22 * endRTube, 12, false);
+  const helicoMesh = new THREE.Mesh(helicoGeo, new THREE.MeshPhysicalMaterial({
+    color: 0x38bdf8, transparent: true, opacity: 0.35, roughness: 0.2, depthWrite: false, side: THREE.DoubleSide
+  }));
+  dynamicGroup.add(helicoMesh);
+
+  // 12. 【核心圖2結構】：外淋巴流動脈衝球 (Perilymph Flow Particles)
+  perilymphSVParticles = [];
+  perilymphSTParticles = [];
+  perilymphApexParticles = [];
+  const pGeo = new THREE.SphereGeometry(0.065, 8, 8);
+  const svPMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+  const apexPMat = new THREE.MeshBasicMaterial({ color: 0x4ade80 });
+  const stPMat = new THREE.MeshBasicMaterial({ color: 0x60a5fa });
+
+  for (let i = 0; i < 12; i++) {
+    const pMesh = new THREE.Mesh(pGeo, svPMat);
+    dynamicGroup.add(pMesh);
+    perilymphSVParticles.push(pMesh);
+  }
+  for (let i = 0; i < 4; i++) {
+    const pMesh = new THREE.Mesh(pGeo, apexPMat);
+    dynamicGroup.add(pMesh);
+    perilymphApexParticles.push(pMesh);
+  }
+  for (let i = 0; i < 12; i++) {
+    const pMesh = new THREE.Mesh(pGeo, stPMat);
+    dynamicGroup.add(pMesh);
+    perilymphSTParticles.push(pMesh);
+  }
+
+  // 13. 共振波峰光環
+  const uPeak = freqToU(currentFreq);
+  const peakFrame = getFrameAt(uPeak, morphFactor);
+  const ringGeo = new THREE.TorusGeometry(peakFrame.rTube * 1.06, 0.05, 12, 36);
+  resonanceRingMesh = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xef4444 }));
+  resonanceRingMesh.position.copy(peakFrame.center);
+  resonanceRingMesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(peakFrame.eR, peakFrame.eY, peakFrame.eT));
+  dynamicGroup.add(resonanceRingMesh);
+
+  // 14. 雙極神經元與動作電位光點
+  const neuronCount = 20;
+  const somaGeo = new THREE.SphereGeometry(0.11, 12, 12);
+  const pulseGeo = new THREE.SphereGeometry(0.08, 10, 10);
+
+  for (let i = 0; i < neuronCount; i++) {
+    const un = uStart + (i / (neuronCount - 1)) * (uEnd - uStart - 0.03);
+
+    const ihcBase3D = mapLocalTo3D(un, -0.05, 0.02, morphFactor);
+    const soma3D = mapLocalTo3D(un, -1.20, -0.03, morphFactor);
+    const nerveTrunk3D = new THREE.Vector3().lerpVectors(
+      new THREE.Vector3(-2.8, -1.8, soma3D.z * 0.35),
+      new THREE.Vector3(soma3D.x * 0.15, -3.2, soma3D.z * 0.15),
+      morphFactor
+    );
+
+    const somaMesh = new THREE.Mesh(
+      somaGeo,
+      new THREE.MeshStandardMaterial({ color: 0xd946ef, emissive: 0x9333ea, emissiveIntensity: 0.6 })
+    );
+    somaMesh.position.copy(soma3D);
+    somaMesh.scale.set(1.3, 0.9, 0.9);
+    dynamicGroup.add(somaMesh);
+
+    const periphCurve = new THREE.LineCurve3(ihcBase3D, soma3D);
+    dynamicGroup.add(new THREE.Mesh(new THREE.TubeGeometry(periphCurve, 4, 0.028, 6, false), new THREE.MeshBasicMaterial({ color: 0xf472b6 })));
+
+    const midCtrl = soma3D.clone().lerp(nerveTrunk3D, 0.5).add(new THREE.Vector3(-0.3 * (1 - morphFactor), -0.4, 0));
+    const centralCurve = new THREE.QuadraticBezierCurve3(soma3D, midCtrl, nerveTrunk3D);
+    dynamicGroup.add(new THREE.Mesh(new THREE.TubeGeometry(centralCurve, 10, 0.03, 6, false), new THREE.MeshBasicMaterial({ color: 0xfde047 })));
+
+    const fullPath = new THREE.CatmullRomCurve3([ihcBase3D, soma3D, midCtrl, nerveTrunk3D]);
+    const pulseMesh = new THREE.Mesh(pulseGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    dynamicGroup.add(pulseMesh);
+    actionPulseMeshes.push({ mesh: pulseMesh, path: fullPath, offset: i * 0.19, uPos: un, somaMesh });
+  }
+
+  // 15. 前庭蝸神經 (CN VIII) 總神經幹
+  const trunkPos = new THREE.Vector3().lerpVectors(new THREE.Vector3(-2.8, -2.2, 0), new THREE.Vector3(0, -3.5, 0), morphFactor);
+  const trunkMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.58, 1.8, 20), new THREE.MeshStandardMaterial({ color: 0xeab308, emissive: 0xca8a04, emissiveIntensity: 0.4 }));
+  trunkMesh.position.copy(trunkPos);
+  dynamicGroup.add(trunkMesh);
+
+  update3DAnchorPositions(uStart, trunkPos);
+}
+
+function updateTravelingWave(time) {
+  if (!bmMeshObj || !cortiMeshObj || !bmOriginalPositions || !cortiOriginalPositions) return;
+
+  const uPeak = freqToU(currentFreq);
+  const uStart = 0.04;
+  const uEnd = 0.96;
+  const segU = 56;
+  const bmNP = PROFILES.bmPts.length;
+  const cortiNP = PROFILES.cortiPts.length;
+
+  const bmPos = bmMeshObj.geometry.attributes.position.array;
+  const cortiPos = cortiMeshObj.geometry.attributes.position.array;
+
+  for (let i = 0; i <= segU; i++) {
+    const u = uStart + (i / segU) * (uEnd - uStart);
+    const distToPeak = u - uPeak;
+    let envelope = 0;
+    if (distToPeak <= 0) envelope = Math.exp(distToPeak * 7.5);
+    else envelope = Math.exp(-distToPeak * 22.0);
+
+    const wavePhase = (u * 38.0) - (time * 12.0);
+    const displacement = Math.sin(wavePhase) * 0.12 * envelope;
+    const { eY } = getFrameAt(u, morphFactor);
+
+    for (let j = 0; j < bmNP; j++) {
+      const idx = (i * bmNP + j) * 3;
+      bmPos[idx]     = bmOriginalPositions[idx]     + eY.x * displacement;
+      bmPos[idx + 1] = bmOriginalPositions[idx + 1] + eY.y * displacement;
+      bmPos[idx + 2] = bmOriginalPositions[idx + 2] + eY.z * displacement;
+    }
+
+    for (let j = 0; j < cortiNP; j++) {
+      const idx = (i * cortiNP + j) * 3;
+      cortiPos[idx]     = cortiOriginalPositions[idx]     + eY.x * displacement;
+      cortiPos[idx + 1] = cortiOriginalPositions[idx + 1] + eY.y * displacement;
+      cortiPos[idx + 2] = cortiOriginalPositions[idx + 2] + eY.z * displacement;
+    }
+  }
+
+  bmMeshObj.geometry.attributes.position.needsUpdate = true;
+  cortiMeshObj.geometry.attributes.position.needsUpdate = true;
+
+  if (resonanceRingMesh) {
+    const peakFrame = getFrameAt(uPeak, morphFactor);
+    resonanceRingMesh.position.copy(peakFrame.center);
+    resonanceRingMesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(peakFrame.eR, peakFrame.eY, peakFrame.eT));
+    const pulseScale = 1 + Math.sin(time * 10) * 0.08;
+    resonanceRingMesh.scale.set(pulseScale, pulseScale, pulseScale);
+  }
+
+  actionPulseMeshes.forEach(item => {
+    const diff = Math.abs(item.uPos - uPeak);
+    const isActive = diff < 0.15;
+    item.mesh.visible = isActive;
+    if (item.somaMesh) {
+      item.somaMesh.material.emissiveIntensity = isActive ? 1.0 : 0.18;
+      item.somaMesh.material.emissive.setHex(isActive ? 0xf43f5e : 0x9333ea);
+    }
+  });
+}
+
+function init3D() {
+  scene = new THREE.Scene();
+
+  const rect = container.getBoundingClientRect();
+  camera = new THREE.PerspectiveCamera(40, Math.max(1, rect.width) / Math.max(1, rect.height), 0.1, 100);
+  camera.position.set(-8.8, 1.8, 0.0);
+
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(rect.width, rect.height);
+  container.appendChild(renderer.domElement);
+
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.07;
+  controls.target.set(0, 0, 0);
+
+  scene.add(new THREE.AmbientLight(0xe0f2fe, 0.95));
+  const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.4);
+  dirLight1.position.set(9, 12, 14);
+  scene.add(dirLight1);
+  const dirLight2 = new THREE.DirectionalLight(0x38bdf8, 0.75);
+  dirLight2.position.set(-10, -5, 8);
+  scene.add(dirLight2);
+
+  cochleaGroup = new THREE.Group();
+  scene.add(cochleaGroup);
+
+  dynamicGroup = new THREE.Group();
+  cochleaGroup.add(dynamicGroup);
+
+  setup3DLabels();
+  rebuild3DCochleaMesh();
+  needsRebuild = false;
+}
+
+function setup3DLabels() {
+  labelsContainer.innerHTML = '';
+  const defs = [
+    { id: 'oval',  text: '卵圓窗 & 鐙骨推入 (Oval window)', color: '#38bdf8' },
+    { id: 'round', text: '圓窗向外凸出釋壓 (Round window)', color: '#c084fc' },
+    { id: 'sv',    text: '前庭階 (上腔・外淋巴推進)', color: '#38bdf8' },
+    { id: 'st',    text: '鼓階 (下腔・回流圓窗)', color: '#0284c7' },
+    { id: 'bm',    text: '基底膜與柯帝器 (行波感音)', color: '#fbbf24' },
+    { id: 'apex',  text: '耳蝸孔 (Helicotrema 頂端相通)', color: '#4ade80' },
+    { id: 'rc',    text: '羅森塔氏管 (雙極螺旋神經節)', color: '#e879f9' },
+    { id: 'nerve', text: '前庭蝸神經 (CN VIII 耳蝸神經幹)', color: '#facc15' },
+    { id: 'peak',  text: '🔴 共振最大位移區', color: '#f87171' }
+  ];
+
+  defs.forEach(d => {
+    const el = document.createElement('div');
+    el.className = 'label-3d' + (d.id === 'peak' ? ' peak-highlight' : '');
+    el.style.borderColor = d.color;
+    el.style.color = d.color;
+    el.textContent = d.text;
+    labelsContainer.appendChild(el);
+    labelAnchors.push({ id: d.id, el, pos: new THREE.Vector3() });
+  });
+}
+
+function update3DAnchorPositions(uStart, trunkPos) {
+  if (labelAnchors.length === 0) return;
+  const setLocal = (id, uVal, xL, yL) => {
+    const item = labelAnchors.find(a => a.id === id);
+    if (!item) return;
+    item.pos.copy(mapLocalTo3D(uVal, xL, yL, morphFactor));
+  };
+
+  setLocal('oval', uStart, 0.20, 0.65);
+  setLocal('round', uStart, 0.20, -0.65);
+  setLocal('sv', 0.35, 0.15, 0.72);
+  setLocal('st', 0.35, 0.15, -0.72);
+  setLocal('bm', 0.40, 0.05, 0.02);
+  setLocal('apex', 0.96, 0.30, 0.0);
+  setLocal('rc', 0.35, -1.35, 0.10);
+
+  const nerveItem = labelAnchors.find(a => a.id === 'nerve');
+  if (nerveItem) {
+    nerveItem.pos.copy(trunkPos).add(new THREE.Vector3(0, -0.9, 0));
+  }
+
+  const uPeak = freqToU(currentFreq);
+  setLocal('peak', uPeak, 0.2, 0.55);
+}
+
+function update3DLabelsScreen() {
+  if (!is3DOpen || !renderer || !camera) return;
+  const rect = container.getBoundingClientRect();
+  const uPeak = freqToU(currentFreq);
+
+  const peakItem = labelAnchors.find(a => a.id === 'peak');
+  if (peakItem) {
+    peakItem.pos.copy(mapLocalTo3D(uPeak, 0.2, 0.55, morphFactor));
+    peakItem.el.textContent = `🔴 ${currentFreq.toLocaleString()} Hz 共振波峰`;
+  }
+
+  labelAnchors.forEach(item => {
+    const v = item.pos.clone().project(camera);
+    if (v.z > 1) {
+      item.el.style.opacity = '0';
+      return;
+    }
+    const x = (v.x * 0.5 + 0.5) * rect.width;
+    const y = (-(v.y * 0.5) + 0.5) * rect.height;
+    item.el.style.left = `${x}px`;
+    item.el.style.top = `${y}px`;
+    item.el.style.opacity = '1';
+  });
+}
+
+function resizeCochlea3D() {
+  if (!renderer || !camera) return;
+  const rect = container.getBoundingClientRect();
+  if (rect.width < 10 || rect.height < 10) return;
+  camera.aspect = rect.width / rect.height;
+  camera.updateProjectionMatrix();
+  renderer.setSize(rect.width, rect.height);
+}
+window.resizeCochlea3D = resizeCochlea3D;
+
+function updateBannerText() {
+  explainBanner.innerHTML = `<strong>🌊 前庭階與鼓室階流體迴路：</strong>目前頻率 <strong>${currentFreq.toLocaleString()} Hz</strong>。鐙骨推動<strong>卵圓窗</strong> ➔ 壓力波沿<strong>前庭階（上）</strong>推進 ➔ 在紅色波峰處使<strong>基底膜與柯帝器</strong>達到最大位移 ➔ 沿<strong>耳蝸孔</strong>進入<strong>鼓室階（下）</strong> ➔ 回流推動<strong>圓窗</strong>釋壓！`;
+}
+
+function toggle3DView(forceOpen = null) {
+  is3DOpen = forceOpen !== null ? forceOpen : !is3DOpen;
+  if (is3DOpen) {
+    if (!scene) init3D();
+    threeWrapper.classList.toggle('open-split', !is3DFull);
+    threeWrapper.classList.toggle('open-full', is3DFull);
+    canvasWrapper.classList.toggle('hidden-2d', is3DFull);
+    tab3DBtn.classList.add('active');
+    quick3DBtn.textContent = '🧊 隱藏 3D 耳蝸結構';
+  } else {
+    threeWrapper.classList.remove('open-split', 'open-full');
+    canvasWrapper.classList.remove('hidden-2d');
+    tab3DBtn.classList.remove('active');
+    quick3DBtn.textContent = '🧊 3D 耳蝸全立體結構';
+    if (gainNode && audioCtx) gainNode.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
+  }
+
+  setTimeout(() => {
+    resizeCochlea3D();
+    if (window.trigger2DResize) window.trigger2DResize();
+  }, 340);
+}
+
+quick3DBtn.addEventListener('click', () => toggle3DView());
+tab3DBtn.addEventListener('click', () => toggle3DView());
+close3DBtn.addEventListener('click', () => toggle3DView(false));
+
+expand3DBtn.addEventListener('click', () => {
+  is3DFull = !is3DFull;
+  expand3DBtn.textContent = is3DFull ? '⤡ 並排 2D+3D' : '⤢ 全畫面 3D';
+  threeWrapper.classList.toggle('open-split', !is3DFull);
+  threeWrapper.classList.toggle('open-full', is3DFull);
+  canvasWrapper.classList.toggle('hidden-2d', is3DFull);
+  setTimeout(() => {
+    resizeCochlea3D();
+    if (window.trigger2DResize) window.trigger2DResize();
+  }, 340);
+});
+
+modeStraightBtn.addEventListener('click', () => {
+  targetMorphFactor = 0.0;
+  coilMorphSlider.value = '0';
+  modeStraightBtn.classList.add('active');
+  modeSpiralBtn.classList.remove('active');
+  updateBannerText();
+  if (camera && controls) {
+    camera.position.set(-8.8, 1.8, 0.0);
+    controls.target.set(0, 0, 0);
+  }
+});
+
+viewFig2Btn.addEventListener('click', () => {
+  targetMorphFactor = 0.0;
+  coilMorphSlider.value = '0';
+  modeStraightBtn.classList.add('active');
+  modeSpiralBtn.classList.remove('active');
+  updateBannerText();
+  if (camera && controls) {
+    camera.position.set(-8.8, 1.8, 0.0);
+    controls.target.set(0, 0, 0);
+  }
+});
+
+modeSpiralBtn.addEventListener('click', () => {
+  targetMorphFactor = 1.0;
+  coilMorphSlider.value = '100';
+  modeSpiralBtn.classList.add('active');
+  modeStraightBtn.classList.remove('active');
+  updateBannerText();
+  if (camera && controls) {
+    camera.position.set(7.5, 4.5, 9.2);
+    controls.target.set(0, -0.3, 0);
+  }
+});
+
+viewCutfaceBtn.addEventListener('click', () => {
+  if (camera && controls) {
+    if (targetMorphFactor < 0.5) {
+      camera.position.set(0.0, 0.15, -8.2);
+      controls.target.set(0.0, 0.0, -4.9);
+    } else {
+      const cutCenter = evalCenter(0.04, 1.0);
+      const cutFrame = getFrameAt(0.04, 1.0);
+      camera.position.copy(cutCenter.clone().addScaledVector(cutFrame.eT, -3.8).addScaledVector(cutFrame.eY, 0.35));
+      controls.target.copy(cutCenter);
+    }
+  }
+});
+
+coilMorphSlider.addEventListener('input', () => {
+  targetMorphFactor = parseFloat(coilMorphSlider.value) / 100;
+  modeStraightBtn.classList.toggle('active', targetMorphFactor < 0.5);
+  modeSpiralBtn.classList.toggle('active', targetMorphFactor >= 0.5);
+  updateBannerText();
+});
+
+toggleShellChk.addEventListener('change', () => {
+  needsRebuild = true;
+});
+
+toggleFlowChk.addEventListener('change', () => {
+  const show = toggleFlowChk.checked;
+  perilymphSVParticles.forEach(p => p.visible = show);
+  perilymphSTParticles.forEach(p => p.visible = show);
+  perilymphApexParticles.forEach(p => p.visible = show);
+});
+
+freqBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    isSweeping = false;
+    sweepFreqBtn.classList.remove('active');
+    setFrequency(parseInt(btn.dataset.freq, 10));
+    updateBannerText();
+  });
+});
+
+freqSlider.addEventListener('input', () => {
+  isSweeping = false;
+  sweepFreqBtn.classList.remove('active');
+  const uVal = parseFloat(freqSlider.value) / 100;
+  setFrequency(uToFreq(uVal), false);
+  freqDisplayVal.textContent = `${currentFreq.toLocaleString()} Hz (${getFreqRegionText(currentFreq)})`;
+  updateBannerText();
+});
+
+sweepFreqBtn.addEventListener('click', () => {
+  isSweeping = !isSweeping;
+  sweepFreqBtn.classList.toggle('active', isSweeping);
+  sweepFreqBtn.textContent = isSweeping ? '⏸ 暫停掃頻' : '🔄 自動掃頻演示';
+});
+
+window.addEventListener('resize', resizeCochlea3D);
+
+let last3DTime = performance.now();
+function animate3D(now) {
+  requestAnimationFrame(animate3D);
+  if (!is3DOpen || !renderer) return;
+
+  const dt = Math.min(0.05, (now - last3DTime) / 1000);
+  last3DTime = now;
+  simClock += dt;
+
+  if (isSweeping) {
+    let uCurrent = freqToU(currentFreq);
+    uCurrent += sweepDir * dt * 0.18;
+    if (uCurrent >= 0.92) { uCurrent = 0.92; sweepDir = -1; }
+    if (uCurrent <= 0.08) { uCurrent = 0.08; sweepDir = 1; }
+    setFrequency(uToFreq(uCurrent));
+    updateBannerText();
+  }
+
+  if (Math.abs(targetMorphFactor - morphFactor) > 0.001) {
+    morphFactor += (targetMorphFactor - morphFactor) * Math.min(1, dt * 8);
+    needsRebuild = true;
+  } else if (morphFactor !== targetMorphFactor) {
+    morphFactor = targetMorphFactor;
+    needsRebuild = true;
+  }
+
+  if (needsRebuild) {
+    rebuild3DCochleaMesh();
+    needsRebuild = false;
+  }
+
+  updateTravelingWave(simClock);
+
+  // 外淋巴流動脈衝動畫與鐙骨/圓窗同步運動（圖2物理原則）
+  const showFlow = toggleFlowChk.checked;
+  const flowSpeed = 0.35;
+  const soundWave = Math.sin(simClock * 14.0);
+  const uStart = 0.04;
+  const uEnd = 0.96;
+
+  if (stapesFootplateMesh) {
+    stapesFootplateMesh.position.z = soundWave * 0.045;
+  }
+  if (roundWindowMembraneObj) {
+    roundWindowMembraneObj.position.z = -soundWave * 0.045;
+  }
+
+  if (showFlow) {
+    // 前庭階（上腔）推進至頂部
+    perilymphSVParticles.forEach((pMesh, i) => {
+      pMesh.visible = true;
+      const frac = ((simClock * flowSpeed + i / perilymphSVParticles.length) % 1);
+      const u = uStart + frac * (uEnd - uStart);
+      pMesh.position.copy(mapLocalTo3D(u, 0.20, 0.48, morphFactor));
+    });
+
+    // 耳蝸孔（Helicotrema）頂部連通弧線轉向
+    if (helicoCurveObj) {
+      perilymphApexParticles.forEach((pMesh, i) => {
+        pMesh.visible = true;
+        const frac = ((simClock * flowSpeed * 2.2 + i / perilymphApexParticles.length) % 1);
+        pMesh.position.copy(helicoCurveObj.getPointAt(frac));
+      });
+    }
+
+    // 鼓室階（下腔）回流至圓窗
+    perilymphSTParticles.forEach((pMesh, i) => {
+      pMesh.visible = true;
+      const frac = ((simClock * flowSpeed + i / perilymphSTParticles.length) % 1);
+      const u = uEnd - frac * (uEnd - uStart);
+      pMesh.position.copy(mapLocalTo3D(u, 0.20, -0.48, morphFactor));
+    });
+  }
+
+  if (actionPulseMeshes.length > 0) {
+    actionPulseMeshes.forEach(item => {
+      if (item.mesh.visible) {
+        const u = (simClock * 0.85 + item.offset) % 1;
+        const pt = item.path.getPointAt(u);
+        item.mesh.position.copy(pt);
+      }
+    });
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+  update3DLabelsScreen();
+}
+requestAnimationFrame(animate3D);
+
+setFrequency(8000);
+</script>
+</body>
+</html>

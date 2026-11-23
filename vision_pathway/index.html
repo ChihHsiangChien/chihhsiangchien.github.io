@@ -1,0 +1,1960 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>視覺神經傳導與視網膜構造 - 互動動態模擬器</title>
+    <style>
+        :root {
+            --bg-color: #070d19;
+            --panel-bg: rgba(15, 23, 42, 0.82);
+            --panel-border: rgba(255, 255, 255, 0.16);
+            --accent: #38bdf8;
+            --accent-glow: rgba(56, 189, 248, 0.35);
+            --step-color: #f59e0b;
+            --text-main: #f1f5f9;
+            --text-sub: #94a3b8;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body, html {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang TC", "Microsoft JhengHei", sans-serif;
+            color: var(--text-main);
+            touch-action: none;
+        }
+
+        #simCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+        }
+        #simCanvas:active { cursor: grabbing; }
+
+        /* 頂部懸浮列 (不遮擋中央動畫) */
+        .top-bar {
+            position: fixed;
+            top: 10px;
+            left: 12px;
+            right: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: none;
+            z-index: 15;
+            gap: 8px;
+        }
+
+        .status-banner {
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--panel-border);
+            padding: 7px 14px;
+            border-radius: 18px;
+            pointer-events: auto;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            max-width: calc(100vw - 145px);
+            box-shadow: 0 4px 18px rgba(0,0,0,0.4);
+        }
+
+        .app-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #e2e8f0;
+            white-space: nowrap;
+        }
+
+        .step-pill {
+            font-size: 12.5px;
+            padding: 3px 10px;
+            border-radius: 12px;
+            background: rgba(56, 189, 248, 0.16);
+            color: #7dd3fc;
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            line-height: 1.35;
+        }
+
+        .step-pill.step-mode {
+            background: rgba(245, 158, 11, 0.2);
+            color: #fcd34d;
+            border-color: rgba(245, 158, 11, 0.5);
+        }
+
+        .zoom-group {
+            display: flex;
+            gap: 6px;
+            pointer-events: auto;
+            flex-shrink: 0;
+        }
+
+        /* 底部極簡懸浮控制塢 */
+        .bottom-dock {
+            position: fixed;
+            bottom: 14px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--panel-bg);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid var(--panel-border);
+            padding: 7px 11px;
+            border-radius: 26px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            z-index: 15;
+            box-shadow: 0 8px 28px rgba(0,0,0,0.55);
+            max-width: 96vw;
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+        .bottom-dock::-webkit-scrollbar { display: none; }
+
+        .btn {
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid rgba(255, 255, 255, 0.13);
+            color: var(--text-main);
+            padding: 7px 12px;
+            border-radius: 18px;
+            font-size: 12.5px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: all 0.18s ease;
+            white-space: nowrap;
+        }
+        .btn:hover { background: rgba(255, 255, 255, 0.15); }
+        .btn:active { transform: scale(0.94); }
+
+        .btn.primary {
+            background: linear-gradient(135deg, #0284c7, #2563eb);
+            border-color: #38bdf8;
+            box-shadow: 0 0 12px var(--accent-glow);
+        }
+
+        .btn.step-btn {
+            background: rgba(245, 158, 11, 0.18);
+            border-color: rgba(245, 158, 11, 0.55);
+            color: #fde68a;
+        }
+        .btn.step-btn.active {
+            background: linear-gradient(135deg, #d97706, #b45309);
+            color: #fff;
+            border-color: #fbbf24;
+            box-shadow: 0 0 14px rgba(245, 158, 11, 0.45);
+        }
+
+        .btn.active {
+            background: rgba(56, 189, 248, 0.22);
+            border-color: var(--accent);
+            color: #7dd3fc;
+        }
+
+        .icon-btn {
+            width: 34px;
+            height: 34px;
+            padding: 0;
+            justify-content: center;
+            border-radius: 50%;
+            background: var(--panel-bg);
+            font-size: 15px;
+        }
+
+        /* 點擊細胞時的輕量角落提示卡 */
+        .cell-popup {
+            position: fixed;
+            top: 62px;
+            right: 12px;
+            width: 285px;
+            max-width: calc(100vw - 24px);
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            border-radius: 16px;
+            padding: 12px 14px;
+            z-index: 20;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.55);
+            transform: translateX(120%);
+            transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+            pointer-events: auto;
+        }
+        .cell-popup.visible { transform: translateX(0); }
+
+        .popup-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .popup-header h3 { font-size: 14px; color: #38bdf8; }
+        .close-icon {
+            background: none; border: none; color: #94a3b8;
+            font-size: 16px; cursor: pointer; padding: 2px 5px;
+        }
+        .popup-body { font-size: 12.5px; line-height: 1.55; color: #cbd5e1; }
+        .popup-tag {
+            display: inline-block; margin-top: 7px; font-size: 11px;
+            padding: 2px 8px; border-radius: 6px;
+            background: rgba(56, 189, 248, 0.12); color: #7dd3fc;
+        }
+
+        /* 多分頁「知識庫」彈出視窗 (僅在點擊 📖 知識庫時開啟，平時完全隱藏不佔空間) */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(3, 7, 18, 0.65);
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            z-index: 50;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .modal-backdrop.open { display: flex; }
+
+        .knowledge-modal {
+            width: 620px;
+            max-width: 100%;
+            max-height: 82vh;
+            background: rgba(15, 23, 42, 0.96);
+            border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.7);
+        }
+
+        .modal-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 18px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .modal-top h2 { font-size: 16px; color: #f8fafc; }
+
+        .tabs-nav {
+            display: flex;
+            gap: 6px;
+            padding: 10px 16px;
+            background: rgba(2, 6, 23, 0.5);
+            overflow-x: auto;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .tab-btn {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #94a3b8;
+            padding: 6px 13px;
+            border-radius: 14px;
+            font-size: 12.5px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .tab-btn.active {
+            background: rgba(56, 189, 248, 0.22);
+            color: #38bdf8;
+            border-color: #38bdf8;
+        }
+
+        .tab-panel {
+            padding: 18px;
+            overflow-y: auto;
+            font-size: 13.5px;
+            line-height: 1.7;
+            color: #e2e8f0;
+            display: none;
+            user-select: text;
+            -webkit-user-select: text;
+        }
+        .tab-panel.active { display: block; }
+        .tab-panel h4 { color: #7dd3fc; margin: 10px 0 4px; font-size: 14.5px; }
+        .tab-panel h4:first-child { margin-top: 0; }
+        .tab-panel p { margin-bottom: 10px; color: #cbd5e1; }
+        .highlight-box {
+            background: rgba(56, 189, 248, 0.09);
+            border-left: 3px solid #38bdf8;
+            padding: 10px 12px;
+            border-radius: 0 8px 8px 0;
+            margin: 10px 0;
+            font-size: 13px;
+        }
+        .locate-btn {
+            margin-top: 6px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: rgba(56, 189, 248, 0.18);
+            border: 1px solid #38bdf8;
+            color: #7dd3fc;
+            padding: 5px 11px;
+            border-radius: 12px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .gesture-tip {
+            position: fixed;
+            bottom: 66px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 11.5px;
+            color: rgba(148, 163, 184, 0.75);
+            pointer-events: none;
+            white-space: nowrap;
+            transition: opacity 0.4s;
+        }
+
+        @media (max-width: 640px) {
+            .app-title { display: none; }
+            .status-banner { max-width: calc(100vw - 130px); padding: 6px 10px; }
+            .btn { padding: 6px 10px; font-size: 12px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 頂部狀態與視角縮放 -->
+    <div class="top-bar">
+        <div class="status-banner">
+            <span class="app-title">👁️ 視覺傳導模擬</span>
+            <span id="statusPill" class="step-pill">連續模擬中：點擊下方「👣 逐步」可分步拆解傳導機制</span>
+        </div>
+        <div class="zoom-group">
+            <button class="btn icon-btn" id="btnZoomIn" title="放大">＋</button>
+            <button class="btn icon-btn" id="btnZoomOut" title="縮小">－</button>
+            <button class="btn icon-btn" id="btnResetView" title="全景視角">⟲</button>
+        </div>
+    </div>
+
+    <!-- 全螢幕互動畫布 -->
+    <canvas id="simCanvas"></canvas>
+
+    <!-- 點擊畫布構造時彈出的小型說明卡 -->
+    <div class="cell-popup" id="cellPopup">
+        <div class="popup-header">
+            <h3 id="popupTitle">細胞名稱</h3>
+            <button class="close-icon" id="btnClosePopup">✕</button>
+        </div>
+        <div class="popup-body" id="popupDesc"></div>
+        <div class="popup-tag" id="popupTag"></div>
+    </div>
+
+    <div class="gesture-tip" id="gestureTip">支援雙指縮放・單指拖曳・點擊畫面任一細胞或構造查看說明</div>
+
+    <!-- 底部極簡懸浮控制塢 -->
+    <div class="bottom-dock">
+        <button class="btn primary" id="btnFire">⚡ 發射光子</button>
+        <button class="btn step-btn" id="btnStepMode">👣 逐步教學</button>
+        <button class="btn step-btn" id="btnNextStep" style="display:none;">⏭️ 下一步 (1/7)</button>
+        <button class="btn active" id="btnAuto">🔄 自動</button>
+        <button class="btn" id="btnLightEnv">☀️ 光亮環境</button>
+        <button class="btn active" id="btnLabels">🏷️ 標籤</button>
+        <button class="btn" id="btnKnowledge">📖 知識庫</button>
+    </div>
+
+    <!-- 多分頁教材知識庫 Modal -->
+    <div class="modal-backdrop" id="knowledgeModal">
+        <div class="knowledge-modal">
+            <div class="modal-top">
+                <h2>📖 視網膜構造與視覺神經傳導知識庫</h2>
+                <button class="close-icon" id="btnCloseModal">✕</button>
+            </div>
+            <div class="tabs-nav">
+                <button class="tab-btn active" data-tab="tab1">1. 視細胞與感光色素</button>
+                <button class="tab-btn" data-tab="tab2">2. 中央窩與盲點</button>
+                <button class="tab-btn" data-tab="tab3">3. 水平與無軸突細胞</button>
+                <button class="tab-btn" data-tab="tab4">4. 刺激傳導途徑</button>
+            </div>
+
+            <!-- 分頁 1：視細胞 -->
+            <div class="tab-panel active" id="tab1">
+                <h4>🔬 視細胞（Visual Cell）</h4>
+                <p><strong>視細胞</strong>是視網膜上含有<strong>感光物質（感光色素）</strong>的特化神經細胞。當光線進入眼球抵達視網膜時，在光刺激下，視細胞內的感光色素結構會發生改變，引發細胞膜電位變化，進而將光刺激轉換為神經電訊號。</p>
+
+                <h4>🟦 視桿細胞（Rod Cells）</h4>
+                <p>視桿細胞數目較多（約一億兩千萬個），主要分布於中央窩以外的視網膜區域。它們對<strong>光亮度極為敏感</strong>，即使在稍暗或微光的環境下，也可辨識物體的輪廓與形狀，但無法分辨色彩（負責暗視覺）。</p>
+
+                <h4>🔺 視錐細胞（Cone Cells）— 紅、綠、藍三原色</h4>
+                <p>視錐細胞的數目較少（約六百萬個），視網膜上分布有<strong>三種不同的視錐細胞</strong>，分別含有對<strong>紅光、綠光和藍光</strong>敏感的感光色素。它們需要較強的光線刺激，能夠在<strong>光亮的環境下辨識豐富的色彩及其精細形狀</strong>。</p>
+                <button class="locate-btn" data-focus="photoreceptors">🎯 在畫面上定位「視桿與三色視錐細胞」</button>
+            </div>
+
+            <!-- 分頁 2：中央窩與盲點 -->
+            <div class="tab-panel" id="tab2">
+                <h4>🎯 中央窩（Fovea）— 視覺最敏銳處</h4>
+                <p>視網膜的中央區域有一小凹陷處，稱為<strong>中央窩</strong>。此處上方的雙極細胞與神經節細胞向兩側推開讓光線直接照射，且<strong>缺乏視桿細胞，但含有多而密集的視錐細胞</strong>，因此是人類視覺解析度最高、最敏銳的部位。</p>
+                <button class="locate-btn" data-focus="fovea">🎯 在畫面上定位「中央窩」</button>
+
+                <h4 style="margin-top:16px;">🕳️ 盲點（Blind Spot）— 視神經穿出口</h4>
+                <p>靠近眼球中心的神經節細胞軸突匯集成為<strong>視神經</strong>，在中央窩附近穿過<strong>脈絡膜、鞏膜</strong>後將視覺訊息傳達到視覺中樞。</p>
+                <div class="highlight-box">
+                    <strong>為什麼會有盲點？</strong><br>
+                    視神經通出眼球壁處的視網膜上（視神經盤），<strong>沒有任何視細胞（無視桿也無視錐細胞）</strong>，因此照射到此處的光線無法引起感光反應，稱為<strong>盲點</strong>。
+                </div>
+                <button class="locate-btn" data-focus="blindspot">🎯 在畫面上定位「盲點與鞏膜穿出口」</button>
+            </div>
+
+            <!-- 分頁 3：橫向調控神經元 -->
+            <div class="tab-panel" id="tab3">
+                <h4>🟠 水平細胞（Horizontal Cells）</h4>
+                <p>位於視細胞與雙極神經細胞交界處（外網狀層）。其突起呈水平橫向延伸，連接多個視桿與視錐細胞，負責<strong>「側向抑制（Lateral Inhibition）」</strong>，能強化明暗邊界的視覺對比度，讓物體邊緣更清晰。</p>
+
+                <h4>🟢 無軸突細胞（Amacrine Cells）</h4>
+                <p>位於雙極神經細胞與神經節細胞交界處（內網狀層）。顧名思義<strong>沒有長軸突</strong>，但其樹突廣泛與雙極細胞及神經節細胞形成突觸，負責調控時間動態訊號（如偵測移動中的物體、光線明暗瞬間變化）。</p>
+
+                <h4>🟫 色素上皮細胞（Pigment Epithelium）</h4>
+                <p>緊貼於視細胞外側與脈絡膜之間，富含黑色素顆粒，能吸收穿過視網膜的多餘光線防止散射，並協助視細胞更新感光色素。</p>
+                <button class="locate-btn" data-focus="lateral">🎯 在畫面上定位「水平細胞與無軸突細胞」</button>
+            </div>
+
+            <!-- 分頁 4：完整傳導途徑 -->
+            <div class="tab-panel" id="tab4">
+                <h4>⚡ 視覺刺激傳導完整路徑</h4>
+                <div class="highlight-box">
+                    <strong>外界光線</strong> ➔ 穿透透明的神經節細胞、雙極細胞層 ➔ 抵達<strong>視細胞（視錐細胞／視桿細胞）</strong> ➔ 感光色素結構改變引發<strong>電位變化</strong> ➔ <strong>雙極神經細胞</strong>（受<em>水平細胞</em>橫向調控） ➔ <strong>神經節細胞</strong>（受<em>無軸突細胞</em>橫向調控） ➔ 軸突匯集為<strong>視神經</strong>（穿過盲點、脈絡膜、鞏膜） ➔ 視丘中繼 ➔ <strong>大腦枕葉視覺皮層</strong>產生視覺！
+                </div>
+                <p>💡 建議點擊主畫面底部的 <strong>「👣 逐步教學」</strong> 按鈕，系統將自動為您一格一格暫停並放大解說這 7 個精采步驟！</p>
+            </div>
+        </div>
+    </div>
+
+<script>
+(() => {
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // UI 參照
+    const statusPill = document.getElementById('statusPill');
+    const cellPopup = document.getElementById('cellPopup');
+    const popupTitle = document.getElementById('popupTitle');
+    const popupDesc = document.getElementById('popupDesc');
+    const popupTag = document.getElementById('popupTag');
+    const gestureTip = document.getElementById('gestureTip');
+
+    const btnStepMode = document.getElementById('btnStepMode');
+    const btnNextStep = document.getElementById('btnNextStep');
+    const btnAuto = document.getElementById('btnAuto');
+    const btnLightEnv = document.getElementById('btnLightEnv');
+    const btnLabels = document.getElementById('btnLabels');
+
+    // 虛擬世界尺寸 (容納視網膜精細橫切面、中央窩、盲點、鞏膜脈絡膜、視神經與大腦皮層)
+    const WORLD_W = 1620;
+    const WORLD_H = 920;
+
+    // 鏡頭狀態 (支援平滑對焦動畫)
+    let view = {
+        x: 0, y: 0, scale: 1,
+        targetX: null, targetY: null, targetScale: null,
+        minScale: 0.32, maxScale: 3.6
+    };
+
+    // 模擬器狀態
+    let state = {
+        showLabels: true,
+        autoFire: true,
+        dimLight: false,      // false: 光亮環境(紅綠藍視錐+視桿), true: 稍暗環境(視桿敏感辨識形狀)
+        stepMode: false,      // 是否開啟 Step-by-step 模式
+        currentStep: 0,       // 0: 未啟動, 1~7 為七個教學步驟
+        pausedAtBarrier: false,
+        time: 0,
+        autoTimer: 0,
+        selectedKey: null,
+        cortexGlow: 0
+    };
+
+    // 7 個 Step-by-Step 逐步教學檢查點定義
+    const STEPS_CONFIG = [
+        null,
+        {
+            title: '步驟 1/7：光線進入眼底，穿透透明神經層（留意中央窩凹陷處光線直達視錐細胞，盲點則無視細胞）',
+            cam: { wx: 520, wy: 430, scale: 1.05 }
+        },
+        {
+            title: '步驟 2/7：光抵達「視細胞」！感光色素結構改變引發電位變化；多餘光線由色素上皮細胞吸收',
+            cam: { wx: 760, wy: 390, scale: 1.32 }
+        },
+        {
+            title: '步驟 3/7：視細胞釋放訊號傳向「雙極神經細胞」，同時活化「水平細胞」進行橫向對比調控',
+            cam: { wx: 625, wy: 390, scale: 1.45 }
+        },
+        {
+            title: '步驟 4/7：雙極神經細胞整合電位，將視覺訊息往內層傳遞',
+            cam: { wx: 535, wy: 390, scale: 1.45 }
+        },
+        {
+            title: '步驟 5/7：訊號傳至「神經節細胞」引發動作電位，「無軸突細胞」於內網狀層橫向整合動態訊號',
+            cam: { wx: 415, wy: 390, scale: 1.42 }
+        },
+        {
+            title: '步驟 6/7：神經節細胞軸突匯集為「視神經」，由「盲點」穿過脈絡膜與鞏膜通往視覺中樞',
+            cam: { wx: 720, wy: 710, scale: 1.15 }
+        },
+        {
+            title: '步驟 7/7：視覺訊息經視神經抵達「大腦皮層（枕葉視覺中樞）」，正式產生色彩與形狀視覺！',
+            cam: { wx: 1320, wy: 460, scale: 1.18 }
+        }
+    ];
+
+    // ================= 視網膜解剖與神經細胞網路定義 =================
+    // 視細胞列表 (Y 軸由上而下排列：上方周邊區 -> 中央窩凹陷區[密集紅綠藍視錐，無視桿] -> 下方周邊區 -> 最下方為盲點[無任何視細胞])
+    const photoreceptors = [
+        // 上方周邊視網膜 (富含視桿細胞)
+        { id: 0, type: 'rod',  y: 155, color: '#60a5fa', name: '視桿細胞', bpIdx: 0, excited: 0, inFovea: false },
+        { id: 1, type: 'rod',  y: 215, color: '#60a5fa', name: '視桿細胞', bpIdx: 0, excited: 0, inFovea: false },
+        // 中央窩 (Fovea, Y: 275 ~ 435)：缺乏視桿細胞，含多而密的紅、綠、藍三種視錐細胞 (視覺最敏銳處)
+        { id: 2, type: 'cone', y: 290, color: '#ef4444', coneLabel: '紅光視錐', bpIdx: 1, excited: 0, inFovea: true },
+        { id: 3, type: 'cone', y: 350, color: '#22c55e', coneLabel: '綠光視錐', bpIdx: 2, excited: 0, inFovea: true },
+        { id: 4, type: 'cone', y: 410, color: '#3b82f6', coneLabel: '藍光視錐', bpIdx: 2, excited: 0, inFovea: true },
+        // 下方周邊視網膜 (視桿細胞為主)
+        { id: 5, type: 'rod',  y: 485, color: '#60a5fa', name: '視桿細胞', bpIdx: 3, excited: 0, inFovea: false },
+        { id: 6, type: 'rod',  y: 545, color: '#60a5fa', name: '視桿細胞', bpIdx: 3, excited: 0, inFovea: false }
+        // Y: 620 ~ 735 為「盲點 (視神經盤)」：沒有任何視細胞！
+    ];
+
+    // 水平細胞 (Horizontal Cells) - 位於外網狀層 X: 615，橫向連結視細胞與雙極細胞
+    const horizontalCells = [
+        { id: 0, x: 618, y: 252, spanTop: 155, spanBot: 350, excited: 0 },
+        { id: 1, x: 618, y: 448, spanTop: 350, spanBot: 545, excited: 0 }
+    ];
+
+    // 雙極神經細胞 (Bipolar Cells) - 位於中層 X: 520 (中央窩附近略微向兩側避開讓光直達)
+    const bipolars = [
+        { id: 0, x: 520, y: 185, gcIdx: 0, excited: 0 },
+        { id: 1, x: 525, y: 280, gcIdx: 1, excited: 0 }, // 中央窩一對一高解析傳導
+        { id: 2, x: 525, y: 405, gcIdx: 2, excited: 0 },
+        { id: 3, x: 520, y: 515, gcIdx: 3, excited: 0 }
+    ];
+
+    // 無軸突細胞 (Amacrine Cells) - 位於內網狀層 X: 432，無長軸突，橫向調控雙極與神經節細胞
+    const amacrineCells = [
+        { id: 0, x: 434, y: 235, spanTop: 185, spanBot: 295, excited: 0 },
+        { id: 1, x: 434, y: 460, spanTop: 395, spanBot: 520, excited: 0 }
+    ];
+
+    // 神經節細胞 (Ganglion Cells) - 位於內層 X: 335
+    const ganglions = [
+        { id: 0, x: 335, y: 185, excited: 0 },
+        { id: 1, x: 340, y: 275, excited: 0 },
+        { id: 2, x: 340, y: 415, excited: 0 },
+        { id: 3, x: 335, y: 515, excited: 0 }
+    ];
+
+    // 互動點擊資料庫 (世界座標熱區)
+    const interactiveDB = {
+        fovea: {
+            title: '🎯 中央窩（Fovea）',
+            desc: '視網膜中央的小凹陷處。<b>缺乏視桿細胞，但含有多而密集的視錐細胞（紅、綠、藍）</b>，內層神經元向旁側移開減少遮蔽，是人類<b>視覺最敏銳</b>的部位。',
+            tag: '高解析度彩色視覺中心｜密集視錐細胞',
+            bounds: { x: 255, y: 265, w: 575, h: 175 }
+        },
+        blindspot: {
+            title: '🕳️ 盲點（Blind Spot / 視神經盤）',
+            desc: '神經節細胞的軸突在此匯集為視神經，穿過<b>脈絡膜與鞏膜</b>離開眼球。此處的視網膜上<b>沒有任何視細胞</b>，光線照射於此無法感受刺激，稱為<b>盲點</b>。',
+            tag: '無任何視細胞｜無法感光｜視神經穿出口',
+            bounds: { x: 640, y: 605, w: 310, h: 140 }
+        },
+        cone: {
+            title: '🔺 視錐細胞（Cone Cells）',
+            desc: '含有感光色素的<b>視細胞</b>，數目較少，集中於中央窩。分為對<b>紅、綠、藍</b>三種光敏感的視錐細胞，能在<b>光亮的環境下辨識色彩及其形狀</b>。',
+            tag: '視細胞｜紅、綠、藍三種感光色素｜明視覺',
+            bounds: { x: 665, y: 270, w: 175, h: 165 }
+        },
+        rod: {
+            title: '🟦 視桿細胞（Rod Cells）',
+            desc: '含有感光物質（視紫質）的<b>視細胞</b>，數目較多。對<b>光亮度非常敏感</b>，即使在稍暗的環境也可辨識物體的形狀，但無法分辨顏色。',
+            tag: '視細胞｜對光亮度敏感｜暗視覺辨識形狀',
+            bounds: { x: 665, y: 130, w: 175, h: 445 }
+        },
+        horizontal: {
+            title: '🟠 水平細胞（Horizontal Cells）',
+            desc: '位於視細胞與雙極細胞交界處的橫向聯絡神經元。透過<b>側向抑制</b>調節鄰近視細胞的訊號，強化影像邊緣的明暗與色彩對比。',
+            tag: '外網狀層橫向神經元｜強化視覺對比',
+            bounds: { x: 590, y: 150, w: 56, h: 405 }
+        },
+        bipolar: {
+            title: '🟣 雙極神經細胞（Bipolar Cells）',
+            desc: '連接視細胞與神經節細胞的中繼神經元。接收視細胞因感光色素改變所引發的電位變化，整合後傳向神經節細胞。',
+            tag: '視網膜中繼神經元｜縱向傳遞電位變化',
+            bounds: { x: 485, y: 150, w: 78, h: 405 }
+        },
+        amacrine: {
+            title: '🟢 無軸突細胞（Amacrine Cells）',
+            desc: '位於雙極細胞與神經節細胞交界處，<b>沒有長軸突</b>，以廣泛的樹突進行橫向聯繫，專門調控動態視覺、光線強弱瞬間變化等複雜訊息。',
+            tag: '內網狀層無軸突神經元｜調控動態與明暗訊號',
+            bounds: { x: 405, y: 175, w: 56, h: 350 }
+        },
+        ganglion: {
+            title: '🔵 神經節細胞（Ganglion Cells）',
+            desc: '視網膜最內層的輸出神經元。接收雙極與無軸突細胞訊息後產生<b>動作電位</b>，其長軸突匯集成為<b>視神經</b>，穿過盲點通往視覺中樞。',
+            tag: '輸出動作電位｜軸突匯集為視神經',
+            bounds: { x: 295, y: 150, w: 85, h: 405 }
+        },
+        rpe_coats: {
+            title: '🟫 色素上皮細胞・脈絡膜・鞏膜',
+            desc: '• <b>色素上皮細胞</b>：緊貼視細胞外節，吸收散射光並協助感光色素再生。<br>• <b>脈絡膜</b>：富含血管與黑色素，供給視網膜養分。<br>• <b>鞏膜</b>：眼球最外層強韌白色保護壁。',
+            tag: '眼球壁三層支持保護構造',
+            bounds: { x: 845, y: 120, w: 120, h: 485 }
+        },
+        opticNerve: {
+            title: '⚡ 視神經（Optic Nerve）',
+            desc: '由神經節細胞軸突匯集而成，在中央窩附近的<b>盲點</b>穿過色素上皮、脈絡膜與鞏膜離開眼球，將視覺電訊號高速傳向間腦視丘與大腦皮層。',
+            tag: '視覺傳導束｜穿出脈絡膜與鞏膜',
+            bounds: { x: 350, y: 635, w: 750, h: 120 }
+        },
+        cortex: {
+            title: '🧠 大腦視覺皮層（Visual Cortex）',
+            desc: '位於大腦枕葉的視覺中樞。接收視神經傳來的神經衝動，解析物體的<b>色彩（紅綠藍視錐貢獻）與形狀明暗（視錐與視桿貢獻）</b>，產生最終視覺！',
+            tag: '大腦枕葉視覺中樞｜產生視覺感知',
+            bounds: { x: 1140, y: 240, w: 390, h: 470 }
+        }
+    };
+
+    // 動態粒子容器
+    const photons = [];
+    const pulses = [];
+    const lateralWaves = [];
+    const ripples = [];
+
+    // 神經節細胞軸突匯集至「盲點 (Y: 675)」穿過脈絡膜與鞏膜，成為視神經通往大腦皮層
+    function getAxonPath(gIdx) {
+        const g = ganglions[gIdx];
+        const lane = (gIdx - 1.5) * 8;
+        return [
+            { x: g.x - 24, y: g.y },
+            { x: 268 + gIdx * 4, y: g.y + 35 },
+            { x: 268 + gIdx * 4, y: 668 + lane },     // 沿視網膜最內側神經纖維層往下走
+            { x: 680, y: 675 + lane },                // 抵達視神經盤（盲點入口）
+            { x: 965, y: 675 + lane },                // 穿過色素上皮、脈絡膜、鞏膜！
+            { x: 1095, y: 650 + lane },               // 視丘外側膝狀體 (LGN)
+            { x: 1230, y: 555 + lane * 1.6 },         // 視放線
+            { x: 1415, y: 465 + (gIdx - 1.5) * 30 }   // 大腦枕葉視覺皮層
+        ];
+    }
+
+    // ================= 畫面縮放與置中初始化 =================
+    function resizeCanvas() {
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = window.innerWidth * dpr;
+        canvas.height = window.innerHeight * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        if (view.scale === 1 && view.x === 0 && view.y === 0) {
+            resetView(true);
+        }
+    }
+
+    function resetView(instant = false) {
+        const availW = window.innerWidth * 0.96;
+        const availH = (window.innerHeight - 105) * 0.95;
+        const s = Math.min(availW / WORLD_W, availH / WORLD_H, 1.1);
+        const tx = (window.innerWidth - WORLD_W * s) / 2;
+        const ty = (window.innerHeight - WORLD_H * s) / 2 + 4;
+        if (instant) {
+            view.scale = s; view.x = tx; view.y = ty;
+            view.targetScale = null;
+        } else {
+            view.targetScale = s; view.targetX = tx; view.targetY = ty;
+        }
+    }
+
+    function focusWorldPoint(wx, wy, targetScale = 1.35) {
+        const clampedS = Math.min(view.maxScale, Math.max(view.minScale, targetScale));
+        view.targetScale = clampedS;
+        view.targetX = window.innerWidth / 2 - wx * clampedS;
+        view.targetY = window.innerHeight / 2 - wy * clampedS;
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+    resetView(true);
+
+    function screenToWorld(sx, sy) {
+        return { x: (sx - view.x) / view.scale, y: (sy - view.y) / view.scale };
+    }
+
+    // ================= 發射光子（新設計：幾何菱形星芒光束，絕不像鞭毛） =================
+    function clearAllParticles() {
+        photons.length = 0;
+        pulses.length = 0;
+        lateralWaves.length = 0;
+        ripples.length = 0;
+    }
+
+    function spawnLightWave() {
+        photoreceptors.forEach((pr) => {
+            let pColor = '#fef08a';
+            if (!state.dimLight && pr.type === 'cone') {
+                pColor = pr.color; // 光亮環境呈現紅、綠、藍三色光刺激對應視錐細胞
+            } else if (state.dimLight) {
+                pColor = '#bae6fd'; // 稍暗環境微光
+            }
+
+            photons.push({
+                x: 95,
+                y: pr.y,
+                speed: 440,
+                color: pColor,
+                targetPR: pr,
+                fate: 'pr'
+            });
+        });
+
+        // 1 道射向「色素上皮細胞」示範多餘光吸收
+        photons.push({
+            x: 95, y: 185, speed: 440,
+            color: state.dimLight ? '#93c5fd' : '#fde047',
+            targetPR: null, fate: 'rpe'
+        });
+
+        // 1 道射向「盲點 (Y: 675)」示範沒有任何視細胞、無法引起視覺訊號！
+        photons.push({
+            x: 95, y: 675, speed: 440,
+            color: state.dimLight ? '#94a3b8' : '#fde047',
+            targetPR: null, fate: 'blindspot'
+        });
+    }
+
+    // ================= 訊號傳遞與橫向神經元觸發 =================
+    function activatePhotoreceptor(pr) {
+        // 稍暗環境下：視錐細胞對弱光不敏感，無法活化；視桿細胞仍可敏感活化辨識形狀
+        if (state.dimLight && pr.type === 'cone') {
+            ripples.push({ x: 765, y: pr.y, r: 4, maxR: 20, color: 'rgba(148,163,184,0.45)' });
+            return;
+        }
+
+        pr.excited = 1.0;
+        ripples.push({ x: 765, y: pr.y, r: 5, maxR: 34, color: pr.color });
+
+        const bp = bipolars[pr.bpIdx];
+        pulses.push({
+            stage: 'pr_to_bp', // Step 3 區段
+            fromX: 662, fromY: pr.y,
+            toX: bp.x + 26, toY: bp.y,
+            progress: 0, speed: 1.55,
+            color: pr.type === 'cone' ? pr.color : '#38bdf8',
+            targetBP: bp,
+            sourceY: pr.y,
+            triggeredHorizontal: false
+        });
+    }
+
+    function activateBipolar(bp) {
+        if (bp.excited > 0.65) return;
+        bp.excited = 1.0;
+        ripples.push({ x: bp.x, y: bp.y, r: 5, maxR: 28, color: '#c084fc' });
+
+        const gc = ganglions[bp.gcIdx];
+        pulses.push({
+            stage: 'bp_to_gc', // Step 4 -> Step 5 區段
+            fromX: bp.x - 26, fromY: bp.y,
+            toX: gc.x + 25, toY: gc.y,
+            progress: 0, speed: 1.55,
+            color: '#e879f9',
+            targetGC: gc,
+            triggeredAmacrine: false
+        });
+    }
+
+    function activateGanglion(gc) {
+        gc.excited = 1.0;
+        ripples.push({ x: gc.x, y: gc.y, r: 6, maxR: 34, color: '#38bdf8' });
+
+        pulses.push({
+            stage: 'gc_to_brain', // Step 6 -> Step 7 區段
+            path: getAxonPath(gc.id),
+            progress: 0, speed: 0.42,
+            color: '#fde047'
+        });
+    }
+
+    // ================= Step-by-Step 逐步控制核心 =================
+    function startStepMode() {
+        state.stepMode = true;
+        state.autoFire = false;
+        state.currentStep = 1;
+        state.pausedAtBarrier = false;
+
+        btnStepMode.classList.add('active');
+        btnAuto.classList.remove('active');
+        btnNextStep.style.display = 'flex';
+        statusPill.classList.add('step-mode');
+
+        clearAllParticles();
+        spawnLightWave();
+        applyStepInfo(1);
+    }
+
+    function exitStepMode() {
+        state.stepMode = false;
+        state.currentStep = 0;
+        state.pausedAtBarrier = false;
+
+        btnStepMode.classList.remove('active');
+        btnNextStep.style.display = 'none';
+        statusPill.classList.remove('step-mode');
+        statusPill.textContent = '自由模擬模式：點擊「⚡ 發射光子」或開啟自動連續刺激';
+        resetView(false);
+    }
+
+    function applyStepInfo(stepNum) {
+        const cfg = STEPS_CONFIG[stepNum];
+        if (!cfg) return;
+        statusPill.textContent = cfg.title;
+        btnNextStep.textContent = stepNum < 7 ? `⏭️ 下一步 (${stepNum}/7)` : `🔄 重新逐步 (7/7)`;
+        focusWorldPoint(cfg.cam.wx, cfg.cam.wy, cfg.cam.scale);
+    }
+
+    function advanceNextStep() {
+        if (!state.stepMode) return;
+        if (state.currentStep >= 7) {
+            // 循環回第 1 步
+            state.currentStep = 1;
+            state.pausedAtBarrier = false;
+            clearAllParticles();
+            spawnLightWave();
+            applyStepInfo(1);
+            return;
+        }
+        state.currentStep++;
+        state.pausedAtBarrier = false;
+        applyStepInfo(state.currentStep);
+    }
+
+    // 多段折線插值工具
+    function pointOnPolyline(pts, t) {
+        let total = 0;
+        const lens = [];
+        for (let i = 0; i < pts.length - 1; i++) {
+            const d = Math.hypot(pts[i+1].x - pts[i].x, pts[i+1].y - pts[i].y);
+            lens.push(d);
+            total += d;
+        }
+        let target = Math.max(0, Math.min(1, t)) * total;
+        for (let i = 0; i < lens.length; i++) {
+            if (target <= lens[i] || i === lens.length - 1) {
+                const r = lens[i] === 0 ? 0 : target / lens[i];
+                return {
+                    x: pts[i].x + (pts[i+1].x - pts[i].x) * r,
+                    y: pts[i].y + (pts[i+1].y - pts[i].y) * r
+                };
+            }
+            target -= lens[i];
+        }
+        return pts[pts.length - 1];
+    }
+
+    // ================= 物理與動畫更新迴圈 =================
+    function update(dt) {
+        state.time += dt;
+
+        // 平滑鏡頭過渡動畫
+        if (view.targetScale !== null) {
+            const lerp = Math.min(1, dt * 6.5);
+            view.scale += (view.targetScale - view.scale) * lerp;
+            view.x += (view.targetX - view.x) * lerp;
+            view.y += (view.targetY - view.y) * lerp;
+            if (Math.abs(view.targetScale - view.scale) < 0.001 &&
+                Math.abs(view.targetX - view.x) < 0.5 &&
+                Math.abs(view.targetY - view.y) < 0.5) {
+                view.scale = view.targetScale;
+                view.x = view.targetX;
+                view.y = view.targetY;
+                view.targetScale = null;
+            }
+        }
+
+        // 自動發射計時
+        if (state.autoFire && !state.stepMode) {
+            state.autoTimer += dt;
+            if (state.autoTimer >= 3.3) {
+                state.autoTimer = 0;
+                spawnLightWave();
+            }
+        }
+
+        // 細胞發光衰減 (若處於 Step 暫停狀態，保持發光讓學生觀察)
+        const decayRate = state.pausedAtBarrier ? 0.12 : 1.25;
+        photoreceptors.forEach(p => p.excited = Math.max(0, p.excited - dt * decayRate));
+        horizontalCells.forEach(h => h.excited = Math.max(0, h.excited - dt * decayRate));
+        bipolars.forEach(b => b.excited = Math.max(0, b.excited - dt * decayRate));
+        amacrineCells.forEach(a => a.excited = Math.max(0, a.excited - dt * decayRate));
+        ganglions.forEach(g => g.excited = Math.max(0, g.excited - dt * decayRate));
+        state.cortexGlow = Math.max(0, state.cortexGlow - dt * (state.pausedAtBarrier ? 0.05 : 0.6));
+
+        // 漣漪與橫向抑制波始終保持柔和動畫
+        for (let i = ripples.length - 1; i >= 0; i--) {
+            ripples[i].r += 52 * dt;
+            if (ripples[i].r >= ripples[i].maxR) ripples.splice(i, 1);
+        }
+        for (let i = lateralWaves.length - 1; i >= 0; i--) {
+            lateralWaves[i].t += 1.8 * dt;
+            if (lateralWaves[i].t >= 1) lateralWaves.splice(i, 1);
+        }
+
+        // 若逐步模式已抵達當前步驟觀察點，暫停主訊號推進
+        if (state.stepMode && state.pausedAtBarrier) return;
+
+        // 1. 更新入射光子
+        for (let i = photons.length - 1; i >= 0; i--) {
+            const p = photons[i];
+            p.x += p.speed * dt;
+
+            // Step 1 攔截點：光線正在穿透神經節細胞與雙極細胞層 (X >= 475)
+            if (state.stepMode && state.currentStep === 1 && p.x >= 475) {
+                state.pausedAtBarrier = true;
+                break;
+            }
+
+            // 抵達視細胞感光外節 (X >= 765)
+            if (p.fate === 'pr' && p.x >= 765) {
+                activatePhotoreceptor(p.targetPR);
+                photons.splice(i, 1);
+                if (state.stepMode && state.currentStep === 2 && photons.every(ph => ph.fate !== 'pr')) {
+                    state.pausedAtBarrier = true;
+                }
+                continue;
+            }
+
+            // 抵達盲點 (X >= 740)：沒有視細胞，光線直接沒入盲點組織無電位反應！
+            if (p.fate === 'blindspot' && p.x >= 740) {
+                ripples.push({ x: 740, y: p.y, r: 3, maxR: 22, color: 'rgba(148,163,184,0.5)' });
+                photons.splice(i, 1);
+                continue;
+            }
+
+            // 抵達色素上皮細胞 RPE (X >= 858)：被黑色素吸收
+            if (p.x >= 858) {
+                ripples.push({ x: 860, y: p.y, r: 3, maxR: 18, color: '#f59e0b' });
+                photons.splice(i, 1);
+            }
+        }
+
+        // 2. 更新神經電訊號脈衝
+        for (let i = pulses.length - 1; i >= 0; i--) {
+            const s = pulses[i];
+            s.progress += s.speed * dt;
+
+            // 外網狀層：觸發「水平細胞」橫向對比調控
+            if (s.stage === 'pr_to_bp' && !s.triggeredHorizontal && s.progress >= 0.45) {
+                s.triggeredHorizontal = true;
+                horizontalCells.forEach(hc => {
+                    if (s.sourceY >= hc.spanTop - 15 && s.sourceY <= hc.spanBot + 15) {
+                        hc.excited = 1.0;
+                        lateralWaves.push({ x: hc.x, y1: hc.y, y2: hc.spanTop + 10, t: 0, color: '#fb923c' });
+                        lateralWaves.push({ x: hc.x, y1: hc.y, y2: hc.spanBot - 10, t: 0, color: '#fb923c' });
+                    }
+                });
+                if (state.stepMode && state.currentStep === 3) {
+                    state.pausedAtBarrier = true;
+                }
+            }
+
+            // 抵達雙極細胞本體
+            if (s.stage === 'pr_to_bp' && s.progress >= 1) {
+                activateBipolar(s.targetBP);
+                pulses.splice(i, 1);
+                if (state.stepMode && state.currentStep === 4) {
+                    state.pausedAtBarrier = true;
+                }
+                continue;
+            }
+
+            // 內網狀層：觸發「無軸突細胞」橫向調控
+            if (s.stage === 'bp_to_gc' && !s.triggeredAmacrine && s.progress >= 0.5) {
+                s.triggeredAmacrine = true;
+                amacrineCells.forEach(ac => {
+                    if (s.fromY >= ac.spanTop - 20 && s.fromY <= ac.spanBot + 20) {
+                        ac.excited = 1.0;
+                        lateralWaves.push({ x: ac.x, y1: ac.y, y2: ac.spanTop, t: 0, color: '#34d399' });
+                        lateralWaves.push({ x: ac.x, y1: ac.y, y2: ac.spanBot, t: 0, color: '#34d399' });
+                    }
+                });
+            }
+
+            // 抵達神經節細胞本體
+            if (s.stage === 'bp_to_gc' && s.progress >= 1) {
+                activateGanglion(s.targetGC);
+                pulses.splice(i, 1);
+                if (state.stepMode && state.currentStep === 5) {
+                    state.pausedAtBarrier = true;
+                }
+                continue;
+            }
+
+            // 沿視神經傳導：Step 6 攔截於盲點穿過脈絡膜與鞏膜處 (progress >= 0.48)
+            if (s.stage === 'gc_to_brain' && state.stepMode && state.currentStep === 6 && s.progress >= 0.48) {
+                state.pausedAtBarrier = true;
+                continue;
+            }
+
+            // 抵達大腦視覺皮層 (Step 7)
+            if (s.stage === 'gc_to_brain' && s.progress >= 1) {
+                state.cortexGlow = 1.0;
+                const endPt = s.path[s.path.length - 1];
+                ripples.push({ x: endPt.x, y: endPt.y, r: 8, maxR: 65, color: '#fde047' });
+                pulses.splice(i, 1);
+                if (state.stepMode && state.currentStep === 7 && pulses.length === 0) {
+                    state.pausedAtBarrier = true;
+                }
+            }
+        }
+    }
+
+    // ================= 繪圖輔助工具 =================
+    function roundRectPath(x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.roundRect(x, y, w, h, r);
+    }
+
+    function drawLabelPill(title, sub, x, y, borderCol = 'rgba(148,163,184,0.45)', bgCol = 'rgba(15,23,42,0.86)') {
+        if (!state.showLabels) return;
+        ctx.save();
+        ctx.font = '600 13px -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif';
+        const w1 = ctx.measureText(title).width;
+        let w2 = 0;
+        if (sub) {
+            ctx.font = '11px -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif';
+            w2 = ctx.measureText(sub).width;
+        }
+        const bw = Math.max(w1, w2) + 18;
+        const bh = sub ? 38 : 24;
+        const bx = x - bw / 2;
+        const by = y - bh / 2;
+
+        ctx.fillStyle = bgCol;
+        ctx.strokeStyle = borderCol;
+        ctx.lineWidth = 1.2;
+        roundRectPath(bx, by, bw, bh, 8);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = '600 12.5px -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif';
+        ctx.fillText(title, x, sub ? by + 12 : y);
+
+        if (sub) {
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '10.5px -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif';
+            ctx.fillText(sub, x, by + 27);
+        }
+        ctx.restore();
+    }
+
+    // ================= 主場景渲染 =================
+    function render() {
+        ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+        ctx.save();
+        ctx.translate(view.x, view.y);
+        ctx.scale(view.scale, view.scale);
+
+        // 1. 視網膜輪廓（包含「中央窩 Fovea 凹陷」與「盲點 Blind Spot 視神經通道」）
+        drawRetinaAndCoats();
+
+        // 2. 右側：大腦枕葉視覺皮層
+        drawBrainVisualCortex();
+
+        // 3. 視神經束與視丘中繼
+        drawOpticNerveBundle();
+
+        // 4. 視細胞（視桿細胞 + 中央窩紅綠藍三種視錐細胞）
+        drawVisualCells();
+
+        // 5. 水平細胞 (Horizontal Cells)
+        drawHorizontalCells();
+
+        // 6. 雙極神經細胞 (Bipolar Cells)
+        drawBipolarCells();
+
+        // 7. 無軸突細胞 (Amacrine Cells)
+        drawAmacrineCells();
+
+        // 8. 神經節細胞 (Ganglion Cells)
+        drawGanglionCells();
+
+        // 9. 左側光源與眼球屈光示意
+        drawIncidentLightOrigin();
+
+        // 10. 動態光子（菱形光束星芒）、電脈衝、橫向波紋
+        drawParticles();
+
+        // 11. 傳導方向與區域標記
+        if (state.showLabels) {
+            drawAnatomicalAnnotations();
+        }
+
+        // 選取高亮框
+        if (state.selectedKey && interactiveDB[state.selectedKey]) {
+            const b = interactiveDB[state.selectedKey].bounds;
+            ctx.save();
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 2.2;
+            ctx.setLineDash([6, 4]);
+            roundRectPath(b.x, b.y, b.w, b.h, 12);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        ctx.restore();
+    }
+
+    // 繪製視網膜底板（含中央窩凹陷、盲點缺口、色素上皮、脈絡膜、鞏膜）
+    function drawRetinaAndCoats() {
+        ctx.save();
+
+        // 視網膜組織底色（左側內表面在 Y=350 中央窩處向右凹陷！）
+        const retGrad = ctx.createLinearGradient(250, 0, 860, 0);
+        retGrad.addColorStop(0, 'rgba(30, 41, 59, 0.32)');
+        retGrad.addColorStop(0.7, 'rgba(30, 41, 59, 0.55)');
+        retGrad.addColorStop(1, 'rgba(51, 65, 85, 0.45)');
+
+        ctx.fillStyle = retGrad;
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.22)';
+        ctx.lineWidth = 1.5;
+
+        ctx.beginPath();
+        ctx.moveTo(245, 115);
+        // 內表面往下走到 Y=265 開始向內凹陷形成「中央窩 (Fovea)」
+        ctx.lineTo(245, 255);
+        ctx.bezierCurveTo(245, 295, 312, 310, 312, 350); // 中央窩小凹陷最高點
+        ctx.bezierCurveTo(312, 390, 245, 405, 245, 445);
+        ctx.lineTo(245, 735);
+        ctx.lineTo(855, 735);
+        ctx.lineTo(855, 115);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // 中央窩高亮柔和背景區
+        ctx.fillStyle = 'rgba(250, 204, 21, 0.05)';
+        roundRectPath(305, 268, 545, 165, 14);
+        ctx.fill();
+
+        // 盲點 (Blind Spot, Y: 615 ~ 730) 區域標示：無任何視細胞！
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+        roundRectPath(650, 610, 205, 120, 10);
+        ctx.fill();
+
+        // 網狀層參考細虛線
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.15)';
+        ctx.setLineDash([4, 6]);
+        ctx.beginPath();
+        ctx.moveTo(434, 125); ctx.lineTo(434, 595); // 內網狀層 IPL (無軸突細胞所在)
+        ctx.moveTo(618, 125); ctx.lineTo(618, 595); // 外網狀層 OPL (水平細胞所在)
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // === 眼球壁外三層 (在 Y=635~715 盲點處留出視神經穿出通道！) ===
+        // 1. 色素上皮細胞層 (RPE, X: 855 ~ 902) - 僅分布於盲點上方 (120 ~ 605) 及盲點下方短段
+        for (let i = 0; i < 8; i++) {
+            const cy = 124 + i * 60;
+            ctx.fillStyle = '#451a03';
+            ctx.strokeStyle = '#92400e';
+            ctx.lineWidth = 1.6;
+            roundRectPath(855, cy, 46, 56, 8);
+            ctx.fill();
+            ctx.stroke();
+
+            // 黑色素顆粒
+            ctx.fillStyle = '#1c1917';
+            [[12, 15], [18, 30], [13, 44], [26, 22]].forEach(([dx, dy]) => {
+                ctx.beginPath();
+                ctx.arc(855 + dx, cy + dy, 2.2, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            // 細胞核
+            ctx.fillStyle = '#78350f';
+            ctx.beginPath();
+            ctx.arc(886, cy + 28, 8, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // 2. 脈絡膜 (Choroid, X: 906 ~ 930，暗紅血管色素層，盲點處中斷讓視神經穿過)
+        ctx.fillStyle = 'rgba(127, 29, 29, 0.68)';
+        ctx.strokeStyle = '#dc2626';
+        ctx.lineWidth = 1.5;
+        roundRectPath(906, 120, 24, 495, 6);
+        ctx.fill(); ctx.stroke();
+        roundRectPath(906, 725, 24, 55, 6);
+        ctx.fill(); ctx.stroke();
+
+        // 3. 鞏膜 (Sclera, X: 934 ~ 962，灰白強韌外膜，盲點處穿出並延續包覆視神經外鞘)
+        ctx.fillStyle = 'rgba(203, 213, 225, 0.25)';
+        ctx.strokeStyle = 'rgba(226, 232, 240, 0.6)';
+        roundRectPath(934, 120, 26, 495, 6);
+        ctx.fill(); ctx.stroke();
+        roundRectPath(934, 725, 26, 55, 6);
+        ctx.fill(); ctx.stroke();
+
+        ctx.restore();
+
+        drawLabelPill('色素上皮・脈絡膜・鞏膜', '吸光保護與眼球外壁', 908, 86, '#b45309');
+    }
+
+    // 繪製視細胞（視桿細胞 & 中央窩密集紅、綠、藍視錐細胞）
+    function drawVisualCells() {
+        photoreceptors.forEach(pr => {
+            const y = pr.y;
+            const glow = pr.excited;
+
+            ctx.save();
+            if (glow > 0.05) {
+                ctx.shadowColor = pr.color;
+                ctx.shadowBlur = 18 * glow;
+            }
+
+            ctx.strokeStyle = pr.color;
+            ctx.lineWidth = 3;
+
+            // 突觸終足 (X: 658) -> 細胞體 (X: 715)
+            ctx.beginPath();
+            ctx.moveTo(658, y);
+            ctx.lineTo(698, y);
+            ctx.stroke();
+
+            // 突觸終足小三角
+            ctx.fillStyle = pr.color;
+            ctx.beginPath();
+            ctx.moveTo(650, y - 7);
+            ctx.lineTo(650, y + 7);
+            ctx.lineTo(661, y);
+            ctx.closePath();
+            ctx.fill();
+
+            // 視細胞核與細胞體
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath();
+            ctx.ellipse(715, y, 18, 12, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = pr.color;
+            ctx.beginPath();
+            ctx.arc(715, y, 5.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 感光外節（含感光色素）
+            if (pr.type === 'rod') {
+                // 視桿細胞：長圓柱狀外節
+                ctx.fillStyle = glow > 0.1 ? '#93c5fd' : 'rgba(96, 165, 250, 0.34)';
+                roundRectPath(740, y - 10, 105, 20, 5);
+                ctx.fill();
+                ctx.stroke();
+
+                // 感光色素膜盤紋路
+                ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+                ctx.lineWidth = 1.3;
+                for (let dx = 750; dx < 838; dx += 9) {
+                    ctx.beginPath();
+                    ctx.moveTo(dx, y - 7);
+                    ctx.lineTo(dx, y + 7);
+                    ctx.stroke();
+                }
+            } else {
+                // 視錐細胞：圓錐狀外節（紅、綠、藍三種感光色素）
+                ctx.globalAlpha = state.dimLight ? 0.38 : 1.0;
+                ctx.beginPath();
+                ctx.moveTo(740, y - 15);
+                ctx.lineTo(838, y);
+                ctx.lineTo(740, y + 15);
+                ctx.closePath();
+
+                ctx.save();
+                ctx.fillStyle = pr.color;
+                ctx.globalAlpha = glow > 0.1 ? 0.92 : (state.dimLight ? 0.2 : 0.55);
+                ctx.fill();
+                ctx.restore();
+                ctx.stroke();
+
+                // 感光色素摺疊層
+                ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+                ctx.lineWidth = 1.3;
+                for (let dx = 752; dx < 822; dx += 11) {
+                    const hh = 13 * (1 - (dx - 740) / 102);
+                    ctx.beginPath();
+                    ctx.moveTo(dx, y - hh);
+                    ctx.lineTo(dx, y + hh);
+                    ctx.stroke();
+                }
+            }
+            ctx.restore();
+
+            // 細胞旁微標籤
+            if (state.showLabels) {
+                ctx.save();
+                ctx.font = '10.5px -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = (pr.type === 'cone' && state.dimLight) ? '#64748b' : '#cbd5e1';
+                const labelTxt = pr.type === 'cone' ? `${pr.coneLabel}細胞` : '視桿細胞';
+                ctx.fillText(labelTxt, 790, y - 17);
+                ctx.restore();
+            }
+        });
+
+        drawLabelPill('視細胞 (視桿+紅綠藍視錐)', '感光色素改變引發電位變化', 745, 86, '#3b82f6');
+    }
+
+    // 繪製水平細胞 (Horizontal Cells - 外網狀層橫向聯絡)
+    function drawHorizontalCells() {
+        horizontalCells.forEach(hc => {
+            ctx.save();
+            const glow = hc.excited;
+            if (glow > 0.05) {
+                ctx.shadowColor = '#fb923c';
+                ctx.shadowBlur = 16 * glow;
+            }
+
+            ctx.strokeStyle = glow > 0.1 ? '#fdba74' : 'rgba(251, 146, 60, 0.75)';
+            ctx.lineWidth = 2.6;
+
+            // 垂直橫向延伸的樹突幹（跨越多個視細胞突觸）
+            ctx.beginPath();
+            ctx.moveTo(hc.x, hc.spanTop);
+            ctx.lineTo(hc.x, hc.spanBot);
+            ctx.stroke();
+
+            // 連接至鄰近視細胞終足的小分枝
+            [hc.spanTop, hc.y, hc.spanBot].forEach(py => {
+                ctx.beginPath();
+                ctx.moveTo(hc.x, py);
+                ctx.lineTo(hc.x + 26, py);
+                ctx.stroke();
+            });
+
+            // 水平細胞本體 (橘金色星狀/多角形)
+            ctx.fillStyle = glow > 0.1 ? '#c2410c' : '#431407';
+            ctx.beginPath();
+            ctx.arc(hc.x, hc.y, 13, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#fed7aa';
+            ctx.beginPath();
+            ctx.arc(hc.x, hc.y, 4.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+
+        drawLabelPill('水平細胞', '橫向對比調控', 618, 582, '#f97316');
+    }
+
+    // 繪製雙極神經細胞 (Bipolar Cells)
+    function drawBipolarCells() {
+        // 視細胞 -> 雙極細胞突觸連線
+        photoreceptors.forEach(pr => {
+            const bp = bipolars[pr.bpIdx];
+            ctx.strokeStyle = 'rgba(192, 132, 252, 0.4)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(648, pr.y);
+            ctx.bezierCurveTo(600, pr.y, 585, bp.y, bp.x + 22, bp.y);
+            ctx.stroke();
+        });
+
+        bipolars.forEach(bp => {
+            ctx.save();
+            if (bp.excited > 0.05) {
+                ctx.shadowColor = '#c084fc';
+                ctx.shadowBlur = 18 * bp.excited;
+            }
+
+            ctx.strokeStyle = '#c084fc';
+            ctx.lineWidth = 2.8;
+            // 左側軸突伸入內網狀層
+            ctx.beginPath();
+            ctx.moveTo(bp.x - 22, bp.y);
+            ctx.lineTo(bp.x - 58, bp.y);
+            ctx.stroke();
+
+            // 梭形雙極細胞本體
+            ctx.fillStyle = bp.excited > 0.1 ? '#7e22ce' : '#2e1065';
+            ctx.beginPath();
+            ctx.ellipse(bp.x, bp.y, 22, 14, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#e9d5ff';
+            ctx.beginPath();
+            ctx.arc(bp.x, bp.y, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+
+        drawLabelPill('雙極神經細胞', '傳遞視細胞電位訊息', 522, 86, '#a855f7');
+    }
+
+    // 繪製無軸突細胞 (Amacrine Cells - 內網狀層，無長軸突，廣泛橫向樹突)
+    function drawAmacrineCells() {
+        amacrineCells.forEach(ac => {
+            ctx.save();
+            const glow = ac.excited;
+            if (glow > 0.05) {
+                ctx.shadowColor = '#34d399';
+                ctx.shadowBlur = 16 * glow;
+            }
+
+            ctx.strokeStyle = glow > 0.1 ? '#6ee7b7' : 'rgba(52, 211, 153, 0.78)';
+            ctx.lineWidth = 2.4;
+
+            // 橫向放射樹突網 (無長軸突！)
+            ctx.beginPath();
+            ctx.moveTo(ac.x, ac.spanTop);
+            ctx.lineTo(ac.x, ac.spanBot);
+            ctx.stroke();
+
+            // 與雙極細胞終末及神經節細胞樹突交會的小觸角
+            [ac.spanTop + 12, ac.y, ac.spanBot - 12].forEach(py => {
+                ctx.beginPath();
+                ctx.moveTo(ac.x - 18, py);
+                ctx.lineTo(ac.x + 18, py);
+                ctx.stroke();
+            });
+
+            // 圓潤水滴狀本體
+            ctx.fillStyle = glow > 0.1 ? '#047857' : '#064e3b';
+            ctx.beginPath();
+            ctx.arc(ac.x, ac.y, 13, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#a7f3d0';
+            ctx.beginPath();
+            ctx.arc(ac.x, ac.y, 4.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+
+        drawLabelPill('無軸突細胞', '無長軸突・橫向調控內網狀層', 434, 582, '#10b981');
+    }
+
+    // 繪製神經節細胞與匯入盲點的軸突
+    function drawGanglionCells() {
+        // 先繪製所有神經節細胞長軸突 ➔ 向下匯集穿過「盲點」與脈絡膜、鞏膜
+        ganglions.forEach((gc, idx) => {
+            const pts = getAxonPath(idx);
+            ctx.save();
+            ctx.strokeStyle = gc.excited > 0.1 ? '#7dd3fc' : 'rgba(56, 189, 248, 0.45)';
+            ctx.lineWidth = 2.8;
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x, pts[0].y);
+            for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+            ctx.stroke();
+            ctx.restore();
+        });
+
+        ganglions.forEach((gc, idx) => {
+            const bp = bipolars[idx];
+            // 樹突連向雙極細胞軸突終末
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.65)';
+            ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            ctx.moveTo(gc.x + 22, gc.y);
+            ctx.lineTo(bp.x - 58, bp.y);
+            ctx.stroke();
+
+            ctx.save();
+            if (gc.excited > 0.05) {
+                ctx.shadowColor = '#38bdf8';
+                ctx.shadowBlur = 20 * gc.excited;
+            }
+
+            ctx.fillStyle = gc.excited > 0.1 ? '#0369a1' : '#0f172a';
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 2.8;
+            ctx.beginPath();
+            ctx.arc(gc.x, gc.y, 21, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#bae6fd';
+            ctx.beginPath();
+            ctx.arc(gc.x, gc.y, 7.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+
+        drawLabelPill('神經節細胞', '軸突匯集為視神經', 338, 86, '#38bdf8');
+    }
+
+    // 繪製視神經穿過盲點、脈絡膜、鞏膜至視丘
+    function drawOpticNerveBundle() {
+        ctx.save();
+        // 視神經外鞘（與鞏膜相連）
+        ctx.strokeStyle = 'rgba(250, 204, 21, 0.22)';
+        ctx.lineWidth = 46;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(675, 675);
+        ctx.lineTo(975, 675);
+        ctx.lineTo(1095, 650);
+        ctx.stroke();
+
+        // 視丘中繼核 (LGN)
+        ctx.fillStyle = 'rgba(30, 58, 138, 0.8)';
+        ctx.strokeStyle = '#60a5fa';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(1095, 650, 42, 26, -0.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        drawLabelPill('🕳️ 盲點 (視神經盤)', '無任何視細胞・無法感光', 755, 632, '#f43f5e', 'rgba(30,10,20,0.9)');
+        drawLabelPill('視神經穿過脈絡膜與鞏膜', '將視覺訊息傳向視覺中樞', 885, 745, '#eab308');
+    }
+
+    // 繪製大腦皮層（視覺中樞）
+    function drawBrainVisualCortex() {
+        ctx.save();
+        ctx.fillStyle = 'rgba(30, 41, 59, 0.86)';
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
+        ctx.lineWidth = 3;
+
+        ctx.beginPath();
+        ctx.moveTo(1195, 505);
+        ctx.bezierCurveTo(1155, 390, 1205, 265, 1320, 260);
+        ctx.bezierCurveTo(1430, 255, 1500, 345, 1490, 465); // 枕葉視覺皮層
+        ctx.bezierCurveTo(1485, 535, 1430, 575, 1370, 570);
+        ctx.bezierCurveTo(1350, 620, 1280, 615, 1270, 565);
+        ctx.bezierCurveTo(1220, 565, 1190, 535, 1195, 505);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // 腦迴線條
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.22)';
+        ctx.lineWidth = 2;
+        [[1235, 350, 1295, 375, 1325, 330], [1310, 295, 1350, 355, 1400, 335], [1240, 445, 1310, 425, 1360, 465]].forEach(s => {
+            ctx.beginPath();
+            ctx.moveTo(s[0], s[1]);
+            ctx.quadraticCurveTo(s[2], s[3], s[4], s[5]);
+            ctx.stroke();
+        });
+
+        // 枕葉視覺中樞發光區
+        const glow = state.cortexGlow;
+        const vGrad = ctx.createRadialGradient(1425, 460, 8, 1425, 460, 85);
+        vGrad.addColorStop(0, `rgba(250, 204, 21, ${0.28 + glow * 0.68})`);
+        vGrad.addColorStop(0.55, `rgba(56, 189, 248, ${0.18 + glow * 0.45})`);
+        vGrad.addColorStop(1, 'rgba(56, 189, 248, 0)');
+
+        ctx.fillStyle = vGrad;
+        ctx.beginPath();
+        ctx.ellipse(1425, 460, 60, 84, 0.12, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 產生視覺感知結果提示框
+        if (glow > 0.08) {
+            ctx.save();
+            ctx.globalAlpha = Math.min(1, glow * 1.35);
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+            ctx.strokeStyle = state.dimLight ? '#93c5fd' : '#fde047';
+            ctx.lineWidth = 2;
+            roundRectPath(1320, 165, 185, 66, 14);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.textAlign = 'center';
+            ctx.font = '700 13.5px -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif';
+            ctx.fillStyle = state.dimLight ? '#bae6fd' : '#fef08a';
+            ctx.fillText(state.dimLight ? '🌙 辨識物體形狀 (暗視覺)' : '🌈 辨識色彩與精細形狀', 1412, 191);
+
+            ctx.font = '11px -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif';
+            ctx.fillStyle = '#cbd5e1';
+            ctx.fillText(state.dimLight ? '視桿細胞對光亮度敏感' : '紅綠藍視錐＋視桿細胞共同作用', 1412, 213);
+            ctx.restore();
+        }
+        ctx.restore();
+
+        drawLabelPill('大腦皮層 (枕葉視覺中樞)', '接收視神經訊息產生視覺', 1350, 650, '#38bdf8');
+    }
+
+    // 左側入射光源與水晶體示意
+    function drawIncidentLightOrigin() {
+        const cx = 92, cy = 360;
+        const g = ctx.createRadialGradient(cx, cy, 8, cx, cy, 68);
+        if (state.dimLight) {
+            g.addColorStop(0, 'rgba(147, 197, 253, 0.85)');
+            g.addColorStop(1, 'rgba(147, 197, 253, 0)');
+        } else {
+            g.addColorStop(0, 'rgba(254, 240, 138, 0.95)');
+            g.addColorStop(0.5, 'rgba(251, 146, 60, 0.35)');
+            g.addColorStop(1, 'rgba(254, 240, 138, 0)');
+        }
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 68, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 水晶體折射弧面示意
+        ctx.save();
+        ctx.strokeStyle = 'rgba(125, 211, 252, 0.4)';
+        ctx.lineWidth = 4.5;
+        ctx.beginPath();
+        ctx.arc(215, 360, 195, Math.PI * 0.77, Math.PI * 1.23);
+        ctx.stroke();
+        ctx.restore();
+
+        drawLabelPill(
+            state.dimLight ? '🌙 稍暗環境光線' : '☀️ 光亮環境光線',
+            '進入眼球射向視網膜',
+            105, 255, 'rgba(253, 224, 71, 0.5)'
+        );
+    }
+
+    // ================= 繪製全新設計的光子、電脈衝與橫向波 =================
+    function drawParticles() {
+        // 1. 全新光子圖示：直線雷射漸層光束 + 四芒星菱形光量子 (完全避免彎曲擺動像精子鞭毛)
+        photons.forEach(p => {
+            ctx.save();
+
+            // 直線乾淨漸層光束尾跡
+            const beamLen = 38;
+            const beamGrad = ctx.createLinearGradient(p.x - beamLen, p.y, p.x, p.y);
+            beamGrad.addColorStop(0, 'rgba(255,255,255,0)');
+            beamGrad.addColorStop(0.6, p.color + '66');
+            beamGrad.addColorStop(1, p.color);
+
+            ctx.strokeStyle = beamGrad;
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(p.x - beamLen, p.y);
+            ctx.lineTo(p.x, p.y);
+            ctx.stroke();
+
+            // 外圍光暈圓環
+            const halo = ctx.createRadialGradient(p.x, p.y, 1, p.x, p.y, 12);
+            halo.addColorStop(0, '#ffffff');
+            halo.addColorStop(0.45, p.color);
+            halo.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = halo;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 12, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 幾何四芒星光量子核心 (Optical Diamond Star)
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            const rOut = 7.5, rIn = 2.2;
+            ctx.moveTo(p.x + rOut, p.y);
+            ctx.lineTo(p.x + rIn, p.y + rIn);
+            ctx.lineTo(p.x, p.y + rOut);
+            ctx.lineTo(p.x - rIn, p.y + rIn);
+            ctx.lineTo(p.x - rOut, p.y);
+            ctx.lineTo(p.x - rIn, p.y - rIn);
+            ctx.lineTo(p.x, p.y - rOut);
+            ctx.lineTo(p.x + rIn, p.y - rIn);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.restore();
+        });
+
+        // 2. 水平細胞與無軸突細胞的橫向調控脈衝
+        lateralWaves.forEach(lw => {
+            const cy = lw.y1 + (lw.y2 - lw.y1) * lw.t;
+            ctx.save();
+            ctx.fillStyle = lw.color;
+            ctx.globalAlpha = 1 - lw.t;
+            ctx.shadowColor = lw.color;
+            ctx.shadowBlur = 8;
+            ctx.beginPath();
+            ctx.arc(lw.x, cy, 4.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+
+        // 3. 神經電訊號脈衝
+        pulses.forEach(s => {
+            const pt = s.stage === 'gc_to_brain'
+                ? pointOnPolyline(s.path, s.progress)
+                : { x: s.fromX + (s.toX - s.fromX) * s.progress, y: s.fromY + (s.toY - s.fromY) * s.progress };
+
+            ctx.save();
+            const g = ctx.createRadialGradient(pt.x, pt.y, 2, pt.x, pt.y, 13);
+            g.addColorStop(0, '#ffffff');
+            g.addColorStop(0.45, s.color);
+            g.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, 13, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        });
+
+        // 4. 波紋
+        ripples.forEach(rp => {
+            const alpha = Math.max(0, 1 - rp.r / rp.maxR);
+            ctx.save();
+            ctx.strokeStyle = rp.color;
+            ctx.globalAlpha = alpha * 0.8;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        });
+    }
+
+    // 解剖重點標註（中央窩、傳導方向提示）
+    function drawAnatomicalAnnotations() {
+        ctx.save();
+        // 中央窩標註
+        drawLabelPill('🎯 中央窩 (小凹陷)', '缺乏視桿・密集紅綠藍視錐・視覺最敏銳', 415, 350, '#facc15', 'rgba(30, 27, 15, 0.88)');
+
+        // 頂部光線穿透方向橫幅
+        ctx.fillStyle = 'rgba(253, 224, 71, 0.13)';
+        ctx.strokeStyle = 'rgba(253, 224, 71, 0.42)';
+        ctx.lineWidth = 1.2;
+        roundRectPath(265, 28, 575, 28, 14);
+        ctx.fill(); ctx.stroke();
+
+        ctx.fillStyle = '#fef08a';
+        ctx.font = '600 12.5px -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('① 入射光線方向 ➔ ➔ ➔ 穿過透明神經層抵達深處「視細胞」引發感光色素改變', 552, 46);
+        ctx.restore();
+    }
+
+    // ================= 觸控螢幕雙指縮放 / 單指平移 / 點擊偵測 =================
+    let pointers = new Map();
+    let prevPinchDist = 0;
+    let prevMid = null;
+    let downPt = null;
+    let dragged = false;
+
+    canvas.addEventListener('pointerdown', (e) => {
+        canvas.setPointerCapture(e.pointerId);
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        downPt = { x: e.clientX, y: e.clientY };
+        dragged = false;
+        view.targetScale = null; // 手動操作時立即接管鏡頭
+
+        if (pointers.size === 2) {
+            const pts = Array.from(pointers.values());
+            prevPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+            prevMid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+        }
+        gestureTip.style.opacity = '0';
+    });
+
+    canvas.addEventListener('pointermove', (e) => {
+        if (!pointers.has(e.pointerId)) return;
+        const prev = pointers.get(e.pointerId);
+        pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+        if (downPt && Math.hypot(e.clientX - downPt.x, e.clientY - downPt.y) > 6) {
+            dragged = true;
+        }
+
+        if (pointers.size === 1) {
+            view.x += e.clientX - prev.x;
+            view.y += e.clientY - prev.y;
+        } else if (pointers.size === 2) {
+            const pts = Array.from(pointers.values());
+            const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+            const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+            if (prevPinchDist > 0) {
+                zoomAt(dist / prevPinchDist, mid.x, mid.y);
+            }
+            if (prevMid) {
+                view.x += mid.x - prevMid.x;
+                view.y += mid.y - prevMid.y;
+            }
+            prevPinchDist = dist;
+            prevMid = mid;
+        }
+    });
+
+    function onPointerUp(e) {
+        if (!pointers.has(e.pointerId)) return;
+        pointers.delete(e.pointerId);
+        if (pointers.size < 2) { prevPinchDist = 0; prevMid = null; }
+
+        if (!dragged && pointers.size === 0) {
+            const wp = screenToWorld(e.clientX, e.clientY);
+            detectHitRegion(wp.x, wp.y);
+        }
+    }
+    canvas.addEventListener('pointerup', onPointerUp);
+    canvas.addEventListener('pointercancel', onPointerUp);
+
+    canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        view.targetScale = null;
+        zoomAt(e.deltaY < 0 ? 1.12 : 0.89, e.clientX, e.clientY);
+        gestureTip.style.opacity = '0';
+    }, { passive: false });
+
+    function zoomAt(factor, sx, sy) {
+        const nextS = Math.min(view.maxScale, Math.max(view.minScale, view.scale * factor));
+        const ratio = nextS / view.scale;
+        view.x = sx - (sx - view.x) * ratio;
+        view.y = sy - (sy - view.y) * ratio;
+        view.scale = nextS;
+    }
+
+    // 點擊查詢構造說明
+    function detectHitRegion(wx, wy) {
+        // 優先順序：特定精細細胞 -> 中央窩/盲點 -> 大區域
+        const priority = [
+            'horizontal', 'amacrine', 'cone', 'rod',
+            'bipolar', 'ganglion', 'blindspot', 'fovea',
+            'rpe_coats', 'opticNerve', 'cortex'
+        ];
+        for (const key of priority) {
+            const b = interactiveDB[key].bounds;
+            if (wx >= b.x && wx <= b.x + b.w && wy >= b.y && wy <= b.y + b.h) {
+                openPopup(key);
+                return;
+            }
+        }
+        state.selectedKey = null;
+        cellPopup.classList.remove('visible');
+    }
+
+    function openPopup(key) {
+        const item = interactiveDB[key];
+        state.selectedKey = key;
+        popupTitle.textContent = item.title;
+        popupDesc.innerHTML = item.desc;
+        popupTag.textContent = item.tag;
+        cellPopup.classList.add('visible');
+    }
+
+    // ================= UI 按鈕事件綁定 =================
+    document.getElementById('btnFire').addEventListener('click', () => {
+        if (state.stepMode) exitStepMode();
+        spawnLightWave();
+    });
+
+    btnStepMode.addEventListener('click', () => {
+        if (state.stepMode) exitStepMode();
+        else startStepMode();
+    });
+
+    btnNextStep.addEventListener('click', () => {
+        advanceNextStep();
+    });
+
+    btnAuto.addEventListener('click', () => {
+        if (state.stepMode) exitStepMode();
+        state.autoFire = !state.autoFire;
+        btnAuto.classList.toggle('active', state.autoFire);
+        if (state.autoFire) spawnLightWave();
+    });
+
+    btnLightEnv.addEventListener('click', () => {
+        state.dimLight = !state.dimLight;
+        btnLightEnv.classList.toggle('active', state.dimLight);
+        btnLightEnv.textContent = state.dimLight ? '🌙 稍暗環境' : '☀️ 光亮環境';
+        if (!state.stepMode) spawnLightWave();
+    });
+
+    btnLabels.addEventListener('click', () => {
+        state.showLabels = !state.showLabels;
+        btnLabels.classList.toggle('active', state.showLabels);
+    });
+
+    document.getElementById('btnClosePopup').addEventListener('click', () => {
+        cellPopup.classList.remove('visible');
+        state.selectedKey = null;
+    });
+
+    document.getElementById('btnZoomIn').addEventListener('click', () => {
+        view.targetScale = null;
+        zoomAt(1.22, window.innerWidth / 2, window.innerHeight / 2);
+    });
+    document.getElementById('btnZoomOut').addEventListener('click', () => {
+        view.targetScale = null;
+        zoomAt(0.82, window.innerWidth / 2, window.innerHeight / 2);
+    });
+    document.getElementById('btnResetView').addEventListener('click', () => {
+        resetView(false);
+    });
+
+    // 知識庫 Modal 與頁籤切換邏輯
+    const knowledgeModal = document.getElementById('knowledgeModal');
+    document.getElementById('btnKnowledge').addEventListener('click', () => {
+        knowledgeModal.classList.add('open');
+    });
+    document.getElementById('btnCloseModal').addEventListener('click', () => {
+        knowledgeModal.classList.remove('open');
+    });
+    knowledgeModal.addEventListener('click', (e) => {
+        if (e.target === knowledgeModal) knowledgeModal.classList.remove('open');
+    });
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById(btn.dataset.tab).classList.add('active');
+        });
+    });
+
+    // 知識庫內的「在畫面上定位」互動按鈕
+    document.querySelectorAll('.locate-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            knowledgeModal.classList.remove('open');
+            const target = btn.dataset.focus;
+            if (target === 'photoreceptors') {
+                focusWorldPoint(750, 350, 1.45);
+                openPopup('cone');
+            } else if (target === 'fovea') {
+                focusWorldPoint(540, 350, 1.38);
+                openPopup('fovea');
+            } else if (target === 'blindspot') {
+                focusWorldPoint(775, 675, 1.45);
+                openPopup('blindspot');
+            } else if (target === 'lateral') {
+                focusWorldPoint(525, 360, 1.5);
+                openPopup('horizontal');
+            }
+        });
+    });
+
+    // ================= 啟動主迴圈 =================
+    let lastTime = performance.now();
+    spawnLightWave();
+
+    function loop(now) {
+        const dt = Math.min(0.05, (now - lastTime) / 1000);
+        lastTime = now;
+        update(dt);
+        render();
+        requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
