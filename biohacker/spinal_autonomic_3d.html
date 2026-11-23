@@ -1,0 +1,2316 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D 脊髓、脊神經與自主神經節互動圖譜 (Spinal Cord, Ganglia & Autonomic Nervous System)</title>
+    <style>
+        :root {
+            --bg-dark: #0b0f19;
+            --panel-bg: rgba(16, 23, 41, 0.90);
+            --border-color: rgba(255, 255, 255, 0.12);
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;
+            --matrix-text-size: 13px;
+            /* 7 大神經元與纖維配色 (大圓球 = 細胞本體 Soma，同色長管 = 該細胞發出的軸突，Y型爪 = 突觸終末) */
+            --c-gsa: #3b82f6;       /* 一般軀體感覺 (藍：DRG本體 + T型連通周邊/中樞突) */
+            --c-gva: #10b981;       /* 一般內臟感覺 (綠：DRG本體 + T型連通內臟傳入纖維) */
+            --c-gse: #ef4444;       /* 一般軀體運動 (紅：脊髓腹角本體 + 運動軸突，無周圍神經節) */
+            --c-symp-pre: #eab308;  /* 交感節前神經元 (亮黃：脊髓側角本體 + 白交通支/內臟神經 → Y型突觸爪) */
+            --c-symp-post: #f97316; /* 交感節後神經元 (橘紅：椎旁/椎前交感節本體 + 灰交通支/交感節後纖維) */
+            --c-para-pre: #14b8a6;  /* 副交感節前神經元 (青綠：腦幹CN X/薦髓S2-S4本體 + 長節前纖維 → Y型突觸爪) */
+            --c-para-post: #c084fc; /* 副交感節後神經元 (亮紫：器官壁終末神經節本體 + 短節後纖維) */
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+        body, html {
+            width: 100%; height: 100%; overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft JhengHei", sans-serif;
+            background-color: var(--bg-dark); color: var(--text-main);
+            touch-action: none;
+        }
+
+        #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
+
+        /* 3D HTML 標籤層 */
+        #labels-container {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 2; overflow: hidden;
+        }
+        .label-3d {
+            position: absolute; top: 0; left: 0;
+            will-change: transform;
+            padding: 3px 7px; border-radius: 5px; font-size: 11px; font-weight: 600;
+            background: rgba(15, 23, 42, 0.90); color: #fff;
+            border: 1px solid rgba(255,255,255,0.22);
+            white-space: nowrap; pointer-events: auto; cursor: pointer;
+            transition: opacity 0.2s, background 0.2s, box-shadow 0.2s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.45);
+        }
+        .label-3d:hover { background: rgba(56, 189, 248, 0.95); color: #000; z-index: 25; }
+        .label-3d.dimmed { opacity: 0.08; pointer-events: none; }
+        .label-3d.highlighted { background: #fff; color: #000; border-color: var(--accent); box-shadow: 0 0 12px var(--accent); z-index: 30; font-weight: 700; }
+
+        /* 頂部導覽列 */
+        header {
+            position: absolute; top: 12px; left: 12px; right: 12px; z-index: 10;
+            display: flex; justify-content: space-between; align-items: center; gap: 8px;
+            pointer-events: none; flex-wrap: wrap;
+        }
+        .title-box, .top-controls {
+            pointer-events: auto; background: var(--panel-bg);
+            backdrop-filter: blur(10px); border: 1px solid var(--border-color);
+            padding: 7px 12px; border-radius: 10px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+        }
+        .title-box h1 { font-size: 14px; font-weight: 700; letter-spacing: 0.4px; color: #fff; }
+        .module-switch {
+            display: inline-flex; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(56, 189, 248, 0.35);
+            border-radius: 7px; overflow: hidden; margin-right: 4px;
+        }
+        .module-link {
+            padding: 5px 10px; font-size: 11.5px; font-weight: 700; color: var(--text-muted);
+            text-decoration: none; transition: all 0.2s; display: flex; align-items: center; gap: 4px;
+        }
+        .module-link:hover { color: #fff; background: rgba(255,255,255,0.08); }
+        .module-link.current { background: var(--accent); color: #0b0f19; }
+
+        button {
+            background: rgba(255,255,255,0.08); color: var(--text-main);
+            border: 1px solid var(--border-color); padding: 5px 9px;
+            border-radius: 6px; font-size: 11.5px; cursor: pointer; transition: all 0.2s;
+            white-space: nowrap;
+        }
+        button:hover, button.active { background: var(--accent); color: #0b0f19; font-weight: 600; border-color: var(--accent); }
+
+        /* 左側控制與篩選面板：單一順暢捲動容器，徹底解決最底下迴路無法點選問題 */
+        #left-panel {
+            position: absolute; top: 64px; left: 12px; bottom: 12px; width: 325px;
+            z-index: 10; background: var(--panel-bg); backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color); border-radius: 12px;
+            display: block; overflow-y: auto; overflow-x: hidden;
+            touch-action: pan-y; -webkit-overflow-scrolling: touch;
+            transition: transform 0.3s ease;
+        }
+        #left-panel::-webkit-scrollbar { width: 6px; }
+        #left-panel::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.4); }
+        #left-panel::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.4); border-radius: 3px; }
+        #left-panel::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+        #left-panel.collapsed { transform: translateX(calc(-100% - 20px)); }
+
+        .panel-section { padding: 10px 12px; border-bottom: 1px solid var(--border-color); }
+        .panel-title {
+            font-size: 11.5px; font-weight: 700; color: var(--text-muted); margin-bottom: 7px;
+            text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between; align-items: center;
+        }
+
+        /* 雙模式切換卡 */
+        .mode-switch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .mode-card {
+            padding: 7px 6px; border-radius: 7px; text-align: center; font-size: 11.5px; font-weight: 700;
+            background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); cursor: pointer;
+            transition: all 0.2s; display: flex; flex-direction: column; gap: 2px; align-items: center;
+        }
+        .mode-card span.sub-txt { font-size: 9.5px; font-weight: 400; color: var(--text-muted); }
+        .mode-card.active {
+            background: rgba(56, 189, 248, 0.22); border-color: var(--accent); color: #fff;
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+        }
+        .mode-card.active span.sub-txt { color: #bae6fd; }
+
+        /* 透明度滑桿控制列 */
+        .slider-box {
+            margin-top: 8px; padding: 7px 10px; border-radius: 7px;
+            background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(56, 189, 248, 0.25);
+            display: flex; flex-direction: column; gap: 5px;
+        }
+        .slider-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; }
+        .slider-row input[type=range] { flex: 1; accent-color: var(--accent); cursor: pointer; height: 4px; }
+
+        /* 造型圖例提示列 */
+        .shape-legend {
+            margin-top: 7px; padding: 6px 8px; border-radius: 6px;
+            background: rgba(255,255,255,0.04); font-size: 10.5px; color: #cbd5e1;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        /* 7種神經元分類按鈕 */
+        .modality-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+        .mod-btn {
+            display: flex; align-items: center; gap: 6px; font-size: 11px; padding: 5px 7px;
+            text-align: left; border-radius: 5px; background: rgba(255,255,255,0.04);
+        }
+        .mod-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 6px currentColor; }
+
+        /* 神經節、交通支與灰質核列表 (雙欄緊湊排列，讓下方迴路更容易一覽無遺) */
+        .ganglia-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+        .ganglion-btn {
+            display: flex; flex-direction: column; justify-content: center; gap: 2px;
+            padding: 6px 8px; background: rgba(255,255,255,0.04); border-radius: 6px;
+            font-size: 11px; border-left: 3px solid #38bdf8; cursor: pointer; transition: background 0.15s;
+        }
+        .ganglion-btn:hover, .ganglion-btn.active { background: rgba(56, 189, 248, 0.24); }
+
+        /* 傳導迴路列表 */
+        .pathway-list { padding: 8px 12px 24px 12px; }
+        .pathway-item {
+            padding: 7px 9px; margin-bottom: 6px; border-radius: 6px;
+            background: rgba(255,255,255,0.04); border-left: 3px solid transparent;
+            cursor: pointer; font-size: 11.5px; display: flex; flex-direction: column; gap: 2px;
+            transition: background 0.15s;
+        }
+        .pathway-item:hover, .pathway-item.active { background: rgba(56, 189, 248, 0.24); }
+        .pathway-item .p-head { display: flex; justify-content: space-between; align-items: center; font-weight: 700; color: #f8fafc; }
+        .pathway-item .p-sub { font-size: 10px; color: var(--text-muted); line-height: 1.35; }
+
+        /* 右下角詳細資訊卡 */
+        #info-panel {
+            position: absolute; bottom: 12px; right: 12px; width: 380px; max-height: 60vh;
+            z-index: 10; background: var(--panel-bg); backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color); border-radius: 12px;
+            padding: 15px; overflow-y: auto; touch-action: pan-y;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.55);
+        }
+        #info-panel h2 { font-size: 15.5px; color: #fff; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+        #info-panel .sub { font-size: 11.5px; color: var(--accent); margin-bottom: 9px; font-weight: 600; }
+        .badge { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10.5px; font-weight: 700; margin-right: 4px; margin-bottom: 4px; color: #000; }
+        .info-row { margin-top: 8px; font-size: 12.5px; line-height: 1.55; color: #cbd5e1; }
+        .info-row strong { color: #fff; }
+        .synapse-box {
+            margin-top: 8px; padding: 8px 10px; border-radius: 7px;
+            background: rgba(15, 23, 42, 0.78); border: 1px solid rgba(56, 189, 248, 0.35);
+            font-size: 11.5px; line-height: 1.5;
+        }
+        .related-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+        .chip { background: rgba(255,255,255,0.1); padding: 3px 8px; border-radius: 12px; font-size: 11px; cursor: pointer; border: 1px solid rgba(255,255,255,0.15); }
+        .chip:hover { background: var(--accent); color: #000; font-weight: 600; }
+
+        /* 2D 對照矩陣 Modal */
+        #matrix-modal {
+            position: fixed; inset: 0; z-index: 50; background: rgba(5, 8, 16, 0.94);
+            backdrop-filter: blur(8px); display: none; flex-direction: column; padding: 16px 20px;
+        }
+        #matrix-modal.open { display: flex; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-shrink: 0; flex-wrap: wrap; gap: 10px; }
+        .matrix-wrapper { flex: 1; overflow: auto; border: 1px solid var(--border-color); border-radius: 8px; touch-action: pan-x pan-y; background: #0f172a; width: 100%; }
+
+        table.matrix-table {
+            border-collapse: separate; border-spacing: 0;
+            font-size: var(--matrix-text-size, 13px);
+            width: 100%; min-width: 920px;
+        }
+        .matrix-table th, .matrix-table td {
+            border: 1px solid #334155; padding: 10px 12px;
+            vertical-align: top; box-sizing: border-box; line-height: 1.45;
+        }
+        .matrix-table thead th {
+            top: 0; position: sticky; z-index: 30;
+            background-color: #1e293b; color: #f8fafc; font-weight: 700; text-align: left;
+        }
+        .matrix-table tbody tr { background-color: #0b1221; transition: background-color 0.15s; cursor: pointer; }
+        .matrix-table tbody tr:hover { background-color: #1e293b; }
+        .matrix-table tbody th {
+            position: sticky; left: 0; z-index: 20;
+            background-color: #172033; text-align: left; min-width: 165px;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.25);
+        }
+
+        #mobile-toggle { display: none; }
+        .hint-bar {
+            position: absolute; bottom: 12px; left: 348px; z-index: 5;
+            font-size: 11px; color: var(--text-muted); pointer-events: none;
+            background: rgba(15,23,42,0.78); padding: 5px 10px; border-radius: 6px;
+        }
+
+        @media (max-width: 900px) {
+            #mobile-toggle { display: inline-block; }
+            #left-panel { width: 290px; top: 62px; }
+            #info-panel { width: calc(100% - 24px); left: 12px; right: 12px; max-height: 38vh; padding: 12px; }
+            .hint-bar { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+<div id="labels-container"></div>
+
+<!-- 頂部導覽列 -->
+<header>
+    <div class="title-box">
+        <button id="mobile-toggle" onclick="toggleLeftPanel()">選單</button>
+        <div class="module-switch">
+            <a href="cranial_nerves_3d.html" class="module-link" title="切換至 12 對腦神經與腦幹神經核 3D 圖譜">🧠 腦神經與腦幹</a>
+            <a href="spinal_autonomic_3d.html" class="module-link current">⚡ 脊髓與自主神經節</a>
+        </div>
+        <h1>脊髓、脊神經與交感/副交感神經節 3D 圖譜</h1>
+    </div>
+    <div class="top-controls">
+        <button onclick="setCameraView('3d')" title="立體斜視角">立體斜視</button>
+        <button onclick="setCameraView('front')" title="由前方腹側觀察直立脊髓與交感幹">正面(腹側)</button>
+        <button onclick="setCameraView('top')" title="由上往下俯視脊髓蝴蝶形橫切面">橫切俯視</button>
+        <button onclick="setCameraView('side')" title="由右側觀察直立脊髓前後關係">側面(直立)</button>
+        <button onclick="setCameraView('back')" title="由後方背側觀察背根與背根神經節">背面(背側)</button>
+        <button onclick="togglePulses()" id="btn-pulses" class="active">訊號脈衝: 開</button>
+        <button onclick="toggleLabels()" id="btn-labels" class="active">3D標籤: 開</button>
+        <button onclick="toggleMatrixModal()" style="background: rgba(56,189,248,0.2); border-color: var(--accent);">神經節與自主神經對照表</button>
+    </div>
+</header>
+
+<!-- 左側篩選器 (單一順暢捲動列) -->
+<aside id="left-panel">
+    <!-- 全部顯示重設按鈕 -->
+    <div style="padding: 10px 12px 6px 12px; border-bottom: 1px solid var(--border-color); position: sticky; top: 0; background: rgba(16, 23, 41, 0.96); z-index: 5;">
+        <button onclick="resetSelection()" style="width: 100%; padding: 8px 12px; font-size: 12.5px; font-weight: 700; background: rgba(56, 189, 248, 0.18); border: 1px solid var(--accent); color: #fff; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; transition: all 0.2s;">
+            <span style="font-size: 15px;">↺</span>
+            <span>全部顯示 (重設選取)</span>
+        </button>
+    </div>
+
+    <!-- 0. 3D 檢視尺度切換 + 神經節透明度調整 -->
+    <div class="panel-section">
+        <div class="panel-title"><span>0. 3D 解剖尺度與外殼透明度</span></div>
+        <div class="mode-switch-grid">
+            <div class="mode-card active" id="mode-btn-micro" onclick="switchSceneMode('micro')">
+                <span>微觀橫切面迴路</span>
+                <span class="sub-txt">直立切面·本體與交通支</span>
+            </div>
+            <div class="mode-card" id="mode-btn-macro" onclick="switchSceneMode('macro')">
+                <span>巨觀全軸雙系統</span>
+                <span class="sub-txt">腦薦副交感 vs 胸腰交感</span>
+            </div>
+        </div>
+        <div class="slider-box">
+            <div class="slider-row">
+                <span style="color:#bae6fd; font-weight:600;">神經節外殼透明度</span>
+                <span id="ganglion-op-val" style="color:var(--accent); font-weight:700;">20%</span>
+            </div>
+            <div class="slider-row">
+                <span style="font-size:10px; color:#64748b;">全透(看本體)</span>
+                <input type="range" id="ganglion-opacity-slider" min="0" max="80" value="20" oninput="updateGanglionShellOpacity(this.value)">
+                <span style="font-size:10px; color:#64748b;">實心外殼</span>
+            </div>
+        </div>
+        <div class="shape-legend">
+            <span><strong>球體</strong> = 細胞本體 (Soma)</span>
+            <span><strong>分叉終末</strong> = 突觸換元處</span>
+        </div>
+    </div>
+
+    <!-- 1. 7種神經元分類 (細胞本體 Soma 與神經纖維同色相連) -->
+    <div class="panel-section">
+        <div class="panel-title">
+            <span>1. 神經元類型 (本體與纖維同色)</span>
+        </div>
+        <div class="modality-grid" id="modality-buttons"></div>
+    </div>
+
+    <!-- 2. 核心神經節、白/灰交通支與脊髓灰質角 -->
+    <div class="panel-section">
+        <div class="panel-title">
+            <span>2. 神經節、白/灰交通支與灰質核</span>
+            <span style="font-size:10px; color:#64748b;">點擊看內部本體</span>
+        </div>
+        <div class="ganglia-grid" id="ganglia-buttons"></div>
+    </div>
+
+    <!-- 3. 經典傳導迴路列表 -->
+    <div class="panel-title" style="padding: 10px 12px 0 12px;">
+        <span>3. 8 大完整神經傳導迴路 (Pathways)</span>
+        <span style="font-size:10px; color:#38bdf8;">連續神經元路徑</span>
+    </div>
+    <div class="pathway-list" id="pathway-list"></div>
+</aside>
+
+<!-- 右下資訊面板 -->
+<section id="info-panel">
+    <h2 id="info-title">脊髓、脊神經與自主神經節 3D 模型</h2>
+    <div class="sub" id="info-sub">球體 = 細胞本體 (Soma) ｜ 同色長管 = 軸突纖維 ｜ 分叉終末 = 突觸換元</div>
+    <div id="info-badges"></div>
+    <div class="info-row" id="info-desc">
+        <strong>如何區分「細胞本體」、「突觸換元」與「直接穿過不換元」：</strong><br>
+        • <strong>球體代表「細胞本體 (Soma)」</strong>，每個細胞本體均直接發出<strong>同色連續神經纖維</strong>。<br>
+        • <strong>分叉終末代表「突觸終末 (Synaptic Terminal)」</strong>：節前纖維於換元處分叉包覆下一級不同色的節後細胞本體。<br>
+        • <strong>椎旁交感幹神經節內的兩類路徑</strong>：<br>
+        　① <strong>換元路徑（迴路 4 體壁交感）</strong>：<span style="color:#facc15;">亮黃色節前纖維</span>於節內形成突觸終末，與<span style="color:#fb923c;">橘色節後細胞本體</span>換元，再發出橘色纖維經<strong>灰交通支</strong>返回脊神經。<br>
+        　② <strong>直穿不換元路徑（迴路 5 椎前節 &amp; 迴路 6 腎上腺髓質）</strong>：<span style="color:#facc15;">亮黃色節前纖維</span>在椎旁節內不設本體、不形成突觸，直接連續穿過交感幹成為內臟神經。<br>
+        • <strong>迴路 7（顱部迷走神經 CN X）與迴路 8（薦髓 S2–S4 骨盆內臟神經）</strong>：迴路 7 由上方<strong>腦幹</strong>直接下行至胸腹靶器官壁換元；迴路 8 由<strong>薦髓側角經腹根</strong>分出骨盆內臟神經至下方膀胱與直腸壁換元。
+    </div>
+    <div id="info-synapse"></div>
+    <div class="info-row" id="info-relations"></div>
+</section>
+
+<div class="hint-bar">球體 = 細胞本體 ｜ 分叉終末 = 突觸換元 ｜ 左側欄可上下捲動選取全部 8 條迴路並調整外殼透明度</div>
+
+<!-- 2D 對照矩陣 Modal -->
+<div id="matrix-modal">
+    <div class="modal-header">
+        <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+            <div>
+                <h2 style="font-size:17px; color:#fff; font-weight:700;">感覺 / 軀體運動 / 交感 / 副交感 × 神經節與神經傳遞物對照矩陣</h2>
+                <p style="font-size:12px; color:var(--text-muted);">點擊表格內任一列，立即關閉視窗並在 3D 模型中定位高亮該神經元本體與傳導迴路</p>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px; background:#1e293b; padding:4px 10px; border-radius:20px; border:1px solid #334155;">
+                <span style="font-size:11px; color:#94a3b8;">Aa</span>
+                <input type="range" min="11" max="18" value="13" style="width:75px; accent-color:#38bdf8; height:4px; cursor:pointer;"
+                       oninput="document.documentElement.style.setProperty('--matrix-text-size', this.value + 'px')">
+                <span style="font-size:15px; color:#94a3b8;">Aa</span>
+            </div>
+        </div>
+        <button onclick="toggleMatrixModal()" style="padding: 6px 14px; font-size:13px; background:#334155; border:1px solid #475569;">關閉視窗</button>
+    </div>
+    <div class="matrix-wrapper" id="matrix-root"></div>
+</div>
+
+<!-- 引入 Three.js 與 OrbitControls -->
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ==========================================
+// 1. 神經解剖資料庫
+// ==========================================
+const MODALITIES = {
+    GSA: {
+        code: 'GSA', name: '軀體感覺 (藍·DRG本體)', color: '#3b82f6', hex: 0x3b82f6,
+        type: '一般軀體感覺神經元 (Pseudounipolar Soma in DRG)',
+        desc: '藍色細胞本體位於背根神經節 (DRG) 內，經由 T 型短柄連通藍色感覺纖維：訊號自皮膚與肌肉傳入，跨過 T 型分叉（在 DRG 內不換元）經背根直入脊髓背角，末端以突觸終末與背角次級神經元換元。'
+    },
+    GVA: {
+        code: 'GVA', name: '內臟感覺 (綠·DRG本體)', color: '#10b981', hex: 0x10b981,
+        type: '一般內臟感覺神經元 (Visceral Afferent Soma in DRG)',
+        desc: '綠色細胞本體位於背根神經節 (DRG) 內，經由 T 型短柄連通綠色內臟感覺纖維：訊號自內臟靶器官借道椎前節、內臟神經、交感幹與白交通支（全程連續直穿不換元）回到 DRG，中樞突入脊髓背角。'
+    },
+    GSE: {
+        code: 'GSE', name: '軀體運動 (紅·腹角本體)', color: '#ef4444', hex: 0xef4444,
+        type: '一般軀體運動神經元 (Somatic Motor Soma in Ventral Horn)',
+        desc: '紅色細胞本體位於脊髓腹角 (Ventral Horn) 內，直接發出連續的紅色運動軸突，經腹根與脊神經直達骨骼肌終板（途中無任何周圍運動神經節）。'
+    },
+    SYMP_PRE: {
+        code: 'SYMP_PRE', name: '交感節前 (黃·側角本體)', color: '#eab308', hex: 0xeab308,
+        type: '交感節前神經元 (Sympathetic Preganglionic Soma in T1–L2 IML)',
+        desc: '亮黃色細胞本體位於脊髓側角 (T1–L2 IML) 內（3 顆分別對應迴路 4、5、6），直接發出亮黃色節前纖維經白交通支進入交感幹：迴路 4 於椎旁節形成突觸換元；迴路 5 與迴路 6 則直接穿過椎旁節不換元。'
+    },
+    SYMP_POST: {
+        code: 'SYMP_POST', name: '交感節後 (橘·交感節本體)', color: '#f97316', hex: 0xf97316,
+        type: '交感節後神經元 (Sympathetic Postganglionic Soma in Chain/Prevertebral Ganglia)',
+        desc: '橘色細胞本體位於「椎旁交感幹神經節」或「椎前神經節」內（接收亮黃色節前突觸支配），直接發出橘色節後纖維，經灰交通支返回脊神經或前往內臟靶器官。'
+    },
+    PARA_PRE: {
+        code: 'PARA_PRE', name: '副交感節前 (青·腦薦本體)', color: '#14b8a6', hex: 0x14b8a6,
+        type: '副交感節前神經元 (Parasympathetic Preganglionic Soma in Brainstem / S2–S4)',
+        desc: '青綠色細胞本體位於上方腦幹迷走神經核 (CN X，迴路 7) 或薦髓側角副交感核 (S2–S4，迴路 8)，發出極長的青綠色節前纖維直抵靶器官壁上的終末神經節，末端形成突觸包覆亮紫色節後細胞本體。'
+    },
+    PARA_POST: {
+        code: 'PARA_POST', name: '副交感節後 (紫·終末節本體)', color: '#c084fc', hex: 0xc084fc,
+        type: '副交感節後神經元 (Parasympathetic Postganglionic Soma in Terminal Ganglia)',
+        desc: '亮紫色細胞本體位於緊貼臟器壁的「副交感終末/壁內神經節」內（接收青綠色節前突觸支配），直接發出極短的亮紫色節後纖維伸入鄰近靶器官平滑肌與腺體。'
+    }
+};
+
+const STRUCTURES = [
+    {
+        id: 'drg',
+        name: '背根神經節 (DRG)',
+        en: 'Dorsal Root Ganglion (Pseudounipolar Sensory Somata)',
+        cat: '感覺神經節 (藍/綠本體)',
+        color: '#3b82f6',
+        mods: ['GSA', 'GVA'],
+        microPos: [4.35, 0.0, -2.85],
+        macroPos: [1.55, 1.3, -0.45],
+        synapse: '節內無突觸換元。僅有藍色 (GSA) 與綠色 (GVA) 細胞本體發出 T 型短柄連通同色感覺纖維，直入脊髓背角。',
+        nt: '中樞突進入脊髓背角後，於突觸終末釋放 Glutamate、Substance P',
+        desc: '位於背根上的感覺神經節。內部只有藍色與綠色假單極細胞本體及其 T 型連通柄，沒有突觸構造，顯示感覺訊號在 DRG 內不進行換元。'
+    },
+    {
+        id: 'dorsal_horn',
+        name: '脊髓背角感覺核',
+        en: 'Dorsal Horn Sensory Relay Nuclei',
+        cat: '脊髓灰質背角',
+        color: '#60a5fa',
+        mods: ['GSA', 'GVA'],
+        microPos: [1.38, 0.0, -3.45],
+        macroPos: [0.35, 1.3, -0.35],
+        synapse: '來自 DRG 的藍色 (GSA) 與綠色 (GVA) 中樞突在此形成突觸終末，與背角內的次級感覺細胞本體換元。',
+        nt: 'Glutamate / Substance P → 背角次級感覺神經元',
+        desc: '位於脊髓蝴蝶形灰質後方（背側）。體表感覺（藍）與內臟痛覺（綠）在此處進行第一次突觸換元。'
+    },
+    {
+        id: 'ventral_horn',
+        name: '脊髓腹角運動核 (GSE)',
+        en: 'Ventral Horn Somatic Motor Somata',
+        cat: '脊髓腹角 (紅本體·無節)',
+        color: '#ef4444',
+        mods: ['GSE'],
+        microPos: [1.18, 0.0, -1.25],
+        macroPos: [0.35, 3.2, 0.28],
+        synapse: '紅色運動細胞本體位於脊髓腹角內，直接發出連續的紅色軸突直達骨骼肌，周圍無任何運動神經節。',
+        nt: '乙醯膽鹼 (ACh) → 骨骼肌終板 N1 (Nm) 菸鹼受體',
+        desc: '位於脊髓蝴蝶形灰質前方（腹側）。紅色軸突直接自紅色細胞本體發出並延伸至骨骼肌運動終板，途中沒有神經節換元。'
+    },
+    {
+        id: 'lateral_horn',
+        name: '脊髓側角交感核 (IML)',
+        en: 'Lateral Horn / Intermediolateral Nucleus (T1–L2)',
+        cat: '脊髓側角 (黃節前本體)',
+        color: '#eab308',
+        mods: ['SYMP_PRE'],
+        microPos: [1.52, 0.0, -2.25],
+        macroPos: [0.38, 0.2, 0.05],
+        synapse: '側角內排列 3 顆亮黃色交感節前細胞本體，上、中、下分別直接發出迴路 4、迴路 5、迴路 6 的連續亮黃色節前軸突。',
+        nt: '節前神經元合成並於突觸終末釋放乙醯膽鹼 (ACh → N2 受體)',
+        desc: '胸腰段 (T1–L2) 脊髓側角。3 顆亮黃色細胞本體各自發出完整的亮黃色節前纖維，隨腹根與白交通支進入交感神經幹。'
+    },
+    {
+        id: 'white_ramus',
+        name: '白交通支 (White Ramus)',
+        en: 'White Ramus Communicans (Myelinated Preganglionic)',
+        cat: '亮黃節前入口 (T1–L2)',
+        color: '#eab308',
+        mods: ['SYMP_PRE'],
+        microPos: [5.38, 0.22, -0.45],
+        macroPos: [2.2, 1.3, 0.35],
+        synapse: '由脊髓側角亮黃色細胞本體發出，經腹根進入交感神經幹的「有髓鞘節前入口匝道」。',
+        nt: '有髓鞘 B 纖維，進入交感節釋放 ACh (→ N2 受體)',
+        desc: '點選「白交通支」時，僅高亮脊髓側角的亮黃色細胞本體，以及由其發出並穿過白交通支進入椎旁交感節的亮黃色節前纖維。'
+    },
+    {
+        id: 'gray_ramus',
+        name: '灰交通支 (Gray Ramus)',
+        en: 'Gray Ramus Communicans (Unmyelinated Postganglionic)',
+        cat: '橘色節後出口 (C1–Co1)',
+        color: '#f97316',
+        mods: ['SYMP_POST'],
+        microPos: [5.88, 0.25, -0.45],
+        macroPos: [2.35, 0.4, 0.45],
+        synapse: '由椎旁交感幹神經節內的橘色細胞本體直接發出，返回脊神經前往體壁的「無髓鞘節後出口匝道」。',
+        nt: '無髓鞘 C 纖維，至體壁血管/豎毛肌釋放 NE (α1)；至汗腺釋放 ACh (M3)',
+        desc: '點選「灰交通支」時，僅高亮椎旁交感節內的橘色細胞本體，以及由其發出並穿過灰交通支返回脊神經的橘色節後纖維。'
+    },
+    {
+        id: 'symp_chain',
+        name: '椎旁交感幹神經節',
+        en: 'Paravertebral Sympathetic Chain Ganglia',
+        cat: '交感節 (上半換元/下半直穿)',
+        color: '#f97316',
+        mods: ['SYMP_PRE', 'SYMP_POST'],
+        microPos: [5.6, 0.0, 1.05],
+        macroPos: [3.1, 0.8, 0.9],
+        synapse: '節內上下分層：① 上半部由亮黃色節前突觸終末包覆橘色細胞本體進行換元（經灰交通支輸出）；② 下半部則是兩條亮黃色連續節前纖維直接穿過不換元（前往椎前節與腎上腺髓質）。',
+        nt: '上半換元處：ACh → 橘色本體 N2 受體 ｜ 下半直穿處：無突觸不換元',
+        desc: '透視椎旁交感幹神經節外殼，可清楚區分兩種路徑：上半部有黃色突觸終末與橘色節後細胞本體進行換元；下半部則僅有連續的黃色節前纖維直接穿過（不換元）。'
+    },
+    {
+        id: 'prevertebral',
+        name: '椎前神經節 (腹腔/腸繫膜節)',
+        en: 'Prevertebral Ganglia (Celiac, SMA, IMA)',
+        cat: '交感節 (內臟神經換元處)',
+        color: '#fb923c',
+        mods: ['SYMP_PRE', 'SYMP_POST'],
+        microPos: [1.45, -0.10, 3.35],
+        macroPos: [1.45, -1.2, 2.3],
+        synapse: '穿過椎旁交感幹未換元的亮黃色內臟神經，在此形成黃色突觸終末包覆節內的橘色節後細胞本體換元，再由橘色本體發出橘色節後纖維進入內臟靶器官。',
+        nt: '節內突觸：ACh → N2 菸鹼受體 ｜ 節後末梢：釋放 NE 抑制胃腸蠕動並收縮血管',
+        desc: '位於腹主動脈前方。節內可見亮黃色內臟神經突觸終末與橘色節後細胞本體相接，再由橘色本體發出連續的橘色節後纖維支配腹腔內臟。'
+    },
+    {
+        id: 'adrenal_medulla',
+        name: '腎上腺髓質 (嗜鉻細胞)',
+        en: 'Adrenal Medulla (Chromaffin Endocrine Somata)',
+        cat: '交感特例 (節前直達)',
+        color: '#facc15',
+        mods: ['SYMP_PRE'],
+        microPos: [4.1, -0.45, 3.55],
+        macroPos: [2.85, -0.8, 2.45],
+        synapse: '由脊髓側角亮黃色本體發出的單一連續亮黃色節前纖維，穿過白交通支與椎旁交感幹不換元直達腎上腺髓質，以突觸終末包覆琥珀金色嗜鉻細胞本體。',
+        nt: '節前釋放 ACh → N2 受體 → 嗜鉻細胞直接將 80% 腎上腺素 (Epi) + 20% NE 排入血液（無節後神經纖維）',
+        desc: '從脊髓側角到腎上腺髓質為單一連續的亮黃色節前纖維，穿過交感幹底部直達腎上腺髓質；嗜鉻細胞本體沒有向外發出的節後神經纖維（改排荷爾蒙入血）。'
+    },
+    {
+        id: 'terminal_ganglia',
+        name: '副交感終末/壁內神經節',
+        en: 'Parasympathetic Terminal / Intramural Ganglia',
+        cat: '副交感節 (含紫色節後本體)',
+        color: '#c084fc',
+        mods: ['PARA_PRE', 'PARA_POST'],
+        microPos: [-3.35, 0.0, 4.10],
+        macroPos: [-1.55, -0.8, 2.8],
+        synapse: '青綠色長節前纖維進入終末神經節後，以突觸終末包覆節內的亮紫色節後細胞本體換元；亮紫色細胞本體再直接發出亮紫色短節後纖維伸入內臟靶器官。',
+        nt: '節內突觸：ACh → N2 菸鹼受體 ｜ 節後末梢：ACh → 靶器官 M2/M3 蕈毒鹼受體',
+        desc: '緊貼在內臟靶器官壁上（微觀模式分為上方「心肺/胃腸壁終末節」受腦幹迷走神經 CN X 支配，與下方「膀胱/直腸壁終末節」受薦髓 S2–S4 骨盆內臟神經支配）。'
+    }
+];
+
+const PATHWAYS = [
+    {
+        id: 'path_gsa',
+        name: '1. 軀體感覺迴路 (藍：皮膚肌肉 → DRG本體 → 背角)',
+        mod: 'GSA',
+        color: '#3b82f6',
+        structs: ['drg', 'dorsal_horn'],
+        summary: '體表感受器 → 藍色周邊突 → 背根神經節 (DRG 內藍色假單極細胞本體 T 型連通，不換元) → 藍色背根中樞突 → 於脊髓背角形成突觸終末與背角次級本體換元。',
+        synapseInfo: 'DRG 內只有藍色細胞本體與 T 型連通柄（無突觸構造），感覺訊號在 DRG 內不換元，直到進入脊髓背角才進行突觸換元。'
+    },
+    {
+        id: 'path_gva',
+        name: '2. 內臟感覺迴路 (綠：內臟靶器官 → 直穿交感幹 → DRG本體 → 背角)',
+        mod: 'GVA',
+        color: '#10b981',
+        structs: ['drg', 'dorsal_horn'],
+        summary: '內臟靶器官受器 → 連續綠色內臟傳入纖維（直接穿過椎前節、內臟神經、椎旁交感幹與白交通支，全程不換元）→ DRG 內綠色假單極細胞本體 → 脊髓背角換元。',
+        synapseInfo: '全程為同一條連續的綠色內臟感覺神經元，其綠色細胞本體位於 DRG 內，中樞突入背角與藍色體感覺匯聚（牽涉痛基礎）。'
+    },
+    {
+        id: 'path_gse',
+        name: '3. 軀體運動直達迴路 (紅：脊髓腹角本體 → 腹根 → 骨骼肌，無神經節)',
+        mod: 'GSE',
+        color: '#ef4444',
+        structs: ['ventral_horn'],
+        summary: '脊髓腹角內的紅色運動細胞本體 → 直接發出單一連續紅色運動軸突 → 經腹根與脊神經直達骨骼肌，末端形成運動終板（途中無任何周圍運動神經節）。',
+        synapseInfo: '全程僅 1 顆紅色軀體運動神經元，細胞本體在脊髓腹角，一路直達骨骼肌，無周圍神經節換元。'
+    },
+    {
+        id: 'path_symp_wall',
+        name: '4. 交感體壁迴路 (黃：側角本體+白交通支 → 椎旁節換元 → 橘：本體+灰交通支)',
+        mod: 'SYMP_POST',
+        color: '#f97316',
+        structs: ['lateral_horn', 'white_ramus', 'symp_chain', 'gray_ramus'],
+        summary: '① 脊髓側角上方亮黃色節前細胞本體 → 發出亮黃色節前纖維經白交通支入椎旁交感幹神經節，形成黃色突觸終末包覆節內的橘色節後細胞本體換元 → ② 橘色細胞本體直接發出橘色節後纖維經灰交通支返脊神經 → 體壁血管、汗腺、豎毛肌。',
+        synapseInfo: '此迴路在「椎旁交感幹神經節上半部」進行換元：亮黃色節前突觸終末包覆橘色節後細胞本體，再由橘色本體發出節後纖維走灰交通支。'
+    },
+    {
+        id: 'path_symp_viscera',
+        name: '5. 交感腹腔內臟迴路 (黃：連續節前直穿交感幹 → 椎前節換元 → 橘：本體入內臟)',
+        mod: 'SYMP_POST',
+        color: '#fb923c',
+        structs: ['lateral_horn', 'white_ramus', 'symp_chain', 'prevertebral'],
+        summary: '① 脊髓側角中間亮黃色節前細胞本體 → 發出單一連續亮黃色節前纖維，經白交通支直接穿過椎旁交感幹下半部（不換元）延續為內臟大神經 → ② 抵達腹主動脈前椎前神經節形成黃色突觸終末包覆節內橘色節後細胞本體換元 → ③ 橘色本體發出橘色節後纖維支配內臟靶器官。',
+        synapseInfo: '從脊髓側角到椎前神經節為連續的亮黃色節前纖維（直接路過椎旁交感幹不換元），直到進入腹主動脈前的「椎前神經節」才與橘色細胞本體換元。'
+    },
+    {
+        id: 'path_symp_adrenal',
+        name: '6. 交感腎上腺髓質特例 (黃：單一連續節前直穿交感幹 → 嗜鉻細胞排 Epi)',
+        mod: 'SYMP_PRE',
+        color: '#eab308',
+        structs: ['lateral_horn', 'white_ramus', 'symp_chain', 'adrenal_medulla'],
+        summary: '脊髓側角下方亮黃色節前細胞本體 → 發出單一連續亮黃色節前纖維，經白交通支直接穿過椎旁交感幹底部（完全不換元）→ 直達腎上腺髓質形成黃色突觸終末包覆琥珀金色嗜鉻細胞本體 → 直接分泌腎上腺素入血（無節後神經纖維）。',
+        synapseInfo: '在椎旁交感幹神經節內完全不換元。整條路徑從脊髓側角亮黃色細胞本體到腎上腺髓質為單一連續節前軸突，且嗜鉻細胞本體沒有向外發出的節後神經纖維。'
+    },
+    {
+        id: 'path_para_cranial',
+        name: '7. 顱部副交感迴路 (青：上方腦幹迷走神經 CN X → 紫：心肺/胃腸壁終末節換元)',
+        mod: 'PARA_POST',
+        color: '#14b8a6',
+        structs: ['terminal_ganglia'],
+        summary: '① 位於脊髓上方的腦幹迷走神經背核 (CN X) 青綠色節前細胞本體（不經脊髓腹根）→ 直接向下發出極長青綠色迷走神經節前纖維 → 直達上方心肺/胃腸道壁終末神經節形成青綠色突觸終末包覆亮紫色節後細胞本體換元 → ② 亮紫色本體發出極短亮紫色節後纖維直接伸入心肺/胃腸靶器官。',
+        synapseInfo: '與迴路 8 的區別：迴路 7 源自上方的腦幹 (CN X 迷走神經)，不經過脊髓腹根，由上方直接下行支配胸腔與上腹腔臟器（心肺、胃、肝、胰、小腸）壁內的終末神經節。'
+    },
+    {
+        id: 'path_para_sacral',
+        name: '8. 薦部副交感迴路 (青：薦髓 S2–S4 側角經腹根出 → 紫：膀胱/直腸壁終末節換元)',
+        mod: 'PARA_POST',
+        color: '#c084fc',
+        structs: ['terminal_ganglia'],
+        summary: '① 位於薦髓 (S2–S4) 側角副交感核的青綠色節前細胞本體 → 經由脊髓腹根穿出並分出青綠色「骨盆內臟神經」→ 直抵下方膀胱與直腸壁終末神經節形成青綠色突觸終末包覆亮紫色節後細胞本體換元 → ② 亮紫色本體發出極短亮紫色節後纖維直接伸入膀胱與直腸靶器官。',
+        synapseInfo: '與迴路 7 的區別：迴路 8 的青綠色細胞本體位於薦髓 (S2–S4) 灰質內，軸突由脊髓腹根穿出成為骨盆內臟神經，專司骨盆腔下部臟器（降結腸、直腸、膀胱排尿與生殖器勃起）。'
+    }
+];
+
+const MATRIX_ROWS = [
+    {
+        system: '1. 一般軀體感覺 (GSA · 藍)',
+        color: '#3b82f6',
+        origin: '背根神經節 (DRG) 內之藍色假單極細胞本體',
+        ganglion: '背根神經節 (DRG)',
+        synapseInGanglion: '否（節內僅有藍色細胞本體與 T 型柄連通，於脊髓背角才換元）',
+        preFiber: '藍色周邊突：自皮膚/骨骼肌感受器傳入 DRG',
+        postFiber: '藍色中樞突：自 DRG 經背根入脊髓背角形成突觸終末',
+        ntGanglion: '無節內突觸',
+        ntTarget: '於脊髓背角釋放 Glutamate、Substance P',
+        target: '脊髓背角 → 視丘 VPL → 大腦體感覺皮質',
+        pathId: 'path_gsa'
+    },
+    {
+        system: '2. 一般內臟感覺 (GVA · 綠)',
+        color: '#10b981',
+        origin: '背根神經節 (DRG) 內之綠色假單極細胞本體',
+        ganglion: '背根神經節 (DRG)',
+        synapseInGanglion: '否（連續綠色纖維直接穿過椎前節、交感幹與白交通支回到 DRG 本體，全程不換元）',
+        preFiber: '綠色周邊突：自內臟靶器官壁逆行直穿交感節與白交通支',
+        postFiber: '綠色中樞突：自 DRG 經背根入脊髓背角形成突觸終末（牽涉痛基礎）',
+        ntGanglion: '無節內突觸',
+        ntTarget: '於脊髓背角 / 孤束核釋放 Glutamate、CGRP',
+        target: '脊髓背角 Lamina I, V（痛覺）或延腦孤束核',
+        pathId: 'path_gva'
+    },
+    {
+        system: '3. 一般軀體運動 (GSE · 紅)',
+        color: '#ef4444',
+        origin: '脊髓腹角 (Ventral Horn) 內之紅色多極運動細胞本體',
+        ganglion: '無周圍運動神經節（單一連續紅色軸突直達骨骼肌）',
+        synapseInGanglion: '無神經節（途中不換元）',
+        preFiber: '紅色粗大有髓鞘 Aα 運動軸突（自腹角細胞本體經腹根直達骨骼肌）',
+        postFiber: '無節後纖維',
+        ntGanglion: '無',
+        ntTarget: '乙醯膽鹼 (ACh) → 骨骼肌運動終板 N1 (Nm) 菸鹼受體',
+        target: '軀幹與四肢骨骼肌（隨意收縮）',
+        pathId: 'path_gse'
+    },
+    {
+        system: '4. 交感體壁路徑 (黃節前 → 橘節後)',
+        color: '#f97316',
+        origin: '節前：T1–L2 脊髓側角亮黃色細胞本體｜節後：椎旁交感節橘色細胞本體',
+        ganglion: '椎旁交感幹神經節 (Paravertebral Ganglion 上半部)',
+        synapseInGanglion: '是（亮黃色節前突觸終末於椎旁節內包覆橘色節後細胞本體換元）',
+        preFiber: '亮黃色有髓鞘 B 纖維 — 經白交通支進入椎旁交感節',
+        postFiber: '橘色無髓鞘 C 纖維 — 自椎旁節橘色細胞本體直接發出，經灰交通支返脊神經',
+        ntGanglion: '乙醯膽鹼 (ACh) → 橘色節後本體 N2 (Nn) 菸鹼受體',
+        ntTarget: '正腎上腺素 (NE → α1 收縮血管/豎毛肌)；汗腺特例釋放 ACh (→ M3)',
+        target: '全身體壁血管平滑肌、汗腺、豎毛肌（以及上行支配瞳孔散大肌、心肺）',
+        pathId: 'path_symp_wall'
+    },
+    {
+        system: '5. 交感腹腔內臟路徑 (黃直穿交感幹 → 椎前節換元)',
+        color: '#fb923c',
+        origin: '節前：T5–L2 脊髓側角亮黃色細胞本體｜節後：椎前神經節橘色細胞本體',
+        ganglion: '椎前神經節 (腹腔/腸繫膜節)',
+        synapseInGanglion: '連續亮黃色纖維直接穿過椎旁交感幹不換元，至腹主動脈前椎前神經節才與橘色細胞本體換元',
+        preFiber: '亮黃色有髓鞘 B 纖維 — 連續穿過交感幹形成內臟大/小/腰神經',
+        postFiber: '橘色無髓鞘 C 纖維 — 自椎前節橘色細胞本體直接發出，進入內臟靶器官',
+        ntGanglion: '乙醯膽鹼 (ACh) → 椎前節橘色本體 N2 菸鹼受體',
+        ntTarget: '正腎上腺素 (NE) → α1 (收縮括約肌/血管)、β2 (抑制胃腸蠕動)',
+        target: '胃、小腸、大腸、肝、膽、胰、脾、腎等腹腔內臟靶器官',
+        pathId: 'path_symp_viscera'
+    },
+    {
+        system: '6. 交感腎上腺髓質特例 (連續節前直達嗜鉻細胞)',
+        color: '#eab308',
+        origin: 'T5–T9 脊髓側角亮黃色細胞本體',
+        ganglion: '腎上腺髓質琥珀金色嗜鉻細胞本體 (無節後神經纖維)',
+        synapseInGanglion: '連續亮黃色節前纖維直接穿過椎旁交感幹不換元，直抵腎上腺髓質包覆嗜鉻細胞本體',
+        preFiber: '單一連續亮黃色有髓鞘節前纖維（自脊髓側角本體直達腎上腺髓質）',
+        postFiber: '無節後神經纖維（嗜鉻細胞本體直接將荷爾蒙排入血液循環）',
+        ntGanglion: '乙醯膽鹼 (ACh) → 嗜鉻細胞 N2 菸鹼受體',
+        ntTarget: '分泌 80% 腎上腺素 (Epi) + 20% 正腎上腺素 (NE) 入血液',
+        target: '全身心血管、支氣管擴張、肝臟糖原分解（全身戰或逃反應）',
+        pathId: 'path_symp_adrenal'
+    },
+    {
+        system: '7. 顱部副交感路徑 (腦幹 CN X → 胸腹器官壁終末節)',
+        color: '#14b8a6',
+        origin: '節前：上方腦幹迷走神經核青綠色本體｜節後：心肺/胃腸壁終末節亮紫色本體',
+        ganglion: '心肺與胃腸道壁上之副交感終末/壁內神經節 (上方)',
+        synapseInGanglion: '是（腦幹下行的青綠色迷走神經長節前纖維進入器官壁終末節，包覆亮紫色細胞本體換元）',
+        preFiber: '青綠色極長有髓鞘節前纖維（由上方腦幹直接下行，不走脊髓腹根）',
+        postFiber: '亮紫色極短無髓鞘節後纖維（自終末節紫色細胞本體發出伸入心肺/胃腸靶器官）',
+        ntGanglion: '乙醯膽鹼 (ACh) → 終末節亮紫色本體 N2 菸鹼受體',
+        ntTarget: '乙醯膽鹼 (ACh) → 靶器官 M2 (減慢心率)、M3 (促進胃腸蠕動與消化液分泌)',
+        target: '心臟、支氣管、胃、肝、膽、胰、小腸至結腸左曲（另有 CN III/VII/IX 支配眼與唾液腺）',
+        pathId: 'path_para_cranial'
+    },
+    {
+        system: '8. 薦部副交感路徑 (薦髓 S2–S4 → 骨盆器官壁終末節)',
+        color: '#c084fc',
+        origin: '節前：薦髓 S2–S4 側角青綠色本體｜節後：膀胱/直腸壁終末節亮紫色本體',
+        ganglion: '膀胱與直腸壁上之副交感終末/壁內神經節 (下方)',
+        synapseInGanglion: '是（由薦髓腹根穿出的青綠色骨盆內臟神經進入盆腔器官壁終末節，包覆亮紫色細胞本體換元）',
+        preFiber: '青綠色長有髓鞘節前纖維（由薦髓 S2–S4 經腹根穿出形成骨盆內臟神經）',
+        postFiber: '亮紫色極短無髓鞘節後纖維（自終末節紫色細胞本體發出伸入膀胱/直腸靶器官）',
+        ntGanglion: '乙醯膽鹼 (ACh) → 終末節亮紫色本體 N2 菸鹼受體',
+        ntTarget: '乙醯膽鹼 (ACh → M3 收縮逼尿肌促進排尿/排便) 及 NO (血管舒張勃起)',
+        target: '降結腸、乙狀結腸、直腸、膀胱逼尿肌、外生殖器勃起組織',
+        pathId: 'path_para_sacral'
+    }
+];
+
+// ==========================================
+// 2. Three.js 場景初始化 (標準人體直立座標系：Y軸上下頭尾，Z>0腹側前，Z<0背側後，X軸左右)
+// ==========================================
+const container = document.getElementById('canvas-container');
+const labelsContainer = document.getElementById('labels-container');
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x0b0f19, 0.012);
+
+const camera = new THREE.PerspectiveCamera(44, window.innerWidth / window.innerHeight, 0.1, 250);
+camera.position.set(8.5, 13.5, 16.5);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+container.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.enablePan = true;
+controls.screenSpacePanning = true;
+controls.minDistance = 3.5;
+controls.maxDistance = 68;
+controls.target.set(0.6, -0.1, 0.4);
+controls.touches = {
+    ONE: THREE.TOUCH.ROTATE,
+    TWO: THREE.TOUCH.DOLLY_PAN
+};
+
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
+scene.add(ambientLight);
+
+const dirLight1 = new THREE.DirectionalLight(0xe0f2fe, 1.45);
+dirLight1.position.set(14, 22, 18);
+scene.add(dirLight1);
+
+const dirLight2 = new THREE.DirectionalLight(0x818cf8, 0.85);
+dirLight2.position.set(-16, -10, -14);
+scene.add(dirLight2);
+
+const gridHelper = new THREE.GridHelper(28, 28, 0x1e293b, 0x131c2e);
+gridHelper.position.y = -7.2;
+scene.add(gridHelper);
+
+// 狀態管理
+let currentMode = 'micro';
+let showPulses = true;
+let showLabels = true;
+let ganglionShellOpacity = 0.20;
+let targetLookAt = new THREE.Vector3(0.6, -0.1, 0.4);
+
+const microGroup = new THREE.Group();
+const macroGroup = new THREE.Group();
+macroGroup.visible = false;
+scene.add(microGroup);
+scene.add(macroGroup);
+
+const interactiveMeshes = [];
+const structureMeshes = {};    // structId -> [{ mesh, isShell, isSoma, mod, pathIds }]
+const ganglionShellMats = [];  // 可調透明度的外殼材質
+const pathwayTubes = [];       // { mesh, pathIds, mod, structIds, mode, curve, pulses: [] }
+const activePulses = [];       // { mesh, curve, t, speed, parentTube }
+const labelItems = [];         // { el, posVec, mode, structId, pathId, mod }
+
+const clampVal = (v, min, max) => Math.max(min, Math.min(max, v));
+const smoothstep = (e0, e1, x) => {
+    const t = clampVal((x - e0) / (e1 - e0), 0, 1);
+    return t * t * (3 - 2 * t);
+};
+const gauss = (x, mu, sigma) => Math.exp(-0.5 * (((x - mu) / sigma) ** 2));
+
+function buildParametricTopoGeo(uSteps, vSteps, evalFn, opts = {}) {
+    const { capStart = false, capEnd = false, uStride = 3, vStride = 4 } = opts;
+    const positions = [];
+    const indices = [];
+    const ringCols = vSteps + 1;
+
+    for (let iu = 0; iu <= uSteps; iu++) {
+        const u = iu / uSteps;
+        for (let iv = 0; iv <= vSteps; iv++) {
+            const v = iv / vSteps;
+            const pt = evalFn(u, v);
+            positions.push(pt[0], pt[1], pt[2]);
+        }
+    }
+    for (let iu = 0; iu < uSteps; iu++) {
+        for (let iv = 0; iv < vSteps; iv++) {
+            const a = iu * ringCols + iv, b = a + 1, c = (iu + 1) * ringCols + iv, d = c + 1;
+            indices.push(a, b, d, a, d, c);
+        }
+    }
+    const linePts = [];
+    for (let iu = 0; iu <= uSteps; iu += uStride) {
+        for (let iv = 0; iv < vSteps; iv++) {
+            const i0 = (iu * ringCols + iv) * 3, i1 = (iu * ringCols + iv + 1) * 3;
+            linePts.push(positions[i0], positions[i0+1], positions[i0+2], positions[i1], positions[i1+1], positions[i1+2]);
+        }
+    }
+    for (let iv = 0; iv < vSteps; iv += vStride) {
+        for (let iu = 0; iu < uSteps; iu++) {
+            const i0 = (iu * ringCols + iv) * 3, i1 = ((iu + 1) * ringCols + iv) * 3;
+            linePts.push(positions[i0], positions[i0+1], positions[i0+2], positions[i1], positions[i1+1], positions[i1+2]);
+        }
+    }
+    if (capStart) {
+        let cx = 0, cy = 0, cz = 0;
+        for (let iv = 0; iv < vSteps; iv++) { cx += positions[iv*3]; cy += positions[iv*3+1]; cz += positions[iv*3+2]; }
+        cx /= vSteps; cy /= vSteps; cz /= vSteps;
+        const cIdx = positions.length / 3;
+        positions.push(cx, cy, cz);
+        for (let iv = 0; iv < vSteps; iv++) indices.push(cIdx, iv + 1, iv);
+    }
+    if (capEnd) {
+        let cx = 0, cy = 0, cz = 0;
+        const base = uSteps * ringCols;
+        for (let iv = 0; iv < vSteps; iv++) { const idx = (base+iv)*3; cx += positions[idx]; cy += positions[idx+1]; cz += positions[idx+2]; }
+        cx /= vSteps; cy /= vSteps; cz /= vSteps;
+        const cIdx = positions.length / 3;
+        positions.push(cx, cy, cz);
+        for (let iv = 0; iv < vSteps; iv++) indices.push(cIdx, base + iv, base + iv + 1);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+
+    const contourGeo = new THREE.BufferGeometry();
+    contourGeo.setAttribute('position', new THREE.Float32BufferAttribute(linePts, 3));
+    geo.userData.contourGeo = contourGeo;
+    return geo;
+}
+
+function registerStructMesh(id, mesh, opts = {}) {
+    const { isShell = false, isSoma = false, mod = null, pathIds = [] } = opts;
+    if (!structureMeshes[id]) structureMeshes[id] = [];
+    if (isShell && mesh.material) {
+        mesh.material.depthWrite = false;
+        mesh.renderOrder = 2;
+        if (!ganglionShellMats.includes(mesh.material)) ganglionShellMats.push(mesh.material);
+    } else if (mesh.material) {
+        mesh.material.depthWrite = true;
+        mesh.renderOrder = isSoma ? 9 : 6;
+    }
+    structureMeshes[id].push({ mesh, isShell, isSoma, mod, pathIds });
+    const st = STRUCTURES.find(s => s.id === id);
+    mesh.userData = { type: 'struct', id, data: st };
+    interactiveMeshes.push(mesh);
+}
+
+// ==========================================
+// 核心造型 1：神經元細胞本體 (Soma = 唯一的大圓球造型！長出的軸突直接由圓球中心平滑延伸，絕無分離短棍)
+// ==========================================
+function createNeuronSoma(posArr, hexColor, radius, targetGroup, structIds, meta = {}) {
+    const ids = Array.isArray(structIds) ? structIds : [structIds];
+    const somaMat = new THREE.MeshStandardMaterial({
+        color: hexColor,
+        emissive: hexColor,
+        emissiveIntensity: 0.65,
+        roughness: 0.18,
+        metalness: 0.05,
+        transparent: true,
+        opacity: 0.99,
+        depthWrite: true
+    });
+    const somaMesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 20, 20), somaMat);
+    somaMesh.position.set(...posArr);
+    somaMesh.renderOrder = 9;
+    targetGroup.add(somaMesh);
+
+    ids.forEach(id => registerStructMesh(id, somaMesh, { isSoma: true, mod: meta.mod, pathIds: meta.pathIds || [] }));
+
+    // 若為假單極感覺神經元 (DRG)，建立直接連通至主軸突的 T 型分叉短柄 (無斷頭，兩端皆埋入圓球中心與主軸突中心)
+    if (meta.tStemTo) {
+        const p0 = new THREE.Vector3(...posArr);
+        const p1 = new THREE.Vector3(...meta.tStemTo);
+        const stemCurve = new THREE.CatmullRomCurve3([p0, p0.clone().lerp(p1, 0.5), p1]);
+        const stemMesh = new THREE.Mesh(new THREE.TubeGeometry(stemCurve, 10, radius * 0.36, 8, false), somaMat);
+        stemMesh.renderOrder = 8;
+        targetGroup.add(stemMesh);
+        ids.forEach(id => registerStructMesh(id, stemMesh, { isSoma: true, mod: meta.mod, pathIds: meta.pathIds || [] }));
+    }
+    return somaMesh;
+}
+
+// ==========================================
+// 核心造型 2：三叉突觸終末爪 (Synaptic Terminal Fork 🔱 — 絕對不用圓球！由節前纖維末端自然分叉出三根弧形突觸爪包繞下一級圓球本體)
+// ==========================================
+function createSynapticFork(fiberEndArr, targetSomaArr, hexColor, targetGroup, structIds, meta = {}) {
+    const ids = Array.isArray(structIds) ? structIds : [structIds];
+    const pEnd = new THREE.Vector3(...fiberEndArr);
+    const pSoma = new THREE.Vector3(...targetSomaArr);
+    const somaR = meta.somaRadius || 0.21;
+
+    // 計算由纖維末端指向目標細胞本體的方向向量與兩個正交基底向量
+    const dir = pSoma.clone().sub(pEnd);
+    const dist = dir.length();
+    if (dist < 0.001) dir.set(1, 0, 0); else dir.normalize();
+
+    const upRef = Math.abs(dir.y) < 0.85 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+    const ortho1 = new THREE.Vector3().crossVectors(dir, upRef).normalize();
+    const ortho2 = new THREE.Vector3().crossVectors(dir, ortho1).normalize();
+
+    const forkMat = new THREE.MeshStandardMaterial({
+        color: hexColor,
+        emissive: hexColor,
+        emissiveIntensity: 0.72,
+        roughness: 0.2,
+        transparent: true,
+        opacity: 0.98,
+        depthWrite: true
+    });
+
+    // 三根 120° 對稱分開的弧形突觸終末爪，從纖維末端 pEnd 張開包繞至目標圓球本體表面前方 (留出清楚的微小突觸間隙)
+    const clawCount = 3;
+    const gapR = somaR + 0.06; // 突觸間隙半徑
+    for (let i = 0; i < clawCount; i++) {
+        const angle = (i * Math.PI * 2) / clawCount + 0.25;
+        const radial = ortho1.clone().multiplyScalar(Math.cos(angle)).addScaledVector(ortho2, Math.sin(angle));
+
+        // 爪的中段向外拱起，尖端朝向圓球本體表面包覆
+        const pMid = pSoma.clone().addScaledVector(dir, -gapR * 1.15).addScaledVector(radial, gapR * 0.78);
+        const pTip = pSoma.clone().addScaledVector(dir, -gapR * 0.35).addScaledVector(radial, gapR * 0.95);
+
+        const clawCurve = new THREE.CatmullRomCurve3([pEnd, pMid, pTip]);
+        const clawGeo = new THREE.TubeGeometry(clawCurve, 10, 0.034, 7, false);
+        const clawMesh = new THREE.Mesh(clawGeo, forkMat);
+        clawMesh.renderOrder = 8;
+        targetGroup.add(clawMesh);
+
+        // 爪尖微小扁平終板墊 (Disc pad，非圓球)
+        const padGeo = new THREE.CylinderGeometry(0.055, 0.035, 0.025, 10);
+        const padMesh = new THREE.Mesh(padGeo, forkMat);
+        padMesh.position.copy(pTip);
+        padMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), pSoma.clone().sub(pTip).normalize());
+        padMesh.renderOrder = 8;
+        targetGroup.add(padMesh);
+
+        ids.forEach(id => {
+            registerStructMesh(id, clawMesh, { isSoma: true, mod: meta.mod, pathIds: meta.pathIds || [] });
+            registerStructMesh(id, padMesh, { isSoma: true, mod: meta.mod, pathIds: meta.pathIds || [] });
+        });
+    }
+}
+
+function add3DLabel(text, posArr, mode, borderColor, clickFn, meta = {}) {
+    const el = document.createElement('div');
+    el.className = 'label-3d';
+    el.style.borderLeft = `3px solid ${borderColor}`;
+    el.innerHTML = text;
+    el.onclick = (e) => { e.stopPropagation(); clickFn(); };
+    labelsContainer.appendChild(el);
+    labelItems.push({ el, posVec: new THREE.Vector3(...posArr), mode, ...meta });
+}
+
+function addPathwayTube(pts, radius, hexColor, meta) {
+    const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3(...p)));
+    const geo = new THREE.TubeGeometry(curve, Math.max(24, pts.length * 8), radius, 10, false);
+    const mat = new THREE.MeshStandardMaterial({
+        color: hexColor,
+        emissive: hexColor,
+        emissiveIntensity: 0.48,
+        roughness: 0.25,
+        transparent: true,
+        opacity: meta.baseOpacity || 0.96,
+        depthWrite: true
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.renderOrder = 6;
+    mesh.userData = { type: 'pathway', pathId: meta.pathIds[0], meta };
+    if (meta.interactive !== false) interactiveMeshes.push(mesh);
+    (meta.mode === 'macro' ? macroGroup : microGroup).add(mesh);
+
+    const pulseCount = meta.pulseCount || 2;
+    const pulseGeo = new THREE.SphereGeometry(radius * 1.55, 10, 10);
+    const pulseMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.98 });
+    const tubeEntry = { mesh, curve, ...meta, origOpacity: meta.baseOpacity || 0.96, pulses: [] };
+
+    for (let i = 0; i < pulseCount; i++) {
+        const pMesh = new THREE.Mesh(pulseGeo, pulseMat.clone());
+        pMesh.renderOrder = 10;
+        (meta.mode === 'macro' ? macroGroup : microGroup).add(pMesh);
+        const pulseObj = {
+            mesh: pMesh,
+            curve,
+            t: i / pulseCount,
+            speed: meta.speed || 0.32,
+            parentTube: tubeEntry
+        };
+        tubeEntry.pulses.push(pulseObj);
+        activePulses.push(pulseObj);
+    }
+
+    pathwayTubes.push(tubeEntry);
+    return tubeEntry;
+}
+
+window.updateGanglionShellOpacity = function(val) {
+    ganglionShellOpacity = Number(val) / 100;
+    document.getElementById('ganglion-op-val').textContent = `${val}%`;
+    ganglionShellMats.forEach(mat => {
+        mat.opacity = ganglionShellOpacity;
+        mat.visible = (ganglionShellOpacity > 0.01);
+    });
+};
+
+// ==========================================
+// 3. 建立【模式一：微觀 3D 直立脊髓橫切面與神經節迴路 (Micro Scene)】
+// ==========================================
+// 設計準則：
+// 1. 每一條神經傳導路徑皆為「1 顆大圓球細胞本體 (Soma) ──(直接從球心長出連續不斷的同色纖維)──> 末端三叉突觸爪 (🔱 Synaptic Fork)」，完全沒有多餘懸空的斷頭短棍！
+// 2. 在椎旁交感幹神經節內：
+//    • 上半部 (Y = +0.35)：迴路4 的亮黃節前纖維在此張開「黃色三叉突觸爪 🔱」包覆「橘色大圓球本體 🟠」換元，橘色本體直接長出灰交通支！
+//    • 下半部 (Y = -0.15 & -0.45)：迴路5 (往椎前節) 與迴路6 (往腎上腺髓質) 的兩條亮黃色節前纖維「直接平滑穿過椎旁交感節下半部（無圓球、無突觸爪、一條連續黃線到底）」！
+// 3. 迴路7 (顱部副交感：上方腦幹迷走神經 CN X → 上方心肺/胃腸壁終末節) 與 迴路8 (薦部副交感：脊髓側角經腹根出骨盆內臟神經 → 下方膀胱/直腸壁終末節) 完全獨立分開！
+
+(function buildMicroScene() {
+    const cordZ0 = -2.1;
+
+    // 3.1 直立脊髓白質外殼 (Y: -1.45 ~ +1.45)
+    const whiteMatterGeo = buildParametricTopoGeo(18, 64, (u, v) => {
+        const y = -1.45 + u * 2.9;
+        const theta = v * Math.PI * 2;
+        const aTheta = Math.abs(theta <= Math.PI ? theta : theta - 2 * Math.PI);
+        const s = Math.sin(theta), c = Math.cos(theta);
+        const rx = 2.55, rz = 2.02;
+        const antFissure = gauss(aTheta, 0, 0.09);
+        const postSulcus = gauss(aTheta, Math.PI, 0.08);
+        return [rx * s, y, cordZ0 + rz * c - 0.52 * antFissure + 0.25 * postSulcus];
+    }, { capStart: true, capEnd: true, uStride: 3, vStride: 4 });
+
+    const whiteMat = new THREE.MeshStandardMaterial({
+        color: 0x64748b, transparent: true, opacity: 0.15, roughness: 0.3, depthWrite: false, side: THREE.DoubleSide
+    });
+    const whiteMesh = new THREE.Mesh(whiteMatterGeo, whiteMat);
+    whiteMesh.renderOrder = 1;
+    whiteMesh.add(new THREE.LineSegments(whiteMatterGeo.userData.contourGeo, new THREE.LineBasicMaterial({ color: 0x64748b, transparent: true, opacity: 0.13, depthWrite: false })));
+    microGroup.add(whiteMesh);
+
+    // 3.2 直立脊髓蝴蝶形灰質柱
+    const grayShape = new THREE.Shape();
+    const butterflyPts = [
+        [0, 0.45], [0.35, 0.52], [0.75, 1.05], [1.45, 1.65], [1.68, 1.52],
+        [1.42, 0.85], [1.28, 0.42], [1.68, 0.18], [1.32, -0.05],
+        [1.55, -0.48], [1.35, -1.05], [0.72, -0.98], [0.42, -0.05], [0, 0.02]
+    ];
+    grayShape.moveTo(butterflyPts[0][0], butterflyPts[0][1]);
+    for (let i = 1; i < butterflyPts.length; i++) grayShape.lineTo(butterflyPts[i][0], butterflyPts[i][1]);
+    for (let i = butterflyPts.length - 2; i >= 0; i--) grayShape.lineTo(-butterflyPts[i][0], butterflyPts[i][1]);
+
+    const grayGeo = new THREE.ExtrudeGeometry(grayShape, {
+        depth: 2.7, bevelEnabled: true, bevelSegments: 2, steps: 1, bevelSize: 0.04, bevelThickness: 0.04
+    });
+    grayGeo.rotateX(-Math.PI / 2);
+    grayGeo.translate(0, -1.35, cordZ0);
+
+    const grayMesh = new THREE.Mesh(grayGeo, new THREE.MeshStandardMaterial({
+        color: 0x94a3b8, emissive: 0x1e293b, emissiveIntensity: 0.3,
+        transparent: true, opacity: 0.25, roughness: 0.4, depthWrite: false, side: THREE.DoubleSide
+    }));
+    grayMesh.renderOrder = 2;
+    microGroup.add(grayMesh);
+
+    // 中央管
+    const canalMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.08, 0.08, 2.9, 16),
+        new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.5, depthWrite: false })
+    );
+    canalMesh.position.set(0, 0, cordZ0 - 0.15);
+    microGroup.add(canalMesh);
+
+    // ==========================================
+    // 3.3 建造所有外殼 (Shells: DRG、背角、側角、腹角、椎旁交感節、椎前節、腎上腺、上下兩個副交感終末節與靶器官)
+    // ==========================================
+
+    // (A) 背角外殼 + 背角內的次級感覺神經元本體 (接收 GSA 藍與 GVA 綠的三叉突觸爪)
+    const dorsalHornShell = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.26, 1.8, 10, 16),
+        new THREE.MeshStandardMaterial({ color: 0x3b82f6, emissive: 0x2563eb, emissiveIntensity: 0.35, transparent: true, opacity: ganglionShellOpacity, depthWrite: false })
+    );
+    dorsalHornShell.position.set(1.38, 0, cordZ0 - 1.32);
+    microGroup.add(dorsalHornShell);
+    registerStructMesh('dorsal_horn', dorsalHornShell, { isShell: true, mod: 'GSA', pathIds: ['path_gsa', 'path_gva'] });
+
+    // 背角內的次級上行感覺神經元圓球本體 (供 GSA 與 GVA 的三叉突觸爪包覆)
+    const dhRelayGSA = [1.35, 0.32, -3.52];
+    const dhRelayGVA = [1.35, -0.28, -3.38];
+    createNeuronSoma(dhRelayGSA, 0x93c5fd, 0.17, microGroup, 'dorsal_horn', { mod: 'GSA', pathIds: ['path_gsa'] });
+    createNeuronSoma(dhRelayGVA, 0x6ee7b7, 0.17, microGroup, 'dorsal_horn', { mod: 'GVA', pathIds: ['path_gva'] });
+
+    // (B) 脊髓側角交感核外殼 (T1–L2 IML)
+    const latHornShell = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.25, 1.8, 10, 16),
+        new THREE.MeshStandardMaterial({ color: 0xeab308, emissive: 0xca8a04, emissiveIntensity: 0.35, transparent: true, opacity: ganglionShellOpacity, depthWrite: false })
+    );
+    latHornShell.position.set(1.52, 0, cordZ0 - 0.18);
+    microGroup.add(latHornShell);
+    registerStructMesh('lateral_horn', latHornShell, { isShell: true, mod: 'SYMP_PRE', pathIds: ['path_symp_wall', 'path_symp_viscera', 'path_symp_adrenal'] });
+
+    // (C) 脊髓腹角運動核外殼 (GSE)
+    const ventHornShell = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.28, 1.8, 10, 16),
+        new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xdc2626, emissiveIntensity: 0.4, transparent: true, opacity: ganglionShellOpacity, depthWrite: false })
+    );
+    ventHornShell.position.set(1.18, 0, cordZ0 + 0.85);
+    microGroup.add(ventHornShell);
+    registerStructMesh('ventral_horn', ventHornShell, { isShell: true, mod: 'GSE', pathIds: ['path_gse'] });
+
+    // (D) 背根神經節 (DRG) 外殼
+    const drgShellGeo = new THREE.SphereGeometry(0.76, 24, 20);
+    drgShellGeo.scale(1.32, 0.92, 0.88);
+    const drgShellMesh = new THREE.Mesh(drgShellGeo, new THREE.MeshStandardMaterial({
+        color: 0x3b82f6, emissive: 0x1d4ed8, emissiveIntensity: 0.35, transparent: true, opacity: ganglionShellOpacity, depthWrite: false
+    }));
+    drgShellMesh.position.set(4.35, 0.0, -2.85);
+    microGroup.add(drgShellMesh);
+    registerStructMesh('drg', drgShellMesh, { isShell: true, mod: 'GSA', pathIds: ['path_gsa', 'path_gva'] });
+
+    // (E) 椎旁交感幹神經節 (Paravertebral Ganglion) 外殼 + 直立交感神經幹索
+    const sympChainGeo = new THREE.SphereGeometry(0.75, 24, 20);
+    sympChainGeo.scale(0.95, 1.35, 0.95);
+    const sympChainMat = new THREE.MeshStandardMaterial({
+        color: 0xf97316, emissive: 0xea580c, emissiveIntensity: 0.35, transparent: true, opacity: ganglionShellOpacity, depthWrite: false
+    });
+    const sympChainMesh = new THREE.Mesh(sympChainGeo, sympChainMat);
+    sympChainMesh.position.set(5.6, 0.0, 1.05);
+    microGroup.add(sympChainMesh);
+    registerStructMesh('symp_chain', sympChainMesh, { isShell: true, mod: 'SYMP_POST', pathIds: ['path_symp_wall', 'path_symp_viscera', 'path_symp_adrenal'] });
+
+    const trunkCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(5.6, -2.8, 1.05),
+        new THREE.Vector3(5.6, 0.0, 1.05),
+        new THREE.Vector3(5.6, 2.8, 1.05)
+    ]);
+    const trunkMesh = new THREE.Mesh(
+        new THREE.TubeGeometry(trunkCurve, 20, 0.11, 10, false),
+        new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xd97706, emissiveIntensity: 0.25, transparent: true, opacity: 0.32, depthWrite: false })
+    );
+    microGroup.add(trunkMesh);
+
+    // (F) 腹主動脈參考柱 & 椎前神經節 (Prevertebral Ganglion) 外殼
+    const aortaMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.65, 0.65, 4.8, 24),
+        new THREE.MeshStandardMaterial({ color: 0x991b1b, transparent: true, opacity: 0.18, roughness: 0.4, depthWrite: false })
+    );
+    aortaMesh.position.set(0.55, 0, 2.65);
+    microGroup.add(aortaMesh);
+
+    const prevertGeo = new THREE.SphereGeometry(0.65, 22, 18);
+    prevertGeo.scale(1.15, 0.95, 0.95);
+    const prevertMesh = new THREE.Mesh(prevertGeo, new THREE.MeshStandardMaterial({
+        color: 0xfb923c, emissive: 0xea580c, emissiveIntensity: 0.38, transparent: true, opacity: ganglionShellOpacity, depthWrite: false
+    }));
+    prevertMesh.position.set(1.45, -0.05, 3.35);
+    microGroup.add(prevertMesh);
+    registerStructMesh('prevertebral', prevertMesh, { isShell: true, mod: 'SYMP_POST', pathIds: ['path_symp_viscera'] });
+
+    // (G) 腎上腺皮質外殼 (Adrenal Cortex Shell)
+    const cortexGeo = new THREE.ConeGeometry(0.85, 1.3, 20);
+    cortexGeo.scale(1.15, 0.9, 0.85);
+    const cortexMesh = new THREE.Mesh(cortexGeo, new THREE.MeshStandardMaterial({
+        color: 0xd97706, transparent: true, opacity: ganglionShellOpacity, depthWrite: false
+    }));
+    cortexMesh.position.set(4.1, -0.45, 3.55);
+    microGroup.add(cortexMesh);
+    registerStructMesh('adrenal_medulla', cortexMesh, { isShell: true, mod: 'SYMP_PRE', pathIds: ['path_symp_adrenal'] });
+
+    // (H) 骨骼肌靶區 (Skeletal Muscle Target for Pathway 3 GSE)
+    const muscleGeo = new THREE.CapsuleGeometry(0.45, 1.3, 12, 16);
+    muscleGeo.rotateZ(Math.PI / 2);
+    const muscleMesh = new THREE.Mesh(muscleGeo, new THREE.MeshStandardMaterial({
+        color: 0xb91c1c, emissive: 0x7f1d1d, emissiveIntensity: 0.35, transparent: true, opacity: 0.42, depthWrite: false
+    }));
+    muscleMesh.position.set(8.6, 0.0, -0.35);
+    microGroup.add(muscleMesh);
+    registerStructMesh('ventral_horn', muscleMesh, { isShell: true, mod: 'GSE', pathIds: ['path_gse'] });
+
+    // ==========================================
+    // 3.4 建立每一條傳導迴路的「1對1 完整連續神經元 (圓球本體 → 連續軸突 → 三叉突觸爪)」
+    // ==========================================
+
+    // ------------------------------------------
+    // 【迴路 1：GSA 藍色軀體感覺神經元】
+    // ------------------------------------------
+    const gsaSomaPos = [4.38, 0.42, -3.12];
+    const gsaTapPos  = [4.38, 0.25, -2.75];
+    const gsaForkTip = [1.58, 0.32, -3.46];
+    createNeuronSoma(gsaSomaPos, MODALITIES.GSA.hex, 0.20, microGroup, 'drg', {
+        mod: 'GSA', pathIds: ['path_gsa'], tStemTo: gsaTapPos
+    });
+    addPathwayTube([
+        [8.4, 0.22, -0.55],   // 體表皮膚/肌肉感受器
+        [7.0, 0.22, -1.35],
+        [5.65, 0.22, -2.05],  // 脊神經幹
+        gsaTapPos,            // 與 DRG 內藍色大圓球本體的 T 型短柄無縫接合!
+        [2.75, 0.28, -3.22],  // 背根 (Dorsal Root)
+        gsaForkTip            // 進入脊髓背角
+    ], 0.082, MODALITIES.GSA.hex, {
+        mode: 'micro', pathIds: ['path_gsa'], mod: 'GSA', structIds: ['drg', 'dorsal_horn'], pulseCount: 3, speed: 0.34
+    });
+    // 背角內的藍色三叉突觸爪 (包覆背角次級感覺本體)
+    createSynapticFork(gsaForkTip, dhRelayGSA, MODALITIES.GSA.hex, microGroup, ['dorsal_horn', 'drg'], {
+        mod: 'GSA', pathIds: ['path_gsa'], somaRadius: 0.17
+    });
+
+    // ------------------------------------------
+    // 【迴路 2：GVA 綠色內臟感覺神經元】
+    // ------------------------------------------
+    const gvaSomaPos = [4.35, -0.42, -3.02];
+    const gvaTapPos  = [4.35, -0.22, -2.68];
+    const gvaForkTip = [1.56, -0.28, -3.32];
+    createNeuronSoma(gvaSomaPos, MODALITIES.GVA.hex, 0.195, microGroup, 'drg', {
+        mod: 'GVA', pathIds: ['path_gva'], tStemTo: gvaTapPos
+    });
+    addPathwayTube([
+        [-0.85, 0.35, 4.25],  // 內臟靶器官壁受器
+        [1.45, -0.28, 3.25],  // 直接穿過椎前神經節 (無圓球、無突觸爪、不換元)
+        [3.65, -0.25, 2.15],  // 借道內臟神經
+        [5.48, -0.22, 0.95],  // 直接穿過椎旁交感幹 (不換元)
+        [5.42, -0.20, -0.45], // 借道白交通支
+        [5.52, -0.20, -1.95], // 脊神經幹
+        gvaTapPos,            // 與 DRG 內綠色大圓球本體的 T 型短柄無縫接合!
+        [2.70, -0.25, -3.15], // 背根
+        gvaForkTip            // 進入脊髓背角
+    ], 0.072, MODALITIES.GVA.hex, {
+        mode: 'micro', pathIds: ['path_gva'], mod: 'GVA', structIds: ['drg', 'dorsal_horn'], pulseCount: 3, speed: 0.30
+    });
+    createSynapticFork(gvaForkTip, dhRelayGVA, MODALITIES.GVA.hex, microGroup, ['dorsal_horn', 'drg'], {
+        mod: 'GVA', pathIds: ['path_gva'], somaRadius: 0.17
+    });
+
+    // ------------------------------------------
+    // 【迴路 3：GSE 紅色軀體運動神經元 (單一神經元自腹角本體直達骨骼肌，無周圍神經節)】
+    // ------------------------------------------
+    const gseSomaPos = [1.18, 0.0, -1.25];
+    const gseEndTip  = [8.15, 0.0, -0.35];
+    createNeuronSoma(gseSomaPos, MODALITIES.GSE.hex, 0.22, microGroup, 'ventral_horn', {
+        mod: 'GSE', pathIds: ['path_gse']
+    });
+    // 紅色運動軸突直接由 gseSomaPos 球心長出，100% 連續無斷裂！
+    addPathwayTube([
+        gseSomaPos,           // 起點即為腹角紅色大圓球本體中心！
+        [2.05, 0.0, -1.02],
+        [3.35, 0.0, -1.15],   // 腹根 (Ventral Root)
+        [4.65, 0.0, -1.55],
+        [5.65, 0.0, -1.95],   // 脊神經幹
+        [7.15, 0.0, -1.10],   // 腹支
+        gseEndTip             // 抵達骨骼肌
+    ], 0.092, MODALITIES.GSE.hex, {
+        mode: 'micro', pathIds: ['path_gse'], mod: 'GSE', structIds: ['ventral_horn'], pulseCount: 3, speed: 0.40
+    });
+    // 骨骼肌表面運動終板三叉爪
+    createSynapticFork(gseEndTip, [8.48, 0.0, -0.35], MODALITIES.GSE.hex, microGroup, 'ventral_horn', {
+        mod: 'GSE', pathIds: ['path_gse'], somaRadius: 0.22
+    });
+
+    // ------------------------------------------
+    // 【迴路 4：交感體壁迴路 (側角黃本體 #1 → 白交通支 → 椎旁節上半部三叉爪換元 → 橘本體 → 灰交通支 → 體壁)】
+    // ------------------------------------------
+    const sympPreSoma1 = [1.52, 0.42, -2.28];  // 脊髓側角上方亮黃色節前本體
+    const chainPostSoma = [5.72, 0.35, 1.12];  // 椎旁交感幹神經節上半部的【橘色節後大圓球本體】
+    const chainForkTip  = [5.52, 0.35, 0.72];  // 亮黃節前纖維在橘色本體前方張開三叉突觸爪的位置
+
+    // ① 第一級：亮黃色交感節前大圓球本體 (位於脊髓側角上方)
+    createNeuronSoma(sympPreSoma1, MODALITIES.SYMP_PRE.hex, 0.20, microGroup, ['lateral_horn', 'white_ramus'], {
+        mod: 'SYMP_PRE', pathIds: ['path_symp_wall']
+    });
+    // 亮黃色節前軸突直接自 sympPreSoma1 球心長出，經腹根與白交通支抵達椎旁交感節上半部
+    const whiteTube1 = addPathwayTube([
+        sympPreSoma1,          // 起點即為側角亮黃本體 #1 球心！
+        [1.55, 0.38, -1.35],
+        [2.95, 0.38, -1.02],   // 腹根
+        [4.50, 0.38, -1.40],
+        [5.35, 0.36, -1.75],   // 轉入白交通支
+        [5.38, 0.36, -0.45],   // 【白交通支 White Ramus】
+        chainForkTip           // 進入椎旁交感幹神經節上半部
+    ], 0.08, MODALITIES.SYMP_PRE.hex, {
+        mode: 'micro', pathIds: ['path_symp_wall'],
+        mod: 'SYMP_PRE', structIds: ['lateral_horn', 'white_ramus', 'symp_chain'], pulseCount: 3, speed: 0.34
+    });
+    registerStructMesh('white_ramus', whiteTube1.mesh, { mod: 'SYMP_PRE', pathIds: ['path_symp_wall'] });
+
+    // 在椎旁交感節上半部張開【亮黃色三叉突觸爪 🔱】包覆橘色節後圓球本體！
+    createSynapticFork(chainForkTip, chainPostSoma, MODALITIES.SYMP_PRE.hex, microGroup, ['white_ramus', 'symp_chain'], {
+        mod: 'SYMP_PRE', pathIds: ['path_symp_wall'], somaRadius: 0.21
+    });
+
+    // ② 第二級：椎旁交感節上半部的【橘色節後大圓球本體】
+    createNeuronSoma(chainPostSoma, MODALITIES.SYMP_POST.hex, 0.21, microGroup, ['symp_chain', 'gray_ramus'], {
+        mod: 'SYMP_POST', pathIds: ['path_symp_wall']
+    });
+    // 橘色節後軸突直接自 chainPostSoma 橘色圓球中心長出，穿過灰交通支返回脊神經！
+    const grayTube = addPathwayTube([
+        chainPostSoma,         // 起點即為椎旁節橘色大圓球本體中心！
+        [5.88, 0.28, 0.45],
+        [5.92, 0.25, -0.45],   // 【灰交通支 Gray Ramus】(與白交通支平行並排)
+        [5.95, 0.22, -1.75],   // 返回脊神經幹
+        [7.25, 0.20, -1.00],
+        [8.55, 0.18, -0.10]    // 抵達體壁血管平滑肌、汗腺、豎毛肌
+    ], 0.08, MODALITIES.SYMP_POST.hex, {
+        mode: 'micro', pathIds: ['path_symp_wall'],
+        mod: 'SYMP_POST', structIds: ['symp_chain', 'gray_ramus'], pulseCount: 3, speed: 0.28
+    });
+    registerStructMesh('gray_ramus', grayTube.mesh, { mod: 'SYMP_POST', pathIds: ['path_symp_wall'] });
+
+    // ------------------------------------------
+    // 【迴路 5：交感腹腔內臟迴路 (側角黃本體 #2 → 單一連續黃線直穿椎旁節不換元 → 椎前節三叉爪換元 → 橘本體 → 內臟靶器官)】
+    // ------------------------------------------
+    const sympPreSoma2   = [1.52, 0.0, -2.28];    // 脊髓側角中間亮黃色節前本體 #2
+    const prevertPostSoma = [1.35, -0.05, 3.45];  // 椎前神經節內的【橘色節後大圓球本體】
+    const prevertForkTip  = [1.75, -0.05, 3.22];  // 內臟大神經在椎前節橘色本體旁張開三叉突觸爪的位置
+
+    createNeuronSoma(sympPreSoma2, MODALITIES.SYMP_PRE.hex, 0.20, microGroup, ['lateral_horn', 'white_ramus'], {
+        mod: 'SYMP_PRE', pathIds: ['path_symp_viscera']
+    });
+    // 單一連續不斷的亮黃色節前纖維：從側角黃本體 #2 一路平滑穿過白交通支與椎旁交感節下半部（無斷裂、無球、無爪），直達椎前神經節！
+    const viscPreTube = addPathwayTube([
+        sympPreSoma2,          // 起點即為側角亮黃本體 #2 球心！
+        [1.55, -0.02, -1.35],
+        [2.95, -0.02, -1.02],  // 腹根
+        [4.50, -0.02, -1.40],
+        [5.35, -0.02, -1.75],
+        [5.38, -0.05, -0.45],  // 白交通支
+        [5.48, -0.10, 1.02],   // 【直接平滑穿過椎旁交感幹神經節中下部，不停留、不換元！】
+        [3.65, -0.08, 2.25],   // 延續為內臟大神經 (Greater Splanchnic Nerve)
+        prevertForkTip         // 進入椎前神經節
+    ], 0.078, MODALITIES.SYMP_PRE.hex, {
+        mode: 'micro', pathIds: ['path_symp_viscera'],
+        mod: 'SYMP_PRE', structIds: ['lateral_horn', 'white_ramus', 'symp_chain', 'prevertebral'], pulseCount: 4, speed: 0.34
+    });
+    registerStructMesh('white_ramus', viscPreTube.mesh, { mod: 'SYMP_PRE', pathIds: ['path_symp_viscera'] });
+
+    // 在椎前神經節內張開【亮黃色三叉突觸爪 🔱】包覆椎前節的橘色節後大圓球本體！
+    createSynapticFork(prevertForkTip, prevertPostSoma, MODALITIES.SYMP_PRE.hex, microGroup, 'prevertebral', {
+        mod: 'SYMP_PRE', pathIds: ['path_symp_viscera'], somaRadius: 0.21
+    });
+
+    // 椎前神經節內的【橘色節後大圓球本體】（直接長出連續橘色節後纖維進入內臟靶器官）
+    createNeuronSoma(prevertPostSoma, MODALITIES.SYMP_POST.hex, 0.21, microGroup, 'prevertebral', {
+        mod: 'SYMP_POST', pathIds: ['path_symp_viscera']
+    });
+    addPathwayTube([
+        prevertPostSoma,       // 起點即為椎前節橘色大圓球本體中心！
+        [0.45, -0.02, 3.85],
+        [-0.55, 0.25, 4.20],
+        [-1.35, 0.45, 4.35]    // 進入上方內臟靶器官 (心肺/胃腸道)
+    ], 0.078, MODALITIES.SYMP_POST.hex, {
+        mode: 'micro', pathIds: ['path_symp_viscera'],
+        mod: 'SYMP_POST', structIds: ['prevertebral'], pulseCount: 2, speed: 0.28
+    });
+
+    // ------------------------------------------
+    // 【迴路 6：交感腎上腺髓質特例 (側角黃本體 #3 → 單一連續黃線直穿椎旁節底部到底 → 腎上腺髓質三叉爪 → 嗜鉻細胞本體)】
+    // ------------------------------------------
+    const sympPreSoma3    = [1.52, -0.42, -2.28]; // 脊髓側角下方亮黃色節前本體 #3
+    const chromaffinSoma  = [4.10, -0.48, 3.62];  // 腎上腺髓質內的【琥珀金嗜鉻細胞本體】(無節後神經纖維)
+    const adrenalForkTip  = [4.38, -0.45, 3.25];  // 節前纖維在嗜鉻細胞前張開三叉突觸爪的位置
+
+    createNeuronSoma(sympPreSoma3, MODALITIES.SYMP_PRE.hex, 0.20, microGroup, ['lateral_horn', 'white_ramus'], {
+        mod: 'SYMP_PRE', pathIds: ['path_symp_adrenal']
+    });
+    // 100% 單一連續不斷的亮黃色節前纖維：從側角黃本體 #3 一條線平滑穿過白交通支與椎旁交感節底部，直達腎上腺髓質！
+    const adrenalPreTube = addPathwayTube([
+        sympPreSoma3,          // 起點即為側角亮黃本體 #3 球心！
+        [1.55, -0.40, -1.35],
+        [2.95, -0.40, -1.02],  // 腹根
+        [4.50, -0.40, -1.40],
+        [5.35, -0.40, -1.75],
+        [5.38, -0.40, -0.45],  // 白交通支
+        [5.48, -0.42, 1.05],   // 【直接平滑穿過椎旁交感幹神經節底部，無折角、無球、不換元！】
+        [4.95, -0.44, 2.35],   // 延續為內臟神經腎上腺支
+        adrenalForkTip         // 直抵腎上腺髓質核心
+    ], 0.078, MODALITIES.SYMP_PRE.hex, {
+        mode: 'micro', pathIds: ['path_symp_adrenal'],
+        mod: 'SYMP_PRE', structIds: ['lateral_horn', 'white_ramus', 'symp_chain', 'adrenal_medulla'], pulseCount: 4, speed: 0.36
+    });
+    registerStructMesh('white_ramus', adrenalPreTube.mesh, { mod: 'SYMP_PRE', pathIds: ['path_symp_adrenal'] });
+
+    // 在腎上腺髓質內張開【亮黃色三叉突觸爪 🔱】包覆琥珀金嗜鉻細胞本體！
+    createSynapticFork(adrenalForkTip, chromaffinSoma, MODALITIES.SYMP_PRE.hex, microGroup, 'adrenal_medulla', {
+        mod: 'SYMP_PRE', pathIds: ['path_symp_adrenal'], somaRadius: 0.22
+    });
+    // 腎上腺髓質內的【琥珀金嗜鉻細胞大圓球本體】(無任何向外長出的節後神經纖維，改將荷爾蒙排入血液)
+    createNeuronSoma(chromaffinSoma, 0xf59e0b, 0.22, microGroup, 'adrenal_medulla', {
+        mod: 'SYMP_PRE', pathIds: ['path_symp_adrenal']
+    });
+
+    // ==========================================
+    // 【迴路 7 vs 迴路 8：將「顱部副交感 (腦幹迷走神經 CN X)」與「薦部副交感 (薦髓 S2–S4 骨盆內臟神經)」完全獨立建造！】
+    // ==========================================
+
+    // ------------------------------------------
+    // 【迴路 7：顱部副交感迴路 (上方腦幹迷走神經核 CN X 青綠本體 → 不走脊神經根直接下行 → 上方心肺/胃腸壁終末節三叉爪換元 → 紫本體入器官)】
+    // ------------------------------------------
+    // 上方腦幹延腦迷走神經背核示意座 (位於脊髓上方 Y = +2.35, X = -2.35, Z = -1.35)
+    const brainstemNode = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.32, 0.55, 10, 16),
+        new THREE.MeshStandardMaterial({ color: 0x14b8a6, emissive: 0x0d9488, emissiveIntensity: 0.35, transparent: true, opacity: ganglionShellOpacity, depthWrite: false })
+    );
+    brainstemNode.position.set(-2.35, 2.35, -1.35);
+    microGroup.add(brainstemNode);
+    registerStructMesh('terminal_ganglia', brainstemNode, { isShell: true, mod: 'PARA_PRE', pathIds: ['path_para_cranial'] });
+
+    const vagusPreSoma   = [-2.35, 2.35, -1.35]; // 腦幹迷走神經青綠色節前大圓球本體
+    const upperTermPos   = [-3.35, 0.55, 4.05];  // 上方：心肺/胃腸壁上的副交感終末神經節位置
+    const upperPostSoma  = [-3.28, 0.55, 4.12];  // 終末節內的【亮紫色節後大圓球本體】
+    const upperForkTip   = [-3.52, 0.72, 3.82];  // 迷走神經在紫色本體旁張開青綠三叉突觸爪的位置
+    const upperOrganPos  = [-1.65, 0.55, 4.35];  // 上方靶器官：心肺与胃腸道
+
+    // 上方靶器官 (心肺 / 胃腸道) + 上方副交感終末神經節外殼
+    const upperOrganGeo = new THREE.SphereGeometry(0.88, 22, 18);
+    upperOrganGeo.scale(1.25, 0.78, 0.82);
+    const upperOrganMesh = new THREE.Mesh(upperOrganGeo, new THREE.MeshStandardMaterial({
+        color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 0.22, transparent: true, opacity: 0.25, depthWrite: false
+    }));
+    upperOrganMesh.position.set(...upperOrganPos);
+    microGroup.add(upperOrganMesh);
+    registerStructMesh('terminal_ganglia', upperOrganMesh, { isShell: true, mod: 'PARA_POST', pathIds: ['path_para_cranial', 'path_symp_viscera'] });
+
+    const upperTermShell = new THREE.Mesh(new THREE.SphereGeometry(0.46, 20, 16), new THREE.MeshStandardMaterial({
+        color: 0xc084fc, emissive: 0x9333ea, emissiveIntensity: 0.38, transparent: true, opacity: ganglionShellOpacity, depthWrite: false
+    }));
+    upperTermShell.position.set(...upperTermPos);
+    microGroup.add(upperTermShell);
+    registerStructMesh('terminal_ganglia', upperTermShell, { isShell: true, mod: 'PARA_POST', pathIds: ['path_para_cranial'] });
+
+    // ① 腦幹迷走神經【青綠色節前大圓球本體】+ 直接下行之【青綠色迷走神經長節前纖維】(不經過脊髓腹根!)
+    createNeuronSoma(vagusPreSoma, MODALITIES.PARA_PRE.hex, 0.21, microGroup, 'terminal_ganglia', {
+        mod: 'PARA_PRE', pathIds: ['path_para_cranial']
+    });
+    addPathwayTube([
+        vagusPreSoma,          // 起點即為上方腦幹迷走神經青綠圓球本體！
+        [-3.15, 1.85, 0.25],   // 自顱底頸部直接下行 (完全不經過脊髓根!)
+        [-3.65, 1.25, 2.25],
+        upperForkTip           // 進入心肺/胃腸壁終末神經節
+    ], 0.082, MODALITIES.PARA_PRE.hex, {
+        mode: 'micro', pathIds: ['path_para_cranial'],
+        mod: 'PARA_PRE', structIds: ['terminal_ganglia'], pulseCount: 3, speed: 0.34
+    });
+    // 青綠色三叉突觸爪包覆亮紫色節後大圓球本體
+    createSynapticFork(upperForkTip, upperPostSoma, MODALITIES.PARA_PRE.hex, microGroup, 'terminal_ganglia', {
+        mod: 'PARA_PRE', pathIds: ['path_para_cranial'], somaRadius: 0.20
+    });
+
+    // ② 上方終末節內的【亮紫色節後大圓球本體】+ 直接由球心長出伸入心肺/胃腸靶器官的【亮紫色短節後纖維】
+    createNeuronSoma(upperPostSoma, MODALITIES.PARA_POST.hex, 0.20, microGroup, 'terminal_ganglia', {
+        mod: 'PARA_POST', pathIds: ['path_para_cranial']
+    });
+    addPathwayTube([
+        upperPostSoma,         // 起點即為終末節亮紫色大圓球本體中心！
+        [-2.55, 0.55, 4.28],
+        [-1.85, 0.55, 4.35]    // 直接伸入上方心肺/胃腸靶器官中心
+    ], 0.08, MODALITIES.PARA_POST.hex, {
+        mode: 'micro', pathIds: ['path_para_cranial'],
+        mod: 'PARA_POST', structIds: ['terminal_ganglia'], pulseCount: 2, speed: 0.26
+    });
+
+    // ------------------------------------------
+    // 【迴路 8：薦部副交感迴路 (薦髓 S2–S4 側角青綠本體 → 經脊髓腹根穿出骨盆內臟神經 → 下方膀胱/直腸壁終末節三叉爪換元 → 紫本體入器官)】
+    // ------------------------------------------
+    const sacralPreSoma  = [-1.48, -0.55, -2.28]; // 位於脊髓灰質側角內的薦髓 S2–S4 青綠色節前本體
+    const lowerTermPos   = [-3.35, -0.75, 4.05];  // 下方：膀胱/直腸壁上的副交感終末神經節位置
+    const lowerPostSoma  = [-3.28, -0.75, 4.12];  // 下方終末節內的【亮紫色節後大圓球本體】
+    const lowerForkTip   = [-3.52, -0.72, 3.78];  // 骨盆內臟神經在紫色本體旁張開青綠三叉突觸爪的位置
+    const lowerOrganPos  = [-1.65, -0.75, 4.35];  // 下方靶器官：膀胱與直腸
+
+    // 薦髓側角副交感核外殼
+    const sacralHornShell = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.22, 0.9, 10, 16),
+        new THREE.MeshStandardMaterial({ color: 0x14b8a6, emissive: 0x0d9488, emissiveIntensity: 0.35, transparent: true, opacity: ganglionShellOpacity, depthWrite: false })
+    );
+    sacralHornShell.position.set(-1.48, -0.55, -2.28);
+    microGroup.add(sacralHornShell);
+    registerStructMesh('terminal_ganglia', sacralHornShell, { isShell: true, mod: 'PARA_PRE', pathIds: ['path_para_sacral'] });
+
+    // 下方靶器官 (膀胱 / 直腸) + 下方副交感終末神經節外殼
+    const lowerOrganMesh = new THREE.Mesh(upperOrganGeo, new THREE.MeshStandardMaterial({
+        color: 0x818cf8, emissive: 0x4f46e5, emissiveIntensity: 0.22, transparent: true, opacity: 0.25, depthWrite: false
+    }));
+    lowerOrganMesh.position.set(...lowerOrganPos);
+    microGroup.add(lowerOrganMesh);
+    registerStructMesh('terminal_ganglia', lowerOrganMesh, { isShell: true, mod: 'PARA_POST', pathIds: ['path_para_sacral'] });
+
+    const lowerTermShell = new THREE.Mesh(new THREE.SphereGeometry(0.46, 20, 16), new THREE.MeshStandardMaterial({
+        color: 0xc084fc, emissive: 0x9333ea, emissiveIntensity: 0.38, transparent: true, opacity: ganglionShellOpacity, depthWrite: false
+    }));
+    lowerTermShell.position.set(...lowerTermPos);
+    microGroup.add(lowerTermShell);
+    registerStructMesh('terminal_ganglia', lowerTermShell, { isShell: true, mod: 'PARA_POST', pathIds: ['path_para_sacral'] });
+
+    // ① 薦髓 S2–S4 側角內的【青綠色節前大圓球本體】+ 經【脊髓腹根】穿出之【青綠色骨盆內臟神經】
+    createNeuronSoma(sacralPreSoma, MODALITIES.PARA_PRE.hex, 0.20, microGroup, 'terminal_ganglia', {
+        mod: 'PARA_PRE', pathIds: ['path_para_sacral']
+    });
+    addPathwayTube([
+        sacralPreSoma,         // 起點即為脊髓灰質側角內的薦髓青綠圓球本體！
+        [-1.55, -0.58, -1.35],
+        [-2.85, -0.62, -1.02], // 經由【脊髓腹根】穿出！
+        [-4.15, -0.68, -0.45], // 分出骨盆內臟神經 (Pelvic Splanchnic Nerve)
+        [-4.10, -0.72, 1.85],
+        lowerForkTip           // 進入下方膀胱/直腸壁終末神經節
+    ], 0.082, MODALITIES.PARA_PRE.hex, {
+        mode: 'micro', pathIds: ['path_para_sacral'],
+        mod: 'PARA_PRE', structIds: ['terminal_ganglia'], pulseCount: 3, speed: 0.34
+    });
+    // 青綠色三叉突觸爪包覆下方亮紫色節後大圓球本體
+    createSynapticFork(lowerForkTip, lowerPostSoma, MODALITIES.PARA_PRE.hex, microGroup, 'terminal_ganglia', {
+        mod: 'PARA_PRE', pathIds: ['path_para_sacral'], somaRadius: 0.20
+    });
+
+    // ② 下方終末節內的【亮紫色節後大圓球本體】+ 直接由球心長出伸入膀胱/直腸靶器官的【亮紫色短節後纖維】
+    createNeuronSoma(lowerPostSoma, MODALITIES.PARA_POST.hex, 0.20, microGroup, 'terminal_ganglia', {
+        mod: 'PARA_POST', pathIds: ['path_para_sacral']
+    });
+    addPathwayTube([
+        lowerPostSoma,         // 起點即為下方終末節亮紫色大圓球本體中心！
+        [-2.55, -0.75, 4.28],
+        [-1.85, -0.75, 4.35]   // 直接伸入下方膀胱/直腸靶器官中心
+    ], 0.08, MODALITIES.PARA_POST.hex, {
+        mode: 'micro', pathIds: ['path_para_sacral'],
+        mod: 'PARA_POST', structIds: ['terminal_ganglia'], pulseCount: 2, speed: 0.26
+    });
+
+    // ==========================================
+    // 3.5 微觀模式 3D 浮動標籤
+    // ==========================================
+    add3DLabel('<strong>背根神經節 (DRG)</strong><br><span style="font-size:9.5px; color:#93c5fd;">藍(GSA)/綠(GVA)細胞本體(不換元)</span>', [4.35, 1.05, -2.85], 'micro', '#3b82f6', () => selectStructure('drg'), { structId: 'drg' });
+    add3DLabel('<strong>脊髓背角感覺核</strong><br><span style="font-size:9.5px; color:#93c5fd;">感覺中樞突於此換元</span>', [1.38, 1.62, -3.45], 'micro', '#60a5fa', () => selectStructure('dorsal_horn'), { structId: 'dorsal_horn' });
+    add3DLabel('<strong>脊髓側角 (T1–L2 IML)</strong><br><span style="font-size:9.5px; color:#fde047;">亮黃色交感節前細胞本體群</span>', [1.95, 1.62, -2.25], 'micro', '#eab308', () => selectStructure('lateral_horn'), { structId: 'lateral_horn' });
+    add3DLabel('<strong>脊髓腹角運動核 (GSE)</strong><br><span style="font-size:9.5px; color:#fca5a5;">紅色運動細胞本體直達骨骼肌</span>', [1.18, 1.62, -1.15], 'micro', '#ef4444', () => selectStructure('ventral_horn'), { structId: 'ventral_horn' });
+    add3DLabel('<strong>白交通支</strong> (亮黃節前入交感節)', [5.1, 0.85, -0.45], 'micro', '#eab308', () => selectStructure('white_ramus'), { structId: 'white_ramus' });
+    add3DLabel('<strong>灰交通支</strong> (橘色節後返脊神經)', [6.4, 0.55, -0.45], 'micro', '#f97316', () => selectStructure('gray_ramus'), { structId: 'gray_ramus' });
+    add3DLabel('<strong>椎旁交感幹神經節</strong><br><span style="font-size:9.5px; color:#fdba74;">上：橘色細胞本體換元 ｜ 下：黃纖維直穿</span>', [5.8, 1.25, 1.05], 'micro', '#f97316', () => selectStructure('symp_chain'), { structId: 'symp_chain' });
+    add3DLabel('<strong>椎前神經節</strong> (腹腔/腸繫膜節)<br><span style="font-size:9.5px; color:#fdba74;">黃內臟神經 → 橘色節後細胞本體換元</span>', [1.45, 0.85, 3.35], 'micro', '#fb923c', () => selectStructure('prevertebral'), { structId: 'prevertebral' });
+    add3DLabel('<strong>腎上腺髓質</strong> (迴路6 節前直達)<br><span style="font-size:9.5px; color:#fde047;">亮黃節前直達嗜鉻細胞(無節後纖維)</span>', [4.2, 0.55, 3.55], 'micro', '#eab308', () => selectStructure('adrenal_medulla'), { structId: 'adrenal_medulla' });
+    add3DLabel('<strong>腦幹迷走神經核 (CN X · 迴路7)</strong><br><span style="font-size:9.5px; color:#5eead4;">青綠節前細胞本體自上方下行</span>', [-2.35, 3.05, -1.35], 'micro', '#14b8a6', () => selectPathway('path_para_cranial'), { pathId: 'path_para_cranial', structId: 'terminal_ganglia' });
+    add3DLabel('<strong>薦髓副交感核 (S2–S4 · 迴路8)</strong><br><span style="font-size:9.5px; color:#e9d5ff;">青綠節前細胞本體經腹根出骨盆內臟神經</span>', [-2.25, -1.35, -2.28], 'micro', '#c084fc', () => selectPathway('path_para_sacral'), { pathId: 'path_para_sacral', structId: 'terminal_ganglia' });
+    add3DLabel('<strong>副交感終末神經節</strong> (壁內換元)<br><span style="font-size:9.5px; color:#e9d5ff;">青綠長節前 → 亮紫色節後細胞本體</span>', [-3.75, 1.45, 4.05], 'micro', '#c084fc', () => selectStructure('terminal_ganglia'), { structId: 'terminal_ganglia' });
+    add3DLabel('<strong>上方靶器官：心肺 &amp; 胃腸道</strong> (迴路5/7)', [-1.65, 1.38, 4.45], 'micro', '#38bdf8', () => selectPathway('path_para_cranial'), { pathId: 'path_para_cranial', structId: 'terminal_ganglia' });
+    add3DLabel('<strong>下方靶器官：膀胱 &amp; 直腸</strong> (迴路8)', [-1.65, -1.55, 4.45], 'micro', '#818cf8', () => selectPathway('path_para_sacral'), { pathId: 'path_para_sacral', structId: 'terminal_ganglia' });
+    add3DLabel('<strong>體壁骨骼肌</strong> (迴路3 紅色 GSE 直達)', [8.6, 0.75, -0.35], 'micro', '#ef4444', () => selectPathway('path_gse'), { pathId: 'path_gse', structId: 'ventral_horn' });
+})();
+
+// ==========================================
+// 4. 建立【模式二：巨觀全軸：腦薦副交感 vs 胸腰交感雙系統全圖 (Macro Scene)】
+// ==========================================
+(function buildMacroScene() {
+    // 4.1 連續直立之「腦幹 + 全段脊髓 (C1~S5 脊髓圓錐)」半透明拓撲外殼
+    const cnsMacroGeo = buildParametricTopoGeo(56, 36, (u, v) => {
+        const y = -6.4 + u * (8.5 - (-6.4));
+        const theta = v * Math.PI * 2;
+        const s = Math.sin(theta), c = Math.cos(theta);
+
+        const conusTaper = smoothstep(-6.45, -5.1, y);
+        const lumbarBulge = 0.22 * gauss(y, -3.6, 0.85);
+        const cervBulge = 0.24 * gauss(y, 3.6, 0.9);
+        const brainstemMask = smoothstep(5.0, 5.8, y);
+        const ponsBulge = 0.55 * gauss(y, 7.0, 0.55) * Math.max(0, c + 0.3);
+
+        const rx = (0.62 + lumbarBulge + cervBulge + 0.48 * brainstemMask + 0.35 * ponsBulge) * conusTaper;
+        const rz = (0.52 + 0.8 * lumbarBulge + 0.8 * cervBulge + 0.42 * brainstemMask + 0.65 * ponsBulge) * conusTaper;
+        return [rx * s, y, rz * c];
+    }, { capStart: true, capEnd: true, uStride: 2, vStride: 4 });
+
+    const cnsMacroMesh = new THREE.Mesh(cnsMacroGeo, new THREE.MeshStandardMaterial({
+        color: 0x64748b, transparent: true, opacity: 0.18, roughness: 0.3, depthWrite: false, side: THREE.DoubleSide
+    }));
+    cnsMacroMesh.renderOrder = 1;
+    cnsMacroMesh.add(new THREE.LineSegments(cnsMacroGeo.userData.contourGeo, new THREE.LineBasicMaterial({ color: 0x64748b, transparent: true, opacity: 0.14, depthWrite: false })));
+    macroGroup.add(cnsMacroMesh);
+
+    // 4.2 脊髓內部核心核柱與細胞本體：
+    // A. T1–L2 脊髓側角交感節前核柱 (IML, Y: -2.3 ~ +2.2)
+    const imlColShell = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.16, 4.5, 10, 16),
+        new THREE.MeshStandardMaterial({ color: 0xeab308, emissive: 0xca8a04, emissiveIntensity: 0.35, transparent: true, opacity: ganglionShellOpacity, depthWrite: false })
+    );
+    imlColShell.position.set(0.35, -0.05, 0.05);
+    macroGroup.add(imlColShell);
+    registerStructMesh('lateral_horn', imlColShell, { isShell: true, mod: 'SYMP_PRE', pathIds: ['path_symp_wall', 'path_symp_viscera', 'path_symp_adrenal'] });
+
+    // B. 頸段脊髓腹角軀體運動核 (GSE, Y: +3.2) 與 背角感覺核 (Dorsal Horn)
+    createNeuronSoma([0.35, 3.2, 0.25], MODALITIES.GSE.hex, 0.19, macroGroup, 'ventral_horn', { mod: 'GSE', pathIds: ['path_gse'] });
+    addPathwayTube([
+        [0.35, 3.2, 0.25],
+        [1.8, 3.2, 0.35],
+        [3.8, 3.2, 0.45]
+    ], 0.06, MODALITIES.GSE.hex, {
+        mode: 'macro', pathIds: ['path_gse'], mod: 'GSE', structIds: ['ventral_horn'], pulseCount: 2, speed: 0.38
+    });
+
+    // C. 左側中樞：腦幹副交感節前圓球本體 (CN III/VII/IX: Y=7.6, CN X 迷走神經: Y=5.8) 與 薦髓 S2–S4 副交感節前圓球本體 (Y=-5.0)
+    createNeuronSoma([-0.32, 7.6, 0.08], MODALITIES.PARA_PRE.hex, 0.19, macroGroup, 'terminal_ganglia', { mod: 'PARA_PRE', pathIds: ['path_para_cranial'] });
+    createNeuronSoma([-0.32, 5.8, 0.08], MODALITIES.PARA_PRE.hex, 0.20, macroGroup, 'terminal_ganglia', { mod: 'PARA_PRE', pathIds: ['path_para_cranial'] });
+    createNeuronSoma([-0.32, -5.0, 0.08], MODALITIES.PARA_PRE.hex, 0.19, macroGroup, 'terminal_ganglia', { mod: 'PARA_PRE', pathIds: ['path_para_sacral'] });
+
+    // 4.3 右側：椎旁交感幹神經節鏈 + T1–L2 側角亮黃本體、白交通支、灰交通支與 DRG 背根神經節
+    const sympSegmentYs = [2.2, 1.3, 0.4, -0.5, -1.4, -2.3];
+    const allChainYs = [4.5, 3.4, ...sympSegmentYs, -3.4, -4.5];
+    const chainPts = [];
+
+    allChainYs.forEach((cy, i) => {
+        const gx = 3.05, gz = 0.85;
+        chainPts.push(new THREE.Vector3(gx, cy, gz));
+
+        const gShell = new THREE.Mesh(
+            new THREE.SphereGeometry(i === 0 ? 0.34 : 0.28, 16, 16),
+            new THREE.MeshStandardMaterial({ color: 0xf97316, emissive: 0xea580c, emissiveIntensity: 0.38, transparent: true, opacity: ganglionShellOpacity, depthWrite: false })
+        );
+        gShell.position.set(gx, cy, gz);
+        if (i === 0) gShell.scale.set(0.95, 1.35, 0.95);
+        macroGroup.add(gShell);
+        registerStructMesh('symp_chain', gShell, { isShell: true, mod: 'SYMP_POST', pathIds: ['path_symp_wall'] });
+
+        // 椎旁節內部橘色節後大圓球本體 + 直接長出灰交通支
+        createNeuronSoma([gx, cy, gz], MODALITIES.SYMP_POST.hex, 0.145, macroGroup, ['symp_chain', 'gray_ramus'], { mod: 'SYMP_POST', pathIds: ['path_symp_wall'] });
+
+        const grayTube = addPathwayTube([
+            [gx, cy, gz],
+            [2.35, cy - 0.10, 0.45],
+            [1.95, cy - 0.08, 0.10]
+        ], 0.038, MODALITIES.SYMP_POST.hex, {
+            mode: 'macro', pathIds: ['path_symp_wall'], mod: 'SYMP_POST', structIds: ['gray_ramus', 'symp_chain'], pulseCount: 1, speed: 0.28
+        });
+        registerStructMesh('gray_ramus', grayTube.mesh, { mod: 'SYMP_POST', pathIds: ['path_symp_wall'] });
+    });
+
+    sympSegmentYs.forEach((sy) => {
+        // 1) 脊髓側角內的亮黃色交感節前大圓球本體
+        createNeuronSoma([0.35, sy, 0.05], MODALITIES.SYMP_PRE.hex, 0.145, macroGroup, ['lateral_horn', 'white_ramus'], {
+            mod: 'SYMP_PRE', pathIds: ['path_symp_wall', 'path_symp_viscera', 'path_symp_adrenal']
+        });
+
+        // 2) 白交通支 (亮黃色節前纖維自側角亮黃圓球中心長出，連至椎旁交感節張開三叉突觸爪)
+        const wTip = [2.82, sy + 0.04, 0.78];
+        const whiteTube = addPathwayTube([
+            [0.35, sy, 0.05],
+            [1.75, sy + 0.08, 0.35],
+            wTip
+        ], 0.044, MODALITIES.SYMP_PRE.hex, {
+            mode: 'macro', pathIds: ['path_symp_wall'],
+            mod: 'SYMP_PRE', structIds: ['lateral_horn', 'white_ramus', 'symp_chain'], pulseCount: 1, speed: 0.35
+        });
+        registerStructMesh('white_ramus', whiteTube.mesh, { mod: 'SYMP_PRE', pathIds: ['path_symp_wall'] });
+        createSynapticFork(wTip, [3.05, sy, 0.85], MODALITIES.SYMP_PRE.hex, macroGroup, ['white_ramus', 'symp_chain'], {
+            mod: 'SYMP_PRE', pathIds: ['path_symp_wall'], somaRadius: 0.145
+        });
+
+        // 3) 背根神經節 (DRG: 含藍色假單極本體 + 完整連入脊髓背角之藍色背根)
+        const drgShell = new THREE.Mesh(
+            new THREE.SphereGeometry(0.22, 14, 14),
+            new THREE.MeshStandardMaterial({ color: 0x3b82f6, emissive: 0x1d4ed8, emissiveIntensity: 0.38, transparent: true, opacity: ganglionShellOpacity, depthWrite: false })
+        );
+        drgShell.position.set(1.55, sy, -0.42);
+        macroGroup.add(drgShell);
+        registerStructMesh('drg', drgShell, { isShell: true, mod: 'GSA', pathIds: ['path_gsa'] });
+
+        createNeuronSoma([1.55, sy, -0.42], MODALITIES.GSA.hex, 0.115, macroGroup, 'drg', { mod: 'GSA', pathIds: ['path_gsa'] });
+        createNeuronSoma([0.32, sy, -0.25], 0x93c5fd, 0.10, macroGroup, 'dorsal_horn', { mod: 'GSA', pathIds: ['path_gsa'] });
+
+        addPathwayTube([
+            [2.45, sy, -0.25],
+            [1.55, sy, -0.42],
+            [0.32, sy, -0.25]
+        ], 0.036, MODALITIES.GSA.hex, {
+            mode: 'macro', pathIds: ['path_gsa'], mod: 'GSA', structIds: ['drg', 'dorsal_horn'], pulseCount: 1, speed: 0.32
+        });
+    });
+
+    // 縱貫交感神經幹索
+    const macroTrunkMesh = new THREE.Mesh(
+        new THREE.TubeGeometry(new THREE.CatmullRomCurve3(chainPts), 40, 0.06, 8, false),
+        new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xd97706, emissiveIntensity: 0.28, transparent: true, opacity: 0.45, depthWrite: false })
+    );
+    macroGroup.add(macroTrunkMesh);
+
+    // 4.4 三大椎前神經節 (腹腔 Celiac、腸繫膜上 SMA、腸繫膜下 IMA：由脊髓側角一條連續黃線直穿交感幹抵達此處張開三叉爪換元！)
+    const prevertConfigs = [
+        { name: '腹腔神經節 (Celiac)', pos: [1.45, 0.2, 2.25], srcY: 1.3 },
+        { name: '腸繫膜上神經節 (SMA)', pos: [1.45, -1.2, 2.25], srcY: -0.5 },
+        { name: '腸繫膜下神經節 (IMA)', pos: [1.45, -2.8, 2.25], srcY: -2.3 }
+    ];
+    prevertConfigs.forEach(pv => {
+        const pvShell = new THREE.Mesh(
+            new THREE.SphereGeometry(0.36, 18, 18),
+            new THREE.MeshStandardMaterial({ color: 0xfb923c, emissive: 0xea580c, emissiveIntensity: 0.38, transparent: true, opacity: ganglionShellOpacity, depthWrite: false })
+        );
+        pvShell.position.set(...pv.pos);
+        macroGroup.add(pvShell);
+        registerStructMesh('prevertebral', pvShell, { isShell: true, mod: 'SYMP_POST', pathIds: ['path_symp_viscera'] });
+
+        // 椎前節內部【橘色節後大圓球本體】
+        createNeuronSoma(pv.pos, MODALITIES.SYMP_POST.hex, 0.165, macroGroup, 'prevertebral', { mod: 'SYMP_POST', pathIds: ['path_symp_viscera'] });
+
+        // 由脊髓側角黃色本體一條連續不斷的亮黃色節前纖維，穿過椎旁交感幹直接抵達椎前節張開三叉突觸爪！
+        const pvForkTip = [pv.pos[0] + 0.25, pv.pos[1] + 0.10, pv.pos[2] - 0.16];
+        addPathwayTube([
+            [0.35, pv.srcY, 0.05],          // 脊髓側角亮黃本體
+            [1.75, pv.srcY + 0.04, 0.35],   // 白交通支
+            [3.05, pv.srcY, 0.85],          // 直接穿過椎旁交感幹 (不換元!)
+            [2.30, (pv.srcY + pv.pos[1]) / 2, 1.60], // 內臟神經
+            pvForkTip
+        ], 0.05, MODALITIES.SYMP_PRE.hex, {
+            mode: 'macro', pathIds: ['path_symp_viscera'], mod: 'SYMP_PRE', structIds: ['lateral_horn', 'white_ramus', 'symp_chain', 'prevertebral'], pulseCount: 3, speed: 0.34
+        });
+        createSynapticFork(pvForkTip, pv.pos, MODALITIES.SYMP_PRE.hex, macroGroup, 'prevertebral', {
+            mod: 'SYMP_PRE', pathIds: ['path_symp_viscera'], somaRadius: 0.165
+        });
+    });
+
+    // 巨觀腎上腺髓質 (迴路6：由脊髓側角 Y=0.4 一條連續黃線直穿椎旁交感幹抵達腎上腺髓質張開三叉突觸爪！)
+    const macroAdrenalPos = [2.85, -0.8, 2.45];
+    const macroAdrenalShell = new THREE.Mesh(
+        new THREE.SphereGeometry(0.38, 18, 18),
+        new THREE.MeshStandardMaterial({ color: 0xd97706, transparent: true, opacity: ganglionShellOpacity, depthWrite: false })
+    );
+    macroAdrenalShell.position.set(...macroAdrenalPos);
+    macroGroup.add(macroAdrenalShell);
+    registerStructMesh('adrenal_medulla', macroAdrenalShell, { isShell: true, mod: 'SYMP_PRE', pathIds: ['path_symp_adrenal'] });
+
+    createNeuronSoma(macroAdrenalPos, 0xf59e0b, 0.175, macroGroup, 'adrenal_medulla', { mod: 'SYMP_PRE', pathIds: ['path_symp_adrenal'] });
+    const macroAdrForkTip = [2.92, -0.52, 2.15];
+    addPathwayTube([
+        [0.35, 0.4, 0.05],     // 起點：脊髓側角亮黃本體
+        [1.75, 0.44, 0.35],    // 白交通支
+        [3.05, 0.4, 0.85],     // 直接穿過椎旁交感幹 (不換元!)
+        [2.98, -0.1, 1.55],    // 內臟神經腎上腺支
+        macroAdrForkTip
+    ], 0.052, MODALITIES.SYMP_PRE.hex, {
+        mode: 'macro', pathIds: ['path_symp_adrenal'], mod: 'SYMP_PRE', structIds: ['lateral_horn', 'white_ramus', 'symp_chain', 'adrenal_medulla'], pulseCount: 3, speed: 0.38
+    });
+    createSynapticFork(macroAdrForkTip, macroAdrenalPos, MODALITIES.SYMP_PRE.hex, macroGroup, 'adrenal_medulla', {
+        mod: 'SYMP_PRE', pathIds: ['path_symp_adrenal'], somaRadius: 0.175
+    });
+
+    // 4.5 四大內臟靶器官 + 緊貼器官壁的「副交感終末神經節 (青綠三叉爪 → 包覆亮紫大圓球本體 → 長出亮紫短纖維入靶器官)」
+    const organs = [
+        {
+            id: 'org_eye', label: '靶器官：眼睛瞳孔 &amp; 唾液腺',
+            pos: [0, 7.3, 3.2], sympSrc: [3.05, 4.5, 0.85], paraSrc: [-0.32, 7.6, 0.08],
+            paraGang: [-1.55, 7.35, 2.65], isSacral: false
+        },
+        {
+            id: 'org_heart', label: '靶器官：心臟 &amp; 肺支氣管',
+            pos: [0, 2.6, 3.2], sympSrc: [3.05, 3.4, 0.85], paraSrc: [-0.32, 5.8, 0.08],
+            paraGang: [-1.55, 2.65, 2.75], isSacral: false
+        },
+        {
+            id: 'org_gi', label: '靶器官：胃、肝、胰、小腸',
+            pos: [0, -0.8, 3.3], sympSrc: [1.45, 0.2, 2.25], paraSrc: [-0.32, 5.8, 0.08],
+            paraGang: [-1.55, -0.75, 2.85], isSacral: false, fromPrevert: true
+        },
+        {
+            id: 'org_pelvis', label: '靶器官：膀胱、直腸 &amp; 生殖器',
+            pos: [0, -4.6, 3.2], sympSrc: [1.45, -2.8, 2.25], paraSrc: [-0.32, -5.0, 0.08],
+            paraGang: [-1.55, -4.55, 2.75], isSacral: true, fromPrevert: true
+        }
+    ];
+
+    organs.forEach(org => {
+        const pId = org.isSacral ? 'path_para_sacral' : 'path_para_cranial';
+        const sPathId = org.fromPrevert ? 'path_symp_viscera' : 'path_symp_wall';
+
+        const oMesh = new THREE.Mesh(
+            new THREE.SphereGeometry(0.62, 20, 16),
+            new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 0.22, transparent: true, opacity: 0.26, depthWrite: false })
+        );
+        oMesh.position.set(...org.pos);
+        oMesh.scale.set(1.3, 0.85, 0.85);
+        macroGroup.add(oMesh);
+        registerStructMesh('terminal_ganglia', oMesh, { isShell: true, mod: 'PARA_POST', pathIds: [pId, sPathId] });
+
+        add3DLabel(`<strong>${org.label}</strong>`, [org.pos[0], org.pos[1] - 0.72, org.pos[2]], 'macro', '#38bdf8', () => selectPathway(pId), { pathId: pId });
+
+        // 副交感終末神經節外殼
+        const tgShell = new THREE.Mesh(
+            new THREE.SphereGeometry(0.35, 16, 16),
+            new THREE.MeshStandardMaterial({ color: 0xc084fc, emissive: 0x9333ea, emissiveIntensity: 0.38, transparent: true, opacity: ganglionShellOpacity, depthWrite: false })
+        );
+        tgShell.position.set(...org.paraGang);
+        macroGroup.add(tgShell);
+        registerStructMesh('terminal_ganglia', tgShell, { isShell: true, mod: 'PARA_POST', pathIds: [pId] });
+
+        // 終末節內的【亮紫色節後大圓球本體】
+        createNeuronSoma(org.paraGang, MODALITIES.PARA_POST.hex, 0.16, macroGroup, 'terminal_ganglia', { mod: 'PARA_POST', pathIds: [pId] });
+
+        // 青綠色長節前纖維 → 於終末節內張開【青綠色三叉突觸爪 🔱】包覆亮紫色圓球本體
+        const pForkTip = [org.paraGang[0] - 0.24, org.paraGang[1] + 0.08, org.paraGang[2] - 0.14];
+        addPathwayTube([
+            org.paraSrc,
+            [-2.35, (org.paraSrc[1] + org.paraGang[1]) / 2, 1.45],
+            pForkTip
+        ], 0.056, MODALITIES.PARA_PRE.hex, {
+            mode: 'macro', pathIds: [pId], mod: 'PARA_PRE', structIds: ['terminal_ganglia'], pulseCount: 2, speed: 0.32
+        });
+        createSynapticFork(pForkTip, org.paraGang, MODALITIES.PARA_PRE.hex, macroGroup, 'terminal_ganglia', {
+            mod: 'PARA_PRE', pathIds: [pId], somaRadius: 0.16
+        });
+
+        // 亮紫色極短節後纖維（直接自亮紫色圓球本體中心長出，伸入靶器官中心！）
+        addPathwayTube([
+            org.paraGang,
+            org.pos
+        ], 0.058, MODALITIES.PARA_POST.hex, {
+            mode: 'macro', pathIds: [pId], mod: 'PARA_POST', structIds: ['terminal_ganglia'], pulseCount: 1, speed: 0.25
+        });
+
+        // 右側橘色交感節後纖維（直接自椎旁或椎前節橘色圓球本體中心長出，伸入靶器官）
+        const sStructId = org.fromPrevert ? 'prevertebral' : 'symp_chain';
+        addPathwayTube([
+            org.sympSrc,
+            [1.65, (org.sympSrc[1] + org.pos[1]) / 2, 2.65],
+            org.pos
+        ], 0.055, MODALITIES.SYMP_POST.hex, {
+            mode: 'macro', pathIds: [sPathId], mod: 'SYMP_POST', structIds: [sStructId], pulseCount: 2, speed: 0.30
+        });
+    });
+
+    // 4.6 巨觀模式 3D 解剖說明標籤
+    add3DLabel('<strong>腦幹副交感核 (CN III, VII, IX, X · 迴路7)</strong><br><span style="font-size:9.5px; color:#5eead4;">青綠色節前細胞本體 → 發出迷走神經長節前纖維</span>', [-2.6, 6.8, 0.5], 'macro', '#14b8a6', () => selectPathway('path_para_cranial'), { pathId: 'path_para_cranial' });
+    add3DLabel('<strong>薦髓副交感核 (S2–S4 · 迴路8)</strong><br><span style="font-size:9.5px; color:#e9d5ff;">青綠色節前細胞本體 → 發出骨盆內臟神經</span>', [-2.6, -5.2, 0.8], 'macro', '#c084fc', () => selectPathway('path_para_sacral'), { pathId: 'path_para_sacral' });
+    add3DLabel('<strong>副交感終末/壁內神經節</strong><br><span style="font-size:9.5px; color:#e9d5ff;">青綠長節前換元 → 亮紫色節後細胞本體入靶器官</span>', [-3.1, 1.1, 2.8], 'macro', '#c084fc', () => selectStructure('terminal_ganglia'), { structId: 'terminal_ganglia' });
+    add3DLabel('<strong>脊髓側角交感核柱 (T1–L2 IML)</strong><br><span style="font-size:9.5px; color:#fde047;">亮黃色交感節前細胞本體群</span>', [1.85, 0.85, -0.1], 'macro', '#eab308', () => selectStructure('lateral_horn'), { structId: 'lateral_horn' });
+    add3DLabel('<strong>背根神經節群 (DRG)</strong><br><span style="font-size:9.5px; color:#93c5fd;">藍色感覺細胞本體·經背根連入脊髓背角</span>', [2.1, 2.45, -0.5], 'macro', '#3b82f6', () => selectStructure('drg'), { structId: 'drg' });
+    add3DLabel('<strong>脊髓腹角運動核 (GSE)</strong><br><span style="font-size:9.5px; color:#fca5a5;">紅色運動細胞本體直達骨骼肌</span>', [2.4, 3.55, 0.4], 'macro', '#ef4444', () => selectStructure('ventral_horn'), { structId: 'ventral_horn' });
+    add3DLabel('<strong>椎旁交感神經幹鏈</strong><br><span style="font-size:9.5px; color:#fdba74;">橘色節後細胞本體換元 (灰交通支) 或黃纖維直穿</span>', [4.4, 1.5, 0.85], 'macro', '#f97316', () => selectStructure('symp_chain'), { structId: 'symp_chain' });
+    add3DLabel('<strong>三大椎前神經節</strong> (腹腔/腸繫膜上/下)<br><span style="font-size:9.5px; color:#fdba74;">黃內臟神經 → 橘色節後細胞本體換元</span>', [3.2, -2.1, 2.25], 'macro', '#fb923c', () => selectStructure('prevertebral'), { structId: 'prevertebral' });
+    add3DLabel('<strong>腎上腺髓質</strong> (迴路6 節前直達不換元)', [4.2, -0.8, 2.45], 'macro', '#eab308', () => selectStructure('adrenal_medulla'), { structId: 'adrenal_medulla' });
+})();
+
+// ==========================================
+// 5. UI 建構與精準篩選連動邏輯
+// ==========================================
+const modBtnContainer = document.getElementById('modality-buttons');
+Object.values(MODALITIES).forEach(m => {
+    const btn = document.createElement('button');
+    btn.className = 'mod-btn';
+    btn.id = `btn-mod-${m.code}`;
+    btn.innerHTML = `<span class="mod-dot" style="background:${m.color}; color:${m.color};"></span><span>${m.name}</span>`;
+    btn.onclick = () => selectModality(m.code);
+    modBtnContainer.appendChild(btn);
+});
+
+const gangliaBtnContainer = document.getElementById('ganglia-buttons');
+STRUCTURES.forEach(st => {
+    const div = document.createElement('div');
+    div.className = 'ganglion-btn';
+    div.id = `btn-struct-${st.id}`;
+    div.style.borderLeftColor = st.color;
+    div.innerHTML = `
+        <span style="font-weight:700; color:#f8fafc;">${st.name}</span>
+        <span style="font-size:9.5px; color:${st.color}; font-weight:600;">${st.cat}</span>
+    `;
+    div.onclick = () => selectStructure(st.id);
+    gangliaBtnContainer.appendChild(div);
+});
+
+const pathwayListContainer = document.getElementById('pathway-list');
+PATHWAYS.forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'pathway-item';
+    div.id = `btn-path-${p.id}`;
+    div.style.borderLeftColor = p.color;
+    div.innerHTML = `
+        <div class="p-head">
+            <span>${p.name.split(' (')[0]}</span>
+            <span style="font-size:10px; color:${p.color};">${p.mod}</span>
+        </div>
+        <div class="p-sub">${p.name.includes('(') ? p.name.split('(')[1].replace(')', '') : ''}</div>
+    `;
+    div.onclick = () => selectPathway(p.id);
+    pathwayListContainer.appendChild(div);
+});
+
+function clearActiveUI() {
+    document.querySelectorAll('.mod-btn, .ganglion-btn, .pathway-item').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.label-3d').forEach(el => el.classList.remove('highlighted', 'dimmed'));
+}
+
+function applyVisualFilter(tubePred, structPred, labelPred) {
+    const isAll = !tubePred;
+
+    // 1. 過濾神經管道與脈衝
+    pathwayTubes.forEach(t => {
+        const active = isAll || tubePred(t);
+        t.mesh.material.opacity = active ? (isAll ? t.origOpacity : 1.0) : 0.05;
+        t.mesh.material.emissiveIntensity = active ? (isAll ? 0.48 : 0.88) : 0.03;
+        t.pulses.forEach(p => {
+            p.mesh.visible = showPulses && active && (t.mode === currentMode);
+        });
+    });
+
+    // 2. 過濾神經節外殼與內部細胞本體 (Soma) / 三叉突觸爪 (Synaptic Fork)
+    // 注意：同一 mesh 可能註冊於多個 structId，先計算每個 mesh 是否在任一匹配項目中為 active
+    const meshActiveMap = new Map();
+    Object.entries(structureMeshes).forEach(([sId, entries]) => {
+        entries.forEach(entry => {
+            const act = isAll || (structPred ? structPred(sId, entry) : tubePred({ structIds: [sId], mod: entry.mod, pathIds: entry.pathIds }));
+            if (act) meshActiveMap.set(entry.mesh, { active: true, isShell: entry.isShell });
+            else if (!meshActiveMap.has(entry.mesh)) meshActiveMap.set(entry.mesh, { active: false, isShell: entry.isShell });
+        });
+    });
+
+    meshActiveMap.forEach((state, m) => {
+        if (!m.material) return;
+        if (state.isShell) {
+            m.material.opacity = state.active ? ganglionShellOpacity : Math.min(0.04, ganglionShellOpacity * 0.25);
+        } else {
+            m.material.opacity = state.active ? 0.99 : 0.06;
+            if (m.material.emissiveIntensity !== undefined) {
+                m.material.emissiveIntensity = state.active ? (isAll ? 0.65 : 0.95) : 0.04;
+            }
+        }
+    });
+
+    // 3. 過濾 3D 標籤
+    labelItems.forEach(item => {
+        if (item.mode !== currentMode) return;
+        const active = isAll || (labelPred ? labelPred(item) : false);
+        item.el.classList.toggle('dimmed', !active);
+        item.el.classList.toggle('highlighted', !isAll && active);
+    });
+}
+
+window.switchSceneMode = function(mode) {
+    currentMode = mode;
+    microGroup.visible = (mode === 'micro');
+    macroGroup.visible = (mode === 'macro');
+
+    document.getElementById('mode-btn-micro').classList.toggle('active', mode === 'micro');
+    document.getElementById('mode-btn-macro').classList.toggle('active', mode === 'macro');
+
+    if (mode === 'micro') {
+        camera.position.set(8.5, 13.5, 16.5);
+        targetLookAt.set(0.6, -0.1, 0.4);
+    } else {
+        camera.position.set(6.5, 2.0, 21.5);
+        targetLookAt.set(0.3, 0.4, 1.0);
+    }
+    resetSelection(false);
+};
+
+// A. 選擇「神經元類型 (大圓球本體 + 同色軸突 + 三叉突觸爪)」
+window.selectModality = function(modCode) {
+    clearActiveUI();
+    const m = MODALITIES[modCode];
+    document.getElementById(`btn-mod-${modCode}`)?.classList.add('active');
+
+    const relatedStructs = STRUCTURES.filter(s => s.mods.includes(modCode));
+    relatedStructs.forEach(s => document.getElementById(`btn-struct-${s.id}`)?.classList.add('active'));
+
+    applyVisualFilter(
+        t => t.mod === modCode,
+        (sId, entry) => entry.mod === modCode || (entry.isShell && relatedStructs.some(s => s.id === sId)),
+        lbl => lbl.mod === modCode || (lbl.structId && relatedStructs.some(s => s.id === lbl.structId))
+    );
+
+    document.getElementById('info-title').textContent = `${m.name}`;
+    document.getElementById('info-sub').textContent = m.type;
+    document.getElementById('info-badges').innerHTML = `<span class="badge" style="background:${m.color}">${m.code} · 本體與軸突同色相連</span>`;
+    document.getElementById('info-desc').innerHTML = m.desc;
+    document.getElementById('info-synapse').innerHTML = '';
+    document.getElementById('info-relations').innerHTML = `
+        <strong>包含此神經元本體或突觸的結構：</strong>
+        <div class="related-chips">
+            ${relatedStructs.map(s => `<span class="chip" style="border-left:3px solid ${s.color}" onclick="selectStructure('${s.id}')">${s.name}</span>`).join('')}
+        </div>
+    `;
+};
+
+// B. 選擇「特定神經節、白/灰交通支或脊髓灰質核」
+window.selectStructure = function(structId) {
+    clearActiveUI();
+    const st = STRUCTURES.find(s => s.id === structId);
+    if (!st) return;
+
+    document.getElementById(`btn-struct-${structId}`)?.classList.add('active');
+    st.mods.forEach(m => document.getElementById(`btn-mod-${m}`)?.classList.add('active'));
+
+    if (structId === 'white_ramus') {
+        applyVisualFilter(
+            t => t.structIds && t.structIds.includes('white_ramus'),
+            (sId, entry) => sId === 'white_ramus' || sId === 'lateral_horn' || (sId === 'symp_chain' && entry.isShell),
+            lbl => lbl.structId === 'white_ramus' || lbl.structId === 'lateral_horn'
+        );
+    } else if (structId === 'gray_ramus') {
+        applyVisualFilter(
+            t => t.structIds && t.structIds.includes('gray_ramus'),
+            (sId, entry) => sId === 'gray_ramus' || (sId === 'symp_chain' && entry.isShell),
+            lbl => lbl.structId === 'gray_ramus' || lbl.structId === 'symp_chain'
+        );
+    } else {
+        applyVisualFilter(
+            t => t.structIds && t.structIds.includes(structId),
+            (sId) => sId === structId,
+            lbl => lbl.structId === structId
+        );
+    }
+
+    const focusPos = currentMode === 'micro' ? st.microPos : st.macroPos;
+    if (focusPos) targetLookAt.set(focusPos[0] * 0.45, focusPos[1] * 0.55, focusPos[2] * 0.45);
+
+    const relatedPaths = PATHWAYS.filter(p => p.structs.includes(structId));
+    document.getElementById('info-title').textContent = st.name;
+    document.getElementById('info-sub').textContent = `${st.cat} ｜ ${st.en}`;
+    document.getElementById('info-badges').innerHTML = st.mods.map(m =>
+        `<span class="badge" style="background:${MODALITIES[m].color}">${MODALITIES[m].name}</span>`
+    ).join('');
+    document.getElementById('info-desc').innerHTML = st.desc;
+    document.getElementById('info-synapse').innerHTML = `
+        <div class="synapse-box">
+            <strong>細胞本體與突觸關係：</strong>${st.synapse}<br>
+            <strong>神經傳遞物與受體：</strong><span style="color:#38bdf8;">${st.nt}</span>
+        </div>
+    `;
+    document.getElementById('info-relations').innerHTML = `
+        <strong>點擊檢視單一完整傳導迴路：</strong>
+        <div class="related-chips">
+            ${relatedPaths.map(p => `<span class="chip" style="border-left:3px solid ${p.color}" onclick="selectPathway('${p.id}')">${p.name.split(' (')[0]}</span>`).join('')}
+        </div>
+    `;
+};
+
+// C. 選擇「完整傳導迴路 (1對1 精準呈現該迴路之單一連續神經元與換元點)」
+window.selectPathway = function(pathId) {
+    clearActiveUI();
+    const p = PATHWAYS.find(x => x.id === pathId);
+    if (!p) return;
+
+    document.getElementById(`btn-path-${pathId}`)?.classList.add('active');
+    document.getElementById(`btn-path-${pathId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    document.getElementById(`btn-mod-${p.mod}`)?.classList.add('active');
+    p.structs.forEach(sId => document.getElementById(`btn-struct-${sId}`)?.classList.add('active'));
+
+    const sSet = new Set(p.structs);
+    applyVisualFilter(
+        t => t.pathIds && t.pathIds.includes(pathId),
+        (sId, entry) => {
+            if (entry.pathIds && entry.pathIds.length > 0) return entry.pathIds.includes(pathId);
+            return entry.isShell && sSet.has(sId);
+        },
+        lbl => lbl.pathId === pathId || (!lbl.pathId && lbl.structId && sSet.has(lbl.structId))
+    );
+
+    document.getElementById('info-title').textContent = p.name;
+    document.getElementById('info-sub').textContent = `傳導性質：${MODALITIES[p.mod].type}`;
+    document.getElementById('info-badges').innerHTML = `<span class="badge" style="background:${p.color}">${MODALITIES[p.mod].name}</span>`;
+    document.getElementById('info-desc').innerHTML = `<strong>傳導路徑順序：</strong><br>${p.summary}`;
+    document.getElementById('info-synapse').innerHTML = `
+        <div class="synapse-box">
+            <strong>細胞本體與突觸換元解析：</strong><br>${p.synapseInfo}
+        </div>
+    `;
+    document.getElementById('info-relations').innerHTML = `
+        <strong>沿途關鍵神經節與結構：</strong>
+        <div class="related-chips">
+            ${p.structs.map(sId => {
+                const st = STRUCTURES.find(s => s.id === sId);
+                return `<span class="chip" style="border-left:3px solid ${st.color}" onclick="selectStructure('${sId}')">${st.name}</span>`;
+            }).join('')}
+        </div>
+    `;
+};
+
+// D. 重設全部顯示
+window.resetSelection = function(resetCam = true) {
+    clearActiveUI();
+    applyVisualFilter(null);
+    if (resetCam) {
+        if (currentMode === 'micro') targetLookAt.set(0.6, -0.1, 0.4);
+        else targetLookAt.set(0.3, 0.4, 1.0);
+    }
+
+    document.getElementById('info-title').textContent = '脊髓、脊神經與自主神經節 3D 模型';
+    document.getElementById('info-sub').textContent = '球體 = 細胞本體 (Soma) ｜ 同色長管 = 軸突纖維 ｜ 分叉終末 = 突觸換元';
+    document.getElementById('info-badges').innerHTML = '';
+    document.getElementById('info-desc').innerHTML = `
+        <strong>如何區分「細胞本體」、「突觸換元」與「直接穿過不換元」：</strong><br>
+        • <strong>球體代表「細胞本體 (Soma)」</strong>，每個細胞本體均直接發出<strong>同色連續神經纖維</strong>。<br>
+        • <strong>分叉終末代表「突觸終末 (Synaptic Terminal)」</strong>：節前纖維於換元處分叉包覆下一級不同色的節後細胞本體。<br>
+        • <strong>椎旁交感幹神經節內的兩類路徑</strong>：<br>
+        　① <strong>換元路徑（迴路 4 體壁交感）</strong>：<span style="color:#facc15;">亮黃色節前纖維</span>於節內形成突觸終末，與<span style="color:#fb923c;">橘色節後細胞本體</span>換元，再發出橘色纖維經<strong>灰交通支</strong>返回脊神經。<br>
+        　② <strong>直穿不換元路徑（迴路 5 椎前節 &amp; 迴路 6 腎上腺髓質）</strong>：<span style="color:#facc15;">亮黃色節前纖維</span>在椎旁節內不設本體、不形成突觸，直接連續穿過交感幹成為內臟神經。<br>
+        • <strong>迴路 7（顱部迷走神經 CN X）與迴路 8（薦髓 S2–S4 骨盆內臟神經）</strong>：迴路 7 由上方<strong>腦幹</strong>直接下行至胸腹靶器官壁換元；迴路 8 由<strong>薦髓側角經腹根</strong>分出骨盆內臟神經至下方膀胱與直腸壁換元。
+    `;
+    document.getElementById('info-synapse').innerHTML = '';
+    document.getElementById('info-relations').innerHTML = '';
+};
+
+window.setCameraView = function(view) {
+    if (currentMode === 'micro') {
+        targetLookAt.set(0.6, -0.1, 0.4);
+        if (view === '3d') camera.position.set(8.5, 13.5, 16.5);
+        else if (view === 'front') camera.position.set(0.6, 0.2, 21.5);
+        else if (view === 'top') camera.position.set(0.6, 22.0, 0.42);
+        else if (view === 'side') camera.position.set(22.5, 0.5, 0.4);
+        else if (view === 'back') camera.position.set(0.6, 0.2, -19.5);
+    } else {
+        targetLookAt.set(0.3, 0.4, 1.0);
+        if (view === '3d') camera.position.set(6.5, 2.0, 21.5);
+        else if (view === 'front') camera.position.set(0.3, 0.5, 23.0);
+        else if (view === 'top') camera.position.set(0.3, 24.0, 1.05);
+        else if (view === 'side') camera.position.set(23.0, 0.5, 1.0);
+        else if (view === 'back') camera.position.set(0.3, 0.5, -21.0);
+    }
+};
+
+window.togglePulses = function() {
+    showPulses = !showPulses;
+    const btn = document.getElementById('btn-pulses');
+    btn.textContent = `訊號脈衝: ${showPulses ? '開' : '關'}`;
+    btn.classList.toggle('active', showPulses);
+    activePulses.forEach(p => {
+        p.mesh.visible = showPulses && (p.parentTube.mode === currentMode) && (p.parentTube.mesh.material.opacity > 0.2);
+    });
+};
+
+window.toggleLabels = function() {
+    showLabels = !showLabels;
+    labelsContainer.style.display = showLabels ? 'block' : 'none';
+    const btn = document.getElementById('btn-labels');
+    btn.textContent = `3D標籤: ${showLabels ? '開' : '關'}`;
+    btn.classList.toggle('active', showLabels);
+};
+
+window.toggleLeftPanel = function() {
+    document.getElementById('left-panel').classList.toggle('collapsed');
+};
+
+window.toggleMatrixModal = function() {
+    document.getElementById('matrix-modal').classList.toggle('open');
+};
+
+// ==========================================
+// 6. 建立 2D 對照矩陣表 (Modal)
+// ==========================================
+function renderMatrixTable() {
+    const root = document.getElementById('matrix-root');
+    if (!root) return;
+
+    const table = document.createElement('table');
+    table.className = 'matrix-table';
+    table.innerHTML = `
+        <thead>
+            <tr>
+                <th>神經傳導系統 (同色本體+纖維)</th>
+                <th>神經元細胞本體位置 (Soma)</th>
+                <th>周圍神經節位置 (Ganglion)</th>
+                <th>是否於神經節內換元？</th>
+                <th>節前 / 周邊突纖維</th>
+                <th>節後 / 中樞突纖維</th>
+                <th>神經節內遞質 & 受體</th>
+                <th>靶器官末梢遞質 & 受體</th>
+                <th>支配目標與生理功能</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${MATRIX_ROWS.map(r => `
+                <tr onclick="toggleMatrixModal(); selectPathway('${r.pathId}');" title="點擊在 3D 模型中聚焦此傳導迴路">
+                    <th style="border-left: 4px solid ${r.color}; color:#fff; font-weight:700;">${r.system}</th>
+                    <td>${r.origin}</td>
+                    <td style="color:#38bdf8; font-weight:600;">${r.ganglion}</td>
+                    <td>${r.synapseInGanglion}</td>
+                    <td>${r.preFiber}</td>
+                    <td>${r.postFiber}</td>
+                    <td style="color:#fde047;">${r.ntGanglion}</td>
+                    <td style="color:#a7f3d0; font-weight:600;">${r.ntTarget}</td>
+                    <td style="color:#94a3b8;">${r.target}</td>
+                </tr>
+            `).join('')}
+        </tbody>
+    `;
+    root.innerHTML = '';
+    root.appendChild(table);
+}
+renderMatrixTable();
+
+// ==========================================
+// 7. 3D Raycaster 點擊選取與動畫迴圈
+// ==========================================
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let pointerDownPos = { x: 0, y: 0 };
+
+renderer.domElement.addEventListener('pointerdown', (e) => {
+    pointerDownPos = { x: e.clientX, y: e.clientY };
+});
+
+renderer.domElement.addEventListener('pointerup', (e) => {
+    if (Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y) > 6) return;
+    pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+    pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+    raycaster.setFromCamera(pointer, camera);
+    const activeTargets = interactiveMeshes.filter(m => {
+        let p = m.parent;
+        while (p) {
+            if (p === microGroup && currentMode !== 'micro') return false;
+            if (p === macroGroup && currentMode !== 'macro') return false;
+            p = p.parent;
+        }
+        return true;
+    });
+
+    const intersects = raycaster.intersectObjects(activeTargets, false);
+    if (intersects.length > 0) {
+        const hit = intersects[0].object.userData;
+        if (hit.type === 'struct') selectStructure(hit.id);
+        else if (hit.type === 'pathway') selectPathway(hit.pathId);
+    }
+});
+
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('mode') === 'macro') switchSceneMode('macro');
+if (urlParams.get('mod') && MODALITIES[urlParams.get('mod')]) selectModality(urlParams.get('mod'));
+if (urlParams.get('struct')) selectStructure(urlParams.get('struct'));
+
+const tempV = new THREE.Vector3();
+let lastTime = performance.now();
+
+function updateLabels() {
+    if (!showLabels) return;
+    const halfW = window.innerWidth / 2;
+    const halfH = window.innerHeight / 2;
+
+    for (let i = 0; i < labelItems.length; i++) {
+        const item = labelItems[i];
+        if (item.mode !== currentMode) {
+            item.el.style.display = 'none';
+            continue;
+        }
+        tempV.copy(item.posVec);
+        tempV.project(camera);
+        if (tempV.z > 1) {
+            item.el.style.display = 'none';
+            continue;
+        }
+        const x = Math.round((tempV.x * halfW) + halfW);
+        const y = Math.round(-(tempV.y * halfH) + halfH);
+        item.el.style.display = 'block';
+        item.el.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%)`;
+    }
+}
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+if (window.innerWidth <= 900) {
+    document.getElementById('left-panel').classList.add('collapsed');
+}
+
+function animate(now) {
+    requestAnimationFrame(animate);
+    const dt = Math.min(0.05, (now - lastTime) / 1000);
+    lastTime = now;
+
+    if (showPulses) {
+        for (let i = 0; i < activePulses.length; i++) {
+            const p = activePulses[i];
+            if (p.parentTube.mode !== currentMode || p.parentTube.mesh.material.opacity < 0.2) {
+                p.mesh.visible = false;
+                continue;
+            }
+            p.mesh.visible = true;
+            p.t = (p.t + dt * p.speed) % 1.0;
+            p.curve.getPointAt(p.t, p.mesh.position);
+        }
+    }
+
+    controls.target.lerp(targetLookAt, 0.08);
+    controls.update();
+    updateLabels();
+    renderer.render(scene, camera);
+}
+
+animate(performance.now());
+</script>
+</body>
+</html>
