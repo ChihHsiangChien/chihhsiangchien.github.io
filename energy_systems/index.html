@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>人體三大能量系統與科里循環動態模擬器</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -30,6 +30,9 @@
       -webkit-user-select: none;
       cursor: grab;
     }
+    #sim-canvas.pointer-hover {
+      cursor: pointer;
+    }
     #sim-canvas:active {
       cursor: grabbing;
     }
@@ -41,7 +44,7 @@
       -ms-overflow-style: none;
       scrollbar-width: none;
     }
-    /* Range slider styling */
+    /* Range slider styling (WebKit + Firefox) */
     input[type="range"] {
       -webkit-appearance: none;
       appearance: none;
@@ -65,6 +68,20 @@
       box-shadow: 0 0 10px rgba(56, 189, 248, 0.6);
       margin-top: -8px;
     }
+    input[type="range"]::-moz-range-track {
+      height: 8px;
+      border-radius: 999px;
+      background: #1e293b;
+      border: 1px solid #334155;
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #38bdf8;
+      border: 2px solid #0f172a;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.6);
+    }
   </style>
 </head>
 <body class="relative w-screen h-screen overflow-hidden bg-[#060b19] text-slate-100 select-none">
@@ -72,8 +89,8 @@
   <!-- Main Interactive Canvas -->
   <canvas id="sim-canvas"></canvas>
 
-  <!-- Top Header & Scenario Bar -->
-  <header class="pointer-events-none absolute top-0 left-0 right-0 z-20 p-2 sm:p-3 flex flex-col gap-2">
+  <!-- Top Header, Scenario Bar & Live Narrator -->
+  <header id="top-header" class="pointer-events-none absolute top-0 left-0 right-0 z-20 p-2 sm:p-3 flex flex-col gap-1.5">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <!-- Title & Live Clock Badge -->
       <div class="pointer-events-auto flex items-center gap-2.5 bg-slate-900/85 backdrop-blur-md border border-slate-700/70 rounded-2xl px-3.5 py-2 shadow-xl">
@@ -83,7 +100,7 @@
             三大能量系統與科里循環動態模擬器
           </h1>
           <p class="text-[11px] text-slate-400 hidden sm:block">
-            跨器官全景（骨骼肌 — 血液 — 肝臟）· 雙指捏合或滾輪縮放檢視微觀途徑
+            跨器官全景（骨骼肌 — 血液 — 肝臟）· 滾輪／雙指縮放 · 點擊各代謝區檢視酵素與生化機制
           </p>
         </div>
         <div class="ml-2 pl-2.5 border-l border-slate-700/80 text-right">
@@ -94,7 +111,7 @@
 
       <!-- Playback & Reset Controls -->
       <div class="pointer-events-auto flex items-center gap-1.5 bg-slate-900/85 backdrop-blur-md border border-slate-700/70 rounded-2xl p-1.5 shadow-xl">
-        <button id="btn-play-pause" type="button" class="min-w-[44px] min-h-[44px] px-3 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 active:bg-sky-500/40 border border-sky-400/40 text-sky-200 font-semibold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition">
+        <button id="btn-play-pause" type="button" class="min-w-[44px] min-h-[44px] px-3 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 active:bg-sky-500/40 border border-sky-400/40 text-sky-200 font-semibold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition" title="空白鍵 (Space) 暫停或繼續">
           <span id="play-icon">⏸</span>
           <span id="play-label">暫停</span>
         </button>
@@ -102,7 +119,7 @@
           <span>📚</span>
           <span>燃料與代謝知識</span>
         </button>
-        <button id="btn-reset-sim" type="button" class="min-w-[44px] min-h-[44px] px-3 rounded-xl bg-slate-800/90 hover:bg-slate-700 active:bg-slate-600 border border-slate-600/60 text-slate-200 font-medium text-xs sm:text-sm flex items-center justify-center gap-1 transition" title="重置生理數值與時間">
+        <button id="btn-reset-sim" type="button" class="min-w-[44px] min-h-[44px] px-3 rounded-xl bg-slate-800/90 hover:bg-slate-700 active:bg-slate-600 border border-slate-600/60 text-slate-200 font-medium text-xs sm:text-sm flex items-center justify-center gap-1 transition" title="重置目前情境數值與時間">
           <span>↺</span>
           <span class="hidden sm:inline">重置</span>
         </button>
@@ -114,56 +131,72 @@
     </div>
 
     <!-- Preset Scenarios Scrollable Bar -->
-    <div class="pointer-events-auto flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
-      <button data-preset="rest" class="preset-btn min-h-[44px] px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap border transition bg-slate-900/85 border-slate-700/80 text-slate-300">
+    <div class="pointer-events-auto flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+      <button data-preset="rest" class="preset-btn min-h-[40px] sm:min-h-[42px] px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap border transition bg-slate-900/85 border-slate-700/80 text-slate-300">
         🧘 靜止／休息
       </button>
-      <button data-preset="jog" class="preset-btn min-h-[44px] px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap border transition bg-slate-900/85 border-slate-700/80 text-slate-300">
+      <button data-preset="jog" class="preset-btn min-h-[40px] sm:min-h-[42px] px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap border transition bg-slate-900/85 border-slate-700/80 text-slate-300">
         🏃 有氧慢跑
       </button>
-      <button data-preset="sprint100" class="preset-btn min-h-[44px] px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap border transition bg-slate-900/85 border-slate-700/80 text-slate-300">
+      <button data-preset="sprint100" class="preset-btn min-h-[40px] sm:min-h-[42px] px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap border transition bg-slate-900/85 border-slate-700/80 text-slate-300">
         ⚡ 100m 衝刺 (0–10s)
       </button>
-      <button data-preset="sprint400" class="preset-btn min-h-[44px] px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap border transition bg-slate-900/85 border-slate-700/80 text-slate-300">
+      <button data-preset="sprint400" class="preset-btn min-h-[40px] sm:min-h-[42px] px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap border transition bg-slate-900/85 border-slate-700/80 text-slate-300">
         🔥 400m 衝刺 (無氧糖解高峰)
       </button>
-      <button data-preset="epoc" class="preset-btn min-h-[44px] px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap border transition bg-slate-900/85 border-slate-700/80 text-slate-300">
+      <button data-preset="marathon" class="preset-btn min-h-[40px] sm:min-h-[42px] px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap border transition bg-slate-900/85 border-slate-700/80 text-slate-300">
+        🏁 馬拉松後期 (肝醣耗竭／撞牆)
+      </button>
+      <button data-preset="epoc" class="preset-btn min-h-[40px] sm:min-h-[42px] px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap border transition bg-slate-900/85 border-slate-700/80 text-slate-300">
         🔄 運動後恢復 (EPOC 乳酸清除)
       </button>
     </div>
+
+    <!-- Real-time Physiology Narrator Bar -->
+    <div id="narrator-bar" class="pointer-events-auto self-start max-w-full flex items-center gap-2 bg-slate-900/85 backdrop-blur-md border border-slate-700/70 rounded-xl px-3 py-1.5 text-[11px] sm:text-xs text-slate-200 shadow-lg">
+      <span id="narrator-dot" class="w-2 h-2 rounded-full bg-teal-400 shrink-0"></span>
+      <span id="narrator-text" class="leading-snug">有氧系統主導供能，脂質與醣類同步氧化維持穩定配速。</span>
+    </div>
   </header>
 
-  <!-- Molecule Legend & Zoom Controls (Floating on Canvas) -->
-  <div id="zoom-controls" class="pointer-events-auto fixed right-3 top-[128px] sm:top-[120px] z-20 flex flex-col gap-1.5 bg-slate-900/85 backdrop-blur-md border border-slate-700/70 rounded-2xl p-1.5 shadow-xl">
-    <button id="btn-zoom-in" type="button" class="min-w-[44px] min-h-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-white font-bold text-lg flex items-center justify-center border border-slate-600/50" title="放大">
+  <!-- Zoom Controls (Floating Right) -->
+  <div id="zoom-controls" class="pointer-events-auto fixed right-3 top-[168px] z-20 flex flex-col gap-1.5 bg-slate-900/85 backdrop-blur-md border border-slate-700/70 rounded-2xl p-1.5 shadow-xl">
+    <button id="btn-zoom-in" type="button" class="min-w-[44px] min-h-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-white font-bold text-lg flex items-center justify-center border border-slate-600/50" title="放大 (+)">
       +
     </button>
     <div id="zoom-level-badge" class="min-w-[44px] py-1 text-center text-[11px] font-mono font-semibold text-sky-300">
       100%
     </div>
-    <button id="btn-zoom-out" type="button" class="min-w-[44px] min-h-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-white font-bold text-lg flex items-center justify-center border border-slate-600/50" title="縮小">
+    <button id="btn-zoom-out" type="button" class="min-w-[44px] min-h-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-white font-bold text-lg flex items-center justify-center border border-slate-600/50" title="縮小 (-)">
       −
     </button>
-    <button id="btn-reset-view" type="button" class="min-w-[44px] min-h-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 text-[11px] font-semibold flex items-center justify-center border border-slate-600/50 px-1" title="重置視角">
+    <button id="btn-reset-view" type="button" class="min-w-[44px] min-h-[44px] rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 text-[11px] font-semibold flex items-center justify-center border border-slate-600/50 px-1" title="重置視角 (R)">
       重置
     </button>
   </div>
 
-  <!-- Interactive Molecule Filter & Highlight Control Panel -->
-  <div id="molecule-filter-panel" class="pointer-events-auto fixed left-3 top-[128px] sm:top-[120px] z-20 flex flex-col gap-1.5 bg-slate-900/90 backdrop-blur-md border border-slate-700/80 rounded-2xl p-2 text-xs shadow-2xl max-w-[235px] sm:max-w-[265px]">
-    <div class="flex items-center justify-between gap-1 px-1">
-      <span class="text-[10px] font-bold uppercase tracking-wider text-slate-300">分子圖層 (點選聚焦 / 眼睛隱藏)</span>
-      <button id="btn-mol-reset" type="button" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-600/60" title="顯示全部並取消單一聚焦">
-        全顯
+  <!-- Collapsible Molecule Filter & Highlight Control Panel (Floating Left) -->
+  <div id="molecule-filter-panel" class="pointer-events-auto fixed left-3 top-[168px] z-20 flex flex-col gap-1.5 bg-slate-900/90 backdrop-blur-md border border-slate-700/80 rounded-2xl p-2 text-xs shadow-2xl max-w-[235px] sm:max-w-[265px]">
+    <div class="flex items-center justify-between gap-2 px-1">
+      <span class="text-[10px] font-bold uppercase tracking-wider text-slate-300">分子圖層 (聚焦 / 隱藏)</span>
+      <button id="btn-mol-collapse" type="button" class="text-[10px] px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600/60 shrink-0" title="展開或收合分子圖層">
+        收合 ▴
       </button>
     </div>
-    <div id="mol-toggle-list" class="flex flex-col gap-1 max-h-[210px] sm:max-h-none overflow-y-auto no-scrollbar">
-      <!-- 由 JS 動態生成 7 種分子的「聚焦 Highlight」與「顯示/隱藏 Toggle」控制列 -->
+    <div id="mol-panel-body" class="flex flex-col gap-1.5 max-h-[calc(100vh-370px)] overflow-y-auto no-scrollbar">
+      <div class="flex justify-end px-0.5">
+        <button id="btn-mol-reset" type="button" class="text-[10px] px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-600/60" title="顯示全部並取消單一聚焦">
+          全部顯示 / 取消聚焦
+        </button>
+      </div>
+      <div id="mol-toggle-list" class="flex flex-col gap-1">
+        <!-- 由 JS 動態生成 7 種分子的「聚焦 Highlight」與「顯示/隱藏 Toggle」控制列 -->
+      </div>
     </div>
   </div>
 
-  <!-- Node Detail Floating Card (Appears when clicking a pathway/organ node) -->
-  <div id="node-detail-card" class="hidden fixed left-3 right-16 sm:right-auto sm:left-3 sm:w-[370px] top-[350px] sm:top-[380px] z-30 bg-slate-900/95 backdrop-blur-xl border border-sky-400/50 rounded-2xl p-4 shadow-2xl transition-all">
+  <!-- Node Detail Floating Card (Right-aligned on desktop so it never overlaps molecule filter) -->
+  <div id="node-detail-card" class="hidden fixed right-[72px] sm:right-[76px] left-3 md:left-auto md:w-[360px] top-[168px] z-30 max-h-[calc(100vh-270px)] overflow-y-auto no-scrollbar bg-slate-900/95 backdrop-blur-xl border border-sky-400/50 rounded-2xl p-4 shadow-2xl transition-all">
     <div class="flex items-start justify-between gap-2">
       <div>
         <span id="node-badge" class="inline-block px-2 py-0.5 rounded-md text-[11px] font-semibold bg-sky-500/20 text-sky-300 border border-sky-400/30 mb-1">
@@ -171,7 +204,7 @@
         </span>
         <h2 id="node-title" class="text-base font-bold text-white">節點名稱</h2>
       </div>
-      <button id="btn-close-node" type="button" class="min-w-[44px] min-h-[44px] -mt-1 -mr-1 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-base font-bold">
+      <button id="btn-close-node" type="button" class="min-w-[44px] min-h-[44px] -mt-1 -mr-1 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-base font-bold" title="關閉 (Esc)">
         ✕
       </button>
     </div>
@@ -190,24 +223,24 @@
 
   <!-- Bottom Control & Telemetry Dashboard -->
   <section id="bottom-dashboard" class="pointer-events-auto fixed bottom-0 left-0 right-0 z-20 p-2 sm:p-3 transition-transform duration-300">
-    <div class="max-w-7xl mx-auto bg-slate-900/90 backdrop-blur-xl border border-slate-700/80 rounded-2xl p-3 shadow-2xl">
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-3 items-center">
+    <div class="max-w-7xl mx-auto bg-slate-900/90 backdrop-blur-xl border border-slate-700/80 rounded-2xl p-2.5 sm:p-3 shadow-2xl">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-2.5 sm:gap-3 items-center">
 
         <!-- Left: Sliders (Intensity & Speed) -->
-        <div class="lg:col-span-4 flex flex-col gap-2.5 bg-slate-800/50 rounded-xl p-2.5 border border-slate-700/50">
+        <div class="lg:col-span-4 flex flex-col gap-2 bg-slate-800/50 rounded-xl p-2.5 border border-slate-700/50">
           <div>
             <div class="flex justify-between items-center text-xs mb-1">
               <span class="font-semibold text-slate-200">運動強度 (Intensity)</span>
               <span id="intensity-val" class="font-mono font-bold text-sky-300">35% · 有氧慢跑</span>
             </div>
-            <input id="slider-intensity" type="range" min="0" max="100" value="35" class="w-full h-7" />
+            <input id="slider-intensity" type="range" min="0" max="100" value="35" class="w-full h-6 sm:h-7" />
           </div>
           <div>
             <div class="flex justify-between items-center text-xs mb-1">
               <span class="font-semibold text-slate-200">模擬速度 (Speed)</span>
               <span id="speed-val" class="font-mono font-bold text-emerald-300">1.00x</span>
             </div>
-            <input id="slider-speed" type="range" min="0.25" max="2.0" step="0.25" value="1.0" class="w-full h-7" />
+            <input id="slider-speed" type="range" min="0.25" max="2.0" step="0.25" value="1.0" class="w-full h-6 sm:h-7" />
           </div>
         </div>
 
@@ -243,13 +276,13 @@
 
           <!-- Carbohydrate vs Lipid Substrate Crossover Bar -->
           <div class="pt-1 border-t border-slate-700/70">
-            <div class="flex justify-between items-center text-[10px] mb-1">
-              <span class="text-slate-300 font-medium">燃料消耗比例（交錯概念 Crossover）</span>
-              <span id="substrate-ratio-text" class="font-mono font-bold text-orange-300">醣類 42% · 脂質 58%</span>
+            <div class="flex justify-between items-center text-[10px] mb-1 gap-1">
+              <span class="text-slate-300 font-medium truncate">有機燃料比例（不含 PCr · Crossover）</span>
+              <span id="substrate-ratio-text" class="font-mono font-bold text-orange-300 shrink-0">醣類 49% · 脂質 51%</span>
             </div>
             <div class="w-full h-2.5 rounded-full overflow-hidden flex bg-slate-950 border border-slate-700">
-              <div id="bar-carb-fuel" style="width: 42%" class="h-full bg-sky-400 transition-all duration-150"></div>
-              <div id="bar-fat-fuel" style="width: 58%" class="h-full bg-orange-400 transition-all duration-150"></div>
+              <div id="bar-carb-fuel" style="width: 49%" class="h-full bg-sky-400 transition-all duration-150"></div>
+              <div id="bar-fat-fuel" style="width: 51%" class="h-full bg-orange-400 transition-all duration-150"></div>
             </div>
           </div>
 
@@ -262,8 +295,8 @@
           </div>
         </div>
 
-        <!-- Right: Physiological Pools (PCr, Muscle Glycogen, Blood Lactate, Blood Glucose, Liver Glycogen) -->
-        <div class="lg:col-span-4 grid grid-cols-5 lg:grid-cols-3 gap-1.5 bg-slate-800/50 rounded-xl p-2.5 border border-slate-700/50 text-center lg:text-left">
+        <!-- Right: Physiological Pools (6 tiles in 3x2 grid across all screen sizes) -->
+        <div class="lg:col-span-4 grid grid-cols-3 gap-1.5 bg-slate-800/50 rounded-xl p-2 sm:p-2.5 border border-slate-700/50 text-center lg:text-left">
           <div class="bg-slate-900/80 rounded-lg p-1.5 border border-slate-700/50">
             <div class="text-[10px] text-slate-400 truncate">肌肉 PCr</div>
             <div id="val-pcr" class="text-xs sm:text-sm font-mono font-bold text-fuchsia-300">92%</div>
@@ -272,8 +305,11 @@
             <div class="text-[10px] text-slate-400 truncate">肌肝醣存量</div>
             <div id="val-mgly" class="text-xs sm:text-sm font-mono font-bold text-sky-300">88%</div>
           </div>
-          <div class="bg-slate-900/80 rounded-lg p-1.5 border border-slate-700/50">
-            <div class="text-[10px] text-slate-400 truncate">血乳酸濃度</div>
+          <div id="val-lactate-card" class="bg-slate-900/80 rounded-lg p-1.5 border border-slate-700/50 transition-colors">
+            <div class="flex items-center justify-center lg:justify-between gap-1">
+              <span class="text-[10px] text-slate-400 truncate">血乳酸濃度</span>
+              <span id="val-lactate-badge" class="hidden text-[9px] font-bold px-1 rounded bg-rose-500/25 text-rose-300 border border-rose-400/40 shrink-0">⚠ ≥4mM</span>
+            </div>
             <div id="val-lactate" class="text-xs sm:text-sm font-mono font-bold text-amber-400">1.4 mM</div>
           </div>
           <div class="bg-slate-900/80 rounded-lg p-1.5 border border-slate-700/50">
@@ -284,9 +320,9 @@
             <div class="text-[10px] text-slate-400 truncate">肝醣庫存</div>
             <div id="val-lgly" class="text-xs sm:text-sm font-mono font-bold text-emerald-300">85%</div>
           </div>
-          <div class="hidden lg:flex flex-col justify-center bg-slate-900/80 rounded-lg p-1.5 border border-slate-700/50">
+          <div class="bg-slate-900/80 rounded-lg p-1.5 border border-slate-700/50">
             <div class="text-[10px] text-slate-400 truncate">肝臟 Cori 負荷</div>
-            <div id="val-cori-cost" class="text-xs font-mono font-bold text-rose-300">-6 ATP/Glc</div>
+            <div id="val-cori-cost" class="text-xs sm:text-sm font-mono font-bold text-rose-300">低負荷</div>
           </div>
         </div>
 
@@ -305,7 +341,7 @@
           </span>
           <h2 class="text-lg sm:text-xl font-bold text-white">醣類、脂質、蛋白質與三大能量系統消耗機制</h2>
         </div>
-        <button id="btn-close-guide" type="button" class="min-w-[44px] min-h-[44px] rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-lg flex items-center justify-center border border-slate-600/60">
+        <button id="btn-close-guide" type="button" class="min-w-[44px] min-h-[44px] rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-lg flex items-center justify-center border border-slate-600/60" title="關閉 (Esc)">
           ✕
         </button>
       </div>
@@ -361,7 +397,7 @@
                   <td class="py-2.5 pr-3 font-bold text-sky-300">醣類 (肝醣 / 葡萄糖)</td>
                   <td class="py-2.5 px-2">肌肝醣 (~400g)、肝醣 (~100g)、血糖</td>
                   <td class="py-2.5 px-2 text-amber-300">無氧 / 有氧皆可</td>
-                  <td class="py-2.5 px-2"><strong>快</strong>（無氧 +2 ATP；有氧 +30~32 ATP）</td>
+                  <td class="py-2.5 px-2"><strong>快</strong>（無氧：血糖 +2 / 肌肝醣 +3 ATP；有氧 +30~32 ATP）</td>
                   <td class="py-2.5 pl-2">唯一能同時支援無氧衝刺與高強度耐力的全能燃料</td>
                 </tr>
                 <tr>
@@ -387,8 +423,8 @@
         <section class="bg-slate-800/50 border border-slate-700/70 rounded-2xl p-4">
           <h3 class="text-base font-bold text-amber-300 mb-2">三、 長時間持續運動與「運動後恢復 (EPOC)」的燃料轉換</h3>
           <ul class="list-disc pl-5 space-y-1.5 text-xs sm:text-sm text-slate-300">
-            <li><strong>長時間耐力運動（肝醣耗竭效應）：</strong> 即使維持相同中等配速，隨時間推進肌肝醣逐漸耗盡，身體會被迫提高<strong>脂質氧化比例</strong>；但因脂肪產能速率較慢，運動員會明顯感覺配速被迫下降（俗稱「撞牆期」），此時肝臟必須加速糖質新生維持血糖供大腦使用。</li>
-            <li><strong>運動後過量耗氧 (EPOC)：</strong> 停止高強度運動後，呼吸與心率不會立刻降回靜止值。此時骨骼肌與肝臟主要燃燒<strong>脂質（FFA）</strong>進行有氧氧化，所產生的大量 ATP 用來：(1) 回充耗盡的 <strong>PCr</strong>、(2) 透過<strong>科里循環</strong>將乳酸轉回葡萄糖與肝醣、(3) 恢復肌紅蛋白氧合與體溫平衡。</li>
+            <li><strong>長時間耐力運動（肝醣耗竭效應）：</strong> 即使維持相同中等配速，隨時間推進肌肝醣逐漸耗盡，身體會被迫提高<strong>脂質氧化比例</strong>；但因脂肪產能速率較慢，運動員會明顯感覺配速被迫下降（俗稱「撞牆期」），此時肝臟必須加速糖質新生維持血糖供大腦使用。可點選上方 <strong>「🏁 馬拉松後期」</strong> 情境直接觀察此轉換！</li>
+            <li><strong>運動後過量耗氧 (EPOC)：</strong> 停止高強度運動後，呼吸與心率不會立刻降回靜止值。此時骨骼肌與肝臟主要燃燒<strong>脂質（FFA）</strong>進行有氧氧化，所產生的大量 ATP 用來：(1) 回充耗盡的 <strong>PCr</strong>、(2) 透過<strong>科里循環</strong>消耗 <strong>-6 高能磷酸鍵（4 ATP + 2 GTP）</strong>將乳酸轉回葡萄糖與肝醣、(3) 恢復肌紅蛋白氧合與體溫平衡。</li>
           </ul>
         </section>
 
@@ -413,6 +449,7 @@
       const sparkCtx = sparkCanvas.getContext('2d');
 
       const ui = {
+        topHeader: document.getElementById('top-header'),
         timeDisplay: document.getElementById('sim-time-display'),
         btnPlayPause: document.getElementById('btn-play-pause'),
         playIcon: document.getElementById('play-icon'),
@@ -423,6 +460,12 @@
         btnResetSim: document.getElementById('btn-reset-sim'),
         btnToggleHud: document.getElementById('btn-toggle-hud'),
         presetBtns: document.querySelectorAll('.preset-btn'),
+        narratorDot: document.getElementById('narrator-dot'),
+        narratorText: document.getElementById('narrator-text'),
+        zoomControls: document.getElementById('zoom-controls'),
+        molFilterPanel: document.getElementById('molecule-filter-panel'),
+        btnMolCollapse: document.getElementById('btn-mol-collapse'),
+        molPanelBody: document.getElementById('mol-panel-body'),
         molToggleList: document.getElementById('mol-toggle-list'),
         btnMolReset: document.getElementById('btn-mol-reset'),
         btnZoomIn: document.getElementById('btn-zoom-in'),
@@ -453,16 +496,19 @@
         barFatFuel: document.getElementById('bar-fat-fuel'),
         valPcr: document.getElementById('val-pcr'),
         valMgly: document.getElementById('val-mgly'),
+        valLactateCard: document.getElementById('val-lactate-card'),
         valLactate: document.getElementById('val-lactate'),
+        valLactateBadge: document.getElementById('val-lactate-badge'),
         valGlucose: document.getElementById('val-glucose'),
-        valLgly: document.getElementById('val-lgly')
+        valLgly: document.getElementById('val-lgly'),
+        valCoriCost: document.getElementById('val-cori-cost')
       };
 
       function clamp(val, min, max) {
         return Math.max(min, Math.min(max, val));
       }
 
-      // 分子圖層顯示/隱藏 (visible) 與單一聚焦 (highlightedType) 控制定義
+      // 分子圖層顯示/隱藏 (visible) 與單一聚焦 (highlighted) 控制定義
       const MOLECULE_TYPES = [
         { key: 'oxygen', label: '雙原子氧氣 (O₂)', color: '#22d3ee', tag: 'O₂' },
         { key: 'glucose', label: '葡萄糖 (Glucose)', color: '#38bdf8', tag: 'G' },
@@ -489,13 +535,15 @@
       const sim = {
         running: true,
         hudVisible: true,
+        molPanelCollapsed: window.innerWidth < 768,
         time: 0,
         speed: 1.0,
         intensity: 35,
         preset: 'jog',
-        highIntensityTimer: 0,
+        lastPreset: 'jog',
         pulsePhase: 0,
         selectedNodeId: null,
+        hoveredNodeId: null,
 
         // 生理代謝池與動態指標
         pcrStore: 92,
@@ -505,34 +553,36 @@
         liverGlycogen: 85,
 
         // 三大能量系統產能速率與佔比
-        totalAtpDemand: 28,
-        ratePcr: 2.8,
-        rateGly: 5.6,
-        rateAer: 19.6,
-        sharePcr: 10,
-        shareGly: 20,
-        shareAer: 70,
+        totalAtpDemand: 41,
+        ratePcr: 0.4,
+        rateGly: 4.8,
+        rateAer: 35.0,
+        sharePcr: 1,
+        shareGly: 12,
+        shareAer: 87,
 
-        // 醣類 vs 脂質燃料消耗比例 (%)
-        carbFuelPct: 42,
-        fatFuelPct: 58,
+        // 有機燃料消耗比例 (醣類 vs 脂質 %)
+        carbFuelPct: 49,
+        fatFuelPct: 51,
+        coriAtpCostRate: 0,
 
         // 各路徑通量係數
         fluxGlucoseToMuscle: 0.5,
         fluxFfaToMito: 0.6,
         fluxOxygenToMuscle: 0.6,
-        fluxLactateToBlood: 0.2,
-        fluxLactateToHeart: 0.2,
-        fluxLactateToLiver: 0.2,
-        fluxLiverGluconeogenesis: 0.3,
+        fluxLactateToBlood: 0.1,
+        fluxLactateToHeart: 0.1,
+        fluxLactateToLiver: 0.1,
+        fluxLiverGluconeogenesis: 0.2,
         pcrRefillRate: 0.2,
 
-        // Sparkline 歷史紀錄
+        // Sparkline 歷史紀錄與情境切換標記
         history: [],
+        presetMarkers: [],
         historyTimer: 0
       };
 
-      // 世界座標系配置 (World Space: 1680 x 940 基準設計，容納肺泡入口與肌原纖維耗能區)
+      // 世界座標系配置 (World Space: 1680 x 940 基準設計)
       const WORLD = {
         width: 1680,
         height: 940
@@ -540,22 +590,24 @@
 
       // 攝影機（視口變換：World -> Screen）
       const camera = {
-        x: WORLD.width / 2,
-        y: WORLD.height / 2,
+        x: 830,
+        y: 448,
         scale: 0.82,
-        minScale: 0.40,
+        minScale: 0.22,
         maxScale: 2.6
       };
 
       // ==========================================
-      // 2. 互動節點定義（支援點擊查看生化詳情與高亮）
+      // 2. 互動節點定義（矩形碰撞區域，支援點擊與 Hover 高亮）
       // ==========================================
       const NODES = [
         {
           id: 'lungs-o2',
-          x: 620,
-          y: 120,
-          r: 68,
+          x: 515,
+          y: 65,
+          w: 230,
+          h: 88,
+          rx: 26,
           badge: '呼吸與循環 · 氧氣來源',
           title: '肺泡氣體交換（O₂ 進入動脈血）',
           desc: '吸入的空氣在肺泡與微血管進行氣體交換，雙原子氧氣（O₂）與紅血球血紅素結合，沿著含氧動脈血流精準輸送至骨骼肌粒線體與肝臟粒線體，同時將代謝產生的 CO₂ 經靜脈運回肺部排出。',
@@ -564,10 +616,26 @@
           color: '#22d3ee'
         },
         {
+          id: 'adipose-ffa',
+          x: 830,
+          y: 65,
+          w: 255,
+          h: 88,
+          rx: 26,
+          badge: '脂肪組織 · 脂質燃料庫',
+          title: '脂肪組織脂解（FFA 游離脂肪酸來源）',
+          desc: '三酸甘油酯在脂肪細胞內經脂解酵素分解為游離脂肪酸（FFA）與甘油，FFA 與血漿白蛋白結合後隨動脈血流送達骨骼肌與肝臟粒線體進行 β-氧化。注意：高強度衝刺時血中乳酸升高與血管收縮，會明顯抑制 FFA 釋出。',
+          enzyme: 'ATGL / 荷爾蒙敏感性脂解酶 (HSL)',
+          atp: '單分子棕櫚酸有氧氧化約 +106 ATP',
+          color: '#fb923c'
+        },
+        {
           id: 'myofibril',
-          x: 135,
-          y: 445,
-          r: 72,
+          x: 62,
+          y: 230,
+          w: 128,
+          h: 430,
+          rx: 24,
           badge: '骨骼肌 · 機械收縮耗能引擎',
           title: '肌原纖維（橫橋週期與 ATP 消耗）',
           desc: '三大能量系統產生的所有 ATP 最終都匯聚至此！肌球蛋白頭部（Myosin ATPase）水解 ATP 產生能量，拉動肌動蛋白絲滑行完成肌肉收縮，並將水解後的 ADP 與無機磷酸（Pi）釋回三大系統重新充電。',
@@ -577,9 +645,11 @@
         },
         {
           id: 'atp-pcr',
-          x: 345,
-          y: 235,
-          r: 78,
+          x: 210,
+          y: 172,
+          w: 275,
+          h: 148,
+          rx: 22,
           badge: '骨骼肌 · 閉環磷化物系統',
           title: 'ATP-PCr 循環（PCr 消耗與有氧再合成）',
           desc: '【高強度放電】肌酸激酶（CK）將 PCr 的高能磷酸基轉移給 ADP，瞬間產生 +1 ATP 並留下游離肌酸（Cr）。【低強度／恢復期充電】粒線體產出的有氧 ATP 會逆向把磷酸基裝回 Cr，重新合成 PCr 儲存備用！',
@@ -589,179 +659,228 @@
         },
         {
           id: 'glycolysis',
-          x: 350,
-          y: 435,
-          r: 82,
+          x: 210,
+          y: 336,
+          w: 275,
+          h: 212,
+          rx: 22,
           badge: '骨骼肌 · 糖解與丙酮酸分岔點',
           title: '糖解作用與「丙酮酸分岔路口」',
-          desc: '葡萄糖與肌肝醣在細胞質分解為丙酮酸（Pyruvate），快速產出 +2 ATP 與 NADH。在粒線體外緣的分岔口：【路徑 A】氧氣充足時丙酮酸經 MPC 載體進入粒線體徹底氧化；【路徑 B】高強度超過有氧上限時，LDH 將多餘丙酮酸還原為乳酸並再生 NAD⁺。',
-          enzyme: 'PFK-1 / MPC 載體 / 乳酸去氫酶 (LDH)',
-          atp: '細胞質階段淨產 +2 ATP（進粒線體可再產 ~30 ATP）',
+          desc: '血糖經 GLUT4 轉運蛋白進入肌細胞，與肌肝醣在細胞質分解為丙酮酸（Pyruvate）。在分岔路口：【路徑 A】氧氣充足時經 MPC 載體進入粒線體徹底氧化；【路徑 B】高強度超過有氧上限時，LDH 將多餘丙酮酸還原為乳酸並再生 NAD⁺，經 MCT4 排入靜脈。',
+          enzyme: 'GLUT4 / PFK-1 / MPC 載體 / LDH / MCT4',
+          atp: '細胞質階段：血糖淨產 +2 ATP、肌肝醣淨產 +3 ATP',
           color: '#f59e0b'
         },
         {
           id: 'muscle-mito',
-          x: 350,
-          y: 690,
-          r: 95,
+          x: 210,
+          y: 585,
+          w: 275,
+          h: 205,
+          rx: 26,
           badge: '骨骼肌 · 有氧系統（粒線體）',
           title: '肌肉粒線體有氧氧化（高產能噴泉）',
-          desc: '接收從糖解分岔路口進入的「丙酮酸」、脂肪酸，以及從肺泡動脈送達的「O₂」，在基質與內膜嵴進行檸檬酸循環與電子傳遞鏈，湧現密集的 ~30–32 ATP 能量粒子送往肌原纖維，並釋出 CO₂ 與 H₂O。',
-          enzyme: '丙酮酸去氫酶 / 檸檬酸循環 / ATP 合酶',
+          desc: '接收從糖解分岔路口進入的「丙酮酸」、脂肪組織送來的「FFA」，以及肺泡動脈送達的「O₂」，在基質與內膜嵴進行 β-氧化、檸檬酸循環與電子傳遞鏈，湧現密集的 ~30–32 ATP 能量粒子送往肌原纖維，並釋出 CO₂ 與 H₂O。',
+          enzyme: '丙酮酸去氫酶 (PDH) / 檸檬酸循環 / ATP 合酶',
           atp: '高產能噴泉：約 +30–32 ATP / 葡萄糖',
           color: '#2dd4bf'
         },
         {
           id: 'lactate-shuttle',
-          x: 840,
-          y: 685,
-          r: 82,
+          x: 640,
+          y: 605,
+          w: 390,
+          h: 160,
+          rx: 28,
           badge: '跨組織代謝 · 乳酸穿梭',
           title: '心肌 ／ 氧化型慢縮肌（乳酸穿梭）',
-          desc: '肌肉釋入靜脈的乳酸並非廢物！約 35–40% 血乳酸會被粒線體豐富的心肌與慢縮肌透過 MCT1 攝取，逆轉回丙酮酸後直接進入粒線體燃燒產生 ATP。',
-          enzyme: 'MCT1 轉運蛋白 / 心肌型 LDH',
+          desc: '肌肉釋入靜脈的乳酸並非廢物！約 35–45% 血乳酸會被粒線體豐富的心肌與慢縮肌透過 MCT1 攝取，經心肌型 LDH 逆轉回丙酮酸後直接進入粒線體燃燒產生 ATP。',
+          enzyme: 'MCT1 轉運蛋白 / 心肌型 LDH (LDH-1)',
           atp: '直接氧化產能（約 +15 ATP / 乳酸）',
           color: '#38bdf8'
         },
         {
+          id: 'liver-glycogen',
+          x: 1195,
+          y: 230,
+          w: 390,
+          h: 102,
+          rx: 20,
+          badge: '肝臟 · 全身血糖緩衝庫',
+          title: '肝醣分解與儲存（維持血糖恆定）',
+          desc: '肝臟儲存約 100 克肝醣，是運動期間維持全身血糖（尤其是大腦燃料）的最重要防線。腎上腺素與升糖素活化肝醣磷酸化酶，將肝醣分解並經 G6Pase 釋出游離葡萄糖進入血液。',
+          enzyme: '肝醣磷酸化酶 / 葡萄糖-6-磷酸酶 (G6Pase)',
+          atp: '維持 70–100 mg/dL 血糖恆定供肌肉與大腦使用',
+          color: '#34d399'
+        },
+        {
           id: 'liver-cori',
-          x: 1380,
-          y: 470,
-          r: 132,
+          x: 1195,
+          y: 355,
+          w: 390,
+          h: 225,
+          rx: 22,
           badge: '肝臟 · 科里循環（Cori Cycle）',
-          title: '肝細胞糖質新生（消耗 -6 ATP 換回葡萄糖）',
-          desc: '肝臟回收血中過剩的乳酸轉回葡萄糖以穩定血糖。畫面中可見肝臟自身的粒線體（接收肺泡送來的 O₂ 氧化脂肪酸）持續輸送 6 顆紅色/金色 ATP 能量代價進入糖質新生反應，將乳酸重新組裝成葡萄糖釋回血液。',
-          enzyme: 'PC / PEPCK / FBPase-1 / G6Pase',
-          atp: '淨消耗 -6 ATP（由肝臟粒線體供能支應）',
+          title: '肝細胞糖質新生（消耗 -6 ATP 當量換回葡萄糖）',
+          desc: '肝臟透過 MCT1 回收血中過剩乳酸轉回葡萄糖以穩定血糖。畫面中可見肝臟自身的粒線體（接收 O₂ 與 FFA 氧化）持續向上輸送高能磷酸粒子進入糖質新生，每合成 1 分子葡萄糖需消耗 4 ATP + 2 GTP（合計 6 個高能磷酸鍵）。',
+          enzyme: 'MCT1 / PC / PEPCK / FBPase-1 / G6Pase',
+          atp: '淨消耗 -6 高能磷酸鍵（4 ATP + 2 GTP）',
           color: '#10b981'
+        },
+        {
+          id: 'liver-mito',
+          x: 1195,
+          y: 610,
+          w: 390,
+          h: 135,
+          rx: 22,
+          badge: '肝臟 · 粒線體供能中心',
+          title: '肝臟粒線體（氧化脂肪酸支援科里循環）',
+          desc: '肝臟糖質新生是高耗能的逆向合成工程！肝細胞粒線體接收肺泡送達的 O₂ 與脂肪組織送來的 FFA 進行 β-氧化與檸檬酸循環，源源不絕產出 ATP / GTP 向上供應糖質新生消耗。',
+          enzyme: 'CPT-1 / β-氧化酵素群 / ATP 合酶',
+          atp: '產出 ATP / GTP 專供肝臟糖質新生 (-6 ATP/Glc) 支應',
+          color: '#2dd4bf'
         }
       ];
 
+      function hitTestNode(wx, wy) {
+        for (let i = 0; i < NODES.length; i++) {
+          const n = NODES[i];
+          if (wx >= n.x && wx <= n.x + n.w && wy >= n.y && wy <= n.y + n.h) {
+            return n;
+          }
+        }
+        return null;
+      }
+
       // ==========================================
-      // 3. 粒子系統（O₂ 雙原子分子、葡萄糖、丙酮酸、乳酸、PCr/Cr、ATP 能量粒子）
+      // 3. 粒子系統、等速平滑流道幾何與離屏發光貼圖快取
       // ==========================================
       const particles = [];
       const floatingPulses = []; // 局部 +ATP / -6 ATP 文字脈衝
 
-      // 預定義流道路徑（World Coordinates）
+      // 預定義流道路徑（World Coordinates — 幾何對齊膜通道且避開彼此重疊）
       const PATHS = {
         // 1. 肺泡 O₂ 進入動脈主幹
         lungsOxygenToArtery: [
-          { x: 620, y: 145 },
+          { x: 620, y: 153 },
           { x: 690, y: 205 },
           { x: 840, y: 215 }
         ],
-        // 2. 動脈 O₂ 支線 A -> 骨骼肌粒線體（明確直達粒線體！）
+        // 2. 動脈 O₂ 支線 A -> 骨骼肌粒線體（繞過 GLUT4/MCT4 外側直達粒線體）
         arteryOxygenToMuscleMito: [
           { x: 840, y: 215 },
-          { x: 640, y: 225 },
-          { x: 545, y: 315 },
-          { x: 525, y: 635 },
-          { x: 430, y: 685 }
+          { x: 605, y: 225 },
+          { x: 538, y: 325 },
+          { x: 538, y: 680 },
+          { x: 412, y: 730 }
         ],
-        // 3. 動脈 O₂ 支線 B -> 肝臟粒線體（支持肝臟氧化脂肪酸產 ATP）
+        // 3. 動脈 O₂ 支線 B -> 肝臟粒線體
         arteryOxygenToLiverMito: [
           { x: 840, y: 215 },
           { x: 1080, y: 220 },
           { x: 1150, y: 340 },
           { x: 1165, y: 635 },
-          { x: 1230, y: 665 }
+          { x: 1228, y: 678 }
         ],
-        // 4. 動脈葡萄糖 -> 骨骼肌糖解區
-        arteryGlucoseToMuscle: [
-          { x: 1120, y: 255 },
-          { x: 820, y: 255 },
-          { x: 560, y: 280 },
-          { x: 485, y: 390 },
-          { x: 375, y: 395 }
+        // 4A. 脂肪組織脂解 FFA -> 進入動脈分流點
+        adiposeFfaToArtery: [
+          { x: 958, y: 153 },
+          { x: 958, y: 240 }
         ],
-        // 4B. 脂肪組織／血液游離脂肪酸 (FFA) -> 直接進入骨骼肌與肝臟粒線體進行 β-氧化
+        // 4B. 動脈 FFA -> 骨骼肌粒線體 / 肝臟粒線體進行 β-氧化
         arteryFfaToMuscleMito: [
-          { x: 960, y: 275 },
-          { x: 615, y: 295 },
-          { x: 515, y: 580 },
-          { x: 445, y: 660 }
+          { x: 958, y: 240 },
+          { x: 630, y: 268 },
+          { x: 554, y: 360 },
+          { x: 554, y: 670 },
+          { x: 412, y: 720 }
         ],
         arteryFfaToLiverMito: [
-          { x: 960, y: 275 },
-          { x: 1125, y: 315 },
-          { x: 1150, y: 615 },
-          { x: 1230, y: 650 }
+          { x: 958, y: 240 },
+          { x: 1120, y: 295 },
+          { x: 1145, y: 620 },
+          { x: 1228, y: 665 }
+        ],
+        // 4C. 肝臟糖質新生 / 肝醣分解葡萄糖 -> 釋入動脈血液並銜接輸往肌肉
+        liverGlucoseToArtery: [
+          { x: 1255, y: 385 },
+          { x: 1155, y: 255 },
+          { x: 1050, y: 255 }
+        ],
+        // 4D. 動脈葡萄糖 -> 經 GLUT4 通道進入骨骼肌糖解區
+        arteryGlucoseToMuscle: [
+          { x: 1050, y: 255 },
+          { x: 780, y: 255 },
+          { x: 575, y: 270 },
+          { x: 503, y: 393 },
+          { x: 385, y: 393 }
         ],
         // 5. 糖解產生丙酮酸 -> 丙酮酸分岔路口
         glycolysisToPyruvateFork: [
-          { x: 350, y: 405 },
-          { x: 350, y: 465 },
-          { x: 350, y: 505 }
+          { x: 348, y: 408 },
+          { x: 348, y: 478 }
         ],
-        // 6A. 丙酮酸分岔路口 -> 進入肌肉粒線體（有氧路徑！）
+        // 6A. 丙酮酸分岔路口 -> 進入肌肉粒線體（有氧路徑）
         pyruvateToMito: [
-          { x: 350, y: 505 },
-          { x: 350, y: 565 },
-          { x: 350, y: 625 }
+          { x: 348, y: 526 },
+          { x: 348, y: 598 }
         ],
-        // 6B. 丙酮酸分岔路口 -> 轉為乳酸經 MCT4 排入靜脈（無氧溢出路徑！）
+        // 6B. 丙酮酸分岔路口 -> 轉為乳酸經 MCT4 排入靜脈（無氧溢出路徑）
         pyruvateToLactateVein: [
-          { x: 350, y: 505 },
-          { x: 430, y: 510 },
-          { x: 505, y: 515 },
-          { x: 640, y: 515 },
-          { x: 780, y: 515 }
+          { x: 434, y: 503 },
+          { x: 503, y: 503 },
+          { x: 640, y: 508 },
+          { x: 780, y: 512 }
         ],
-        // 7A. 靜脈乳酸分流 -> 肝臟進行科里循環
+        // 7A. 靜脈乳酸分流 -> 經肝細胞 MCT1 進入科里循環
         veinLactateToLiver: [
-          { x: 780, y: 515 },
-          { x: 1010, y: 515 },
-          { x: 1140, y: 505 },
+          { x: 780, y: 512 },
+          { x: 1010, y: 512 },
+          { x: 1159, y: 495 },
           { x: 1235, y: 485 }
         ],
-        // 7B. 靜脈乳酸分流 -> 心肌 / 氧化型慢縮肌（乳酸穿梭）
+        // 7B. 靜脈乳酸分流 -> 經心肌 MCT1 進入乳酸穿梭
         veinLactateToHeart: [
-          { x: 780, y: 515 },
-          { x: 825, y: 580 },
+          { x: 780, y: 512 },
+          { x: 830, y: 558 },
+          { x: 840, y: 604 },
           { x: 840, y: 655 }
         ],
-        // 8. 肝臟糖質新生葡萄糖 -> 釋入動脈血液維持血糖
-        liverGlucoseToArtery: [
-          { x: 1255, y: 385 },
-          { x: 1155, y: 270 },
-          { x: 1010, y: 255 }
-        ],
-        // 9. 代謝廢物 CO₂ 從肌肉粒線體沿靜脈回流肺泡排出
+        // 8. 代謝廢物 CO₂ 從肌肉粒線體沿靜脈回流肺泡排出
         muscleCo2ToLungs: [
-          { x: 430, y: 715 },
-          { x: 545, y: 650 },
-          { x: 605, y: 475 },
-          { x: 605, y: 230 },
-          { x: 590, y: 145 }
+          { x: 412, y: 742 },
+          { x: 574, y: 680 },
+          { x: 574, y: 480 },
+          { x: 574, y: 153 }
         ],
 
         // === ATP 能量粒子視覺路徑 ===
         // A. PCr 系統 -> 肌原纖維收縮耗能區 (+1 ATP 快速爆發)
         atpFromPcrToMyofibril: [
-          { x: 280, y: 235 },
-          { x: 195, y: 275 },
+          { x: 224, y: 235 },
+          { x: 180, y: 280 },
           { x: 145, y: 375 }
         ],
-        // B. 無氧糖解 -> 肌原纖維收縮耗能區 (+2 ATP)
+        // B. 無氧糖解 -> 肌原纖維收縮耗能區 (+2/+3 ATP)
         atpFromGlyToMyofibril: [
-          { x: 275, y: 435 },
-          { x: 210, y: 440 },
-          { x: 165, y: 445 }
+          { x: 215, y: 400 },
+          { x: 185, y: 420 },
+          { x: 165, y: 442 }
         ],
         // C. 肌肉粒線體有氧系統 -> 肌原纖維收縮耗能區 (~30 ATP 高密度能量流)
         atpFromMitoToMyofibril: [
-          { x: 275, y: 675 },
-          { x: 185, y: 625 },
+          { x: 220, y: 680 },
+          { x: 175, y: 610 },
           { x: 145, y: 515 }
         ],
-        // D. 恢復期充電：肌肉粒線體有氧 ATP -> 回充 ATP-PCr 系統再生 PCr！
+        // D. 恢復期充電：肌肉粒線體有氧 ATP -> 回充 ATP-PCr 系統再生 PCr
         atpFromMitoToPcrRefill: [
-          { x: 415, y: 620 },
-          { x: 455, y: 435 },
-          { x: 415, y: 265 }
+          { x: 462, y: 600 },
+          { x: 478, y: 435 },
+          { x: 462, y: 265 }
         ],
-        // E. 肝臟粒線體 ATP -> 肝臟糖質新生反應（消耗 -6 ATP 代價！）
+        // E. 肝臟粒線體 ATP -> 肝臟糖質新生反應（消耗 -6 ATP 當量）
         atpFromLiverMitoToCori: [
           { x: 1380, y: 625 },
           { x: 1380, y: 565 },
@@ -769,18 +888,193 @@
         ]
       };
 
-      function spawnParticle(type, pathKey, speedFactor = 1, customOffset = null) {
-        if (particles.length > 420) return;
-        const pts = PATHS[pathKey];
-        if (!pts || pts.length < 2) return;
+      const PATH_META = {};
+      function initPathMeta() {
+        for (const [key, pts] of Object.entries(PATHS)) {
+          const segLens = [];
+          const cumLens = [0];
+          const segNormals = [];
+          let totalLen = 0;
+
+          for (let i = 0; i < pts.length - 1; i++) {
+            const dx = pts[i + 1].x - pts[i].x;
+            const dy = pts[i + 1].y - pts[i].y;
+            const len = Math.max(0.001, Math.hypot(dx, dy));
+            segLens.push(len);
+            totalLen += len;
+            cumLens.push(totalLen);
+            segNormals.push({ nx: -dy / len, ny: dx / len });
+          }
+
+          // 平滑頂點法向量，避免粒子在轉角處橫向跳格
+          const vNormals = [];
+          for (let i = 0; i < pts.length; i++) {
+            if (i === 0) {
+              vNormals.push({ ...segNormals[0] });
+            } else if (i === pts.length - 1) {
+              vNormals.push({ ...segNormals[segNormals.length - 1] });
+            } else {
+              const sx = segNormals[i - 1].nx + segNormals[i].nx;
+              const sy = segNormals[i - 1].ny + segNormals[i].ny;
+              const sl = Math.hypot(sx, sy);
+              if (sl > 0.01) {
+                vNormals.push({ nx: sx / sl, ny: sy / sl });
+              } else {
+                vNormals.push({ ...segNormals[i] });
+              }
+            }
+          }
+
+          PATH_META[key] = { pts, segLens, cumLens, totalLen, vNormals };
+        }
+      }
+
+      function evaluatePathPoint(pathKey, dist, offset) {
+        const meta = PATH_META[pathKey];
+        if (!meta) return null;
+        const clampedDist = clamp(dist, 0, meta.totalLen);
+        const { pts, segLens, cumLens, vNormals } = meta;
+        let seg = 0;
+        while (seg < segLens.length - 1 && clampedDist > cumLens[seg + 1]) {
+          seg++;
+        }
+        const localT = (clampedDist - cumLens[seg]) / segLens[seg];
+        const a = pts[seg];
+        const b = pts[seg + 1];
+        const bx = a.x + (b.x - a.x) * localT;
+        const by = a.y + (b.y - a.y) * localT;
+
+        const na = vNormals[seg];
+        const nb = vNormals[seg + 1];
+        let nx = na.nx + (nb.nx - na.nx) * localT;
+        let ny = na.ny + (nb.ny - na.ny) * localT;
+        const nl = Math.hypot(nx, ny) || 1;
+        nx /= nl;
+        ny /= nl;
+
+        return { x: bx + nx * offset, y: by + ny * offset };
+      }
+
+      // 離屏快取各分子發光貼圖（2x 超取樣），大幅降低主迴圈 shadowBlur 與文字繪製成本
+      const SPRITES = {};
+      function drawO2DumbbellRaw(c, x, y, r, showText) {
+        c.beginPath();
+        c.arc(x - r * 0.65, y, r, 0, Math.PI * 2);
+        c.fillStyle = '#22d3ee';
+        c.fill();
+        c.strokeStyle = '#ecfeff';
+        c.lineWidth = 1.2;
+        c.stroke();
+
+        c.beginPath();
+        c.arc(x + r * 0.65, y, r, 0, Math.PI * 2);
+        c.fillStyle = '#06b6d4';
+        c.fill();
+        c.stroke();
+
+        if (showText) {
+          c.shadowBlur = 0;
+          c.fillStyle = '#042f2e';
+          c.font = `bold ${Math.max(7, Math.round(r * 1.15))}px "Inter", sans-serif`;
+          c.textAlign = 'center';
+          c.textBaseline = 'middle';
+          c.fillText('O₂', x, y + 0.5);
+        }
+      }
+
+      function buildMoleculeSprites() {
+        const specs = [
+          { type: 'oxygen', r: 5.2, color: '#22d3ee', tag: 'O₂', textColor: '#042f2e', alwaysTag: false },
+          { type: 'glucose', r: 5.2, color: '#38bdf8', tag: 'G', textColor: '#060b19', alwaysTag: false },
+          { type: 'ffa', r: 5.6, color: '#fb923c', tag: 'FFA', textColor: '#060b19', alwaysTag: false },
+          { type: 'pyruvate', r: 5.2, color: '#c084fc', tag: 'Pyr', textColor: '#060b19', alwaysTag: false },
+          { type: 'lactate', r: 5.2, color: '#f59e0b', tag: 'L', textColor: '#060b19', alwaysTag: false },
+          { type: 'co2', r: 5.2, color: '#94a3b8', tag: 'CO₂', textColor: '#060b19', alwaysTag: false },
+          { type: 'atp', r: 6.0, color: '#fde047', tag: '⚡', textColor: '#0f172a', alwaysTag: true },
+          { type: 'atp_cost', r: 6.0, color: '#fb7185', tag: '-P', textColor: '#0f172a', alwaysTag: true }
+        ];
+
+        const oversample = 2;
+        const logicalSize = 56;
+        const half = logicalSize / 2;
+
+        for (const s of specs) {
+          SPRITES[s.type] = {};
+          for (const variant of ['normal', 'labeled', 'boosted']) {
+            const off = document.createElement('canvas');
+            off.width = logicalSize * oversample;
+            off.height = logicalSize * oversample;
+            const oc = off.getContext('2d');
+            oc.scale(oversample, oversample);
+            oc.translate(half, half);
+
+            const isBoosted = variant === 'boosted';
+            const showText = s.alwaysTag || variant === 'labeled' || isBoosted;
+            const rad = isBoosted ? s.r * 1.28 : s.r;
+
+            oc.shadowColor = s.color;
+            oc.shadowBlur = isBoosted ? 20 : (s.type === 'atp' || s.type === 'atp_cost' ? 14 : 10);
+
+            if (s.type === 'oxygen') {
+              drawO2DumbbellRaw(oc, 0, 0, rad, showText);
+            } else {
+              oc.beginPath();
+              oc.arc(0, 0, rad, 0, Math.PI * 2);
+              oc.fillStyle = s.color;
+              oc.fill();
+
+              if (s.alwaysTag || isBoosted) {
+                oc.lineWidth = isBoosted ? 1.6 : 1.2;
+                oc.strokeStyle = '#ffffff';
+                oc.stroke();
+              }
+
+              if (showText) {
+                oc.shadowBlur = 0;
+                oc.fillStyle = s.textColor;
+                const fontSize = s.alwaysTag ? 7.5 : (isBoosted ? 7.2 : 6.4);
+                oc.font = `bold ${fontSize}px "Inter", sans-serif`;
+                oc.textAlign = 'center';
+                oc.textBaseline = 'middle';
+                oc.fillText(s.tag, 0, 0.5);
+              }
+            }
+
+            SPRITES[s.type][variant] = { canvas: off, size: logicalSize, half };
+          }
+        }
+      }
+
+      const TYPE_CAPS = {
+        oxygen: 65,
+        glucose: 65,
+        ffa: 65,
+        pyruvate: 65,
+        lactate: 75,
+        co2: 60,
+        atp: 120,
+        atp_cost: 40
+      };
+
+      function countParticlesOfType(type) {
+        let count = 0;
+        for (let i = 0; i < particles.length; i++) {
+          if (particles[i].type === type) count++;
+        }
+        return count;
+      }
+
+      function spawnParticle(type, pathKey, speedFactor = 1, customOffset = null, initialRatio = 0) {
+        const cap = TYPE_CAPS[type] || 65;
+        if (countParticlesOfType(type) >= cap) return;
+        const meta = PATH_META[pathKey];
+        if (!meta) return;
         particles.push({
           type, // 'glucose' | 'ffa' | 'pyruvate' | 'lactate' | 'oxygen' | 'co2' | 'atp' | 'atp_cost'
-          path: pts,
-          seg: 0,
-          t: Math.random() * 0.12,
-          speed: (0.34 + Math.random() * 0.14) * speedFactor,
-          offset: customOffset !== null ? customOffset : (Math.random() - 0.5) * 14,
-          radius: type === 'oxygen' ? 5.2 : type === 'atp' || type === 'atp_cost' ? 6.0 : type === 'ffa' ? 5.6 : 5.2
+          pathKey,
+          dist: clamp(initialRatio, 0, 0.92) * meta.totalLen,
+          pxSpeed: (115 + Math.random() * 35) * speedFactor,
+          offset: customOffset !== null ? customOffset : (Math.random() - 0.5) * 14
         });
       }
 
@@ -800,84 +1094,86 @@
       // 4. 預設運動情境與物理生理微分方程更新
       // ==========================================
       const PRESETS = {
-        rest: { intensity: 8, label: '靜止／休息' },
-        jog: { intensity: 35, label: '有氧慢跑' },
-        sprint100: { intensity: 98, label: '100m 衝刺' },
-        sprint400: { intensity: 82, label: '400m 衝刺' },
-        epoc: { intensity: 14, label: '運動後恢復 (EPOC)' }
+        rest: {
+          intensity: 8,
+          label: '靜止／休息',
+          short: '靜止',
+          color: '#94a3b8',
+          pcrStore: 98,
+          muscleGlycogen: 92,
+          bloodLactate: 1.1,
+          bloodGlucose: 92,
+          liverGlycogen: 88,
+          rateAer: 12
+        },
+        jog: {
+          intensity: 35,
+          label: '有氧慢跑',
+          short: '慢跑',
+          color: '#2dd4bf',
+          pcrStore: 92,
+          muscleGlycogen: 88,
+          bloodLactate: 1.4,
+          bloodGlucose: 92,
+          liverGlycogen: 85,
+          rateAer: 35
+        },
+        sprint100: {
+          intensity: 98,
+          label: '100m 衝刺',
+          short: '100m',
+          color: '#e879f9',
+          pcrStore: 98,
+          muscleGlycogen: 90,
+          bloodLactate: 1.2,
+          bloodGlucose: 94,
+          liverGlycogen: 86,
+          rateAer: 15
+        },
+        sprint400: {
+          intensity: 82,
+          label: '400m 衝刺',
+          short: '400m',
+          color: '#f59e0b',
+          pcrStore: 34,
+          muscleGlycogen: 72,
+          bloodLactate: 6.5,
+          bloodGlucose: 96,
+          liverGlycogen: 78,
+          rateAer: 38
+        },
+        marathon: {
+          intensity: 58,
+          label: '馬拉松後期',
+          short: '撞牆期',
+          color: '#fb923c',
+          pcrStore: 86,
+          muscleGlycogen: 14,
+          bloodLactate: 2.3,
+          bloodGlucose: 76,
+          liverGlycogen: 24,
+          rateAer: 46
+        },
+        epoc: {
+          intensity: 14,
+          label: '運動後恢復 (EPOC)',
+          short: 'EPOC',
+          color: '#38bdf8',
+          pcrStore: 36,
+          muscleGlycogen: 64,
+          bloodLactate: 8.8,
+          bloodGlucose: 89,
+          liverGlycogen: 66,
+          rateAer: 42
+        }
       };
 
-      function applyPreset(key) {
-        const p = PRESETS[key];
-        if (!p) return;
-        sim.preset = key;
-        sim.intensity = p.intensity;
-        ui.sliderIntensity.value = p.intensity;
-
-        if (key === 'sprint100') {
-          sim.pcrStore = Math.max(sim.pcrStore, 95);
-          sim.highIntensityTimer = 0;
-        } else if (key === 'sprint400') {
-          sim.pcrStore = Math.min(sim.pcrStore, 35);
-          sim.bloodLactate = Math.max(sim.bloodLactate, 6.5);
-          sim.highIntensityTimer = 14;
-        } else if (key === 'epoc') {
-          sim.bloodLactate = Math.max(sim.bloodLactate, 8.8);
-          sim.pcrStore = Math.min(sim.pcrStore, 40);
-          sim.highIntensityTimer = 0;
-        } else if (key === 'rest') {
-          sim.highIntensityTimer = 0;
-        }
-
-        updatePresetButtonsUI();
-        updateIntensityLabel();
-      }
-
-      function updatePresetButtonsUI() {
-        ui.presetBtns.forEach(btn => {
-          const isActive = btn.dataset.preset === sim.preset;
-          if (isActive) {
-            btn.className = 'preset-btn min-h-[44px] px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap border transition bg-sky-500/25 border-sky-400 text-sky-200 shadow-[0_0_12px_rgba(56,189,248,0.25)]';
-          } else {
-            btn.className = 'preset-btn min-h-[44px] px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap border transition bg-slate-900/85 border-slate-700/80 text-slate-300 hover:bg-slate-800';
-          }
-        });
-      }
-
-      function updateIntensityLabel() {
-        const v = sim.intensity;
-        let desc = '低強度活動';
-        if (sim.preset === 'epoc' && v <= 20) desc = '運動後恢復 (EPOC)';
-        else if (v <= 15) desc = '靜止／基礎代謝';
-        else if (v <= 45) desc = '有氧耐力區間';
-        else if (v <= 72) desc = '乳酸閾值／混氧區';
-        else if (v <= 90) desc = '無氧糖解高強度';
-        else desc = '極限爆發衝刺';
-        ui.intensityVal.textContent = `${v}% · ${desc}`;
-      }
-
-      function resetSimulation() {
-        sim.time = 0;
-        sim.highIntensityTimer = 0;
-        sim.pcrStore = 92;
-        sim.muscleGlycogen = 88;
-        sim.bloodLactate = 1.4;
-        sim.bloodGlucose = 92;
-        sim.liverGlycogen = 85;
-        sim.history = [];
-        particles.length = 0;
-        floatingPulses.length = 0;
-        if (sim.preset === 'epoc') {
-          sim.bloodLactate = 9.2;
-          sim.pcrStore = 35;
-        }
-      }
-
-      let particleSpawnAccum = {
+      const particleSpawnAccum = {
         glc: 0,
         ffa: 0,
         oxyLung: 0,
         pyr: 0,
+        veinLactate: 0,
         liverGlc: 0,
         co2: 0,
         atpPcr: 0,
@@ -888,71 +1184,196 @@
       };
       let pulseSpawnAccum = 0;
 
+      function clearSpawnAccumulators() {
+        for (const k of Object.keys(particleSpawnAccum)) {
+          particleSpawnAccum[k] = 0;
+        }
+        pulseSpawnAccum = 0;
+      }
+
+      function computePhysiologyState(dtForAer) {
+        const I = sim.intensity / 100; // 0 ~ 1
+        const epocBonus = (sim.preset === 'epoc' || (I < 0.25 && sim.bloodLactate > 2.2))
+          ? Math.min(18, (sim.bloodLactate - 1.0) * 2.2)
+          : 0;
+
+        // 總 ATP 需求基準速率 (mmol/min 概念值: 靜止 ~15, 滿載衝刺 ~140)
+        const baseDemand = 12 + Math.pow(I, 1.45) * 128 + epocBonus;
+
+        // 1. 磷化物系統 (ATP-PCr) 出力：高強度瞬間衝高，隨 PCr 存量下降而衰減
+        const pcrActivation = Math.pow(Math.max(0, (I - 0.30) / 0.70), 1.6);
+        const pcrAvailability = Math.max(0.04, sim.pcrStore / 100);
+        const rawPcr = baseDemand * 0.78 * pcrActivation * pcrAvailability;
+
+        // 2. 有氧系統出力：具備真實 VO2 動力學時間常數 (τ ≈ 14s 爬升 / 18s 下降)
+        const aerobicCeiling = 56 + epocBonus * 1.3;
+        const aerobicTarget = Math.min(aerobicCeiling, 11 + I * 72 + epocBonus);
+        const rawAer = dtForAer > 0
+          ? sim.rateAer + (aerobicTarget - sim.rateAer) * (1 - Math.exp(-dtForAer / (aerobicTarget > sim.rateAer ? 14.0 : 18.0)))
+          : sim.rateAer;
+
+        // 3. 無氧糖解系統補齊剩餘高強度能量缺口（受肌肝醣耗竭限制）
+        const remainingDemand = Math.max(0.8, baseDemand - rawPcr - rawAer);
+        const glyFactor = clamp(0.25 + 0.75 * (sim.muscleGlycogen / 45), 0.25, 1.0);
+        const rawGly = (remainingDemand * (0.35 + 0.65 * I) + Math.pow(I, 2.2) * 28) * glyFactor;
+
+        const sumRates = Math.max(0.001, rawPcr + rawGly + rawAer);
+        sim.ratePcr = rawPcr;
+        sim.rateGly = rawGly;
+        sim.rateAer = rawAer;
+        sim.totalAtpDemand = sumRates;
+
+        sim.sharePcr = (rawPcr / sumRates) * 100;
+        sim.shareGly = (rawGly / sumRates) * 100;
+        sim.shareAer = (rawAer / sumRates) * 100;
+
+        // 有機燃料交錯概念 (Crossover)：排除 PCr，僅以有氧與糖解之醣類 vs 脂質計算；
+        // 當肌肝醣低於 50% 時會逐步提高脂質依賴（耐力後期撞牆效應）
+        const glycogenDepletionBoost = clamp((50 - sim.muscleGlycogen) / 50, 0, 1) * 0.24;
+        const aerobicFatFraction = clamp(
+          0.74 - Math.pow(I, 1.35) * 0.68 + (epocBonus > 2 ? 0.14 : 0) + glycogenDepletionBoost,
+          0.05,
+          0.86
+        );
+        const organicSum = Math.max(0.001, rawAer + rawGly);
+        const fatPctRaw = ((rawAer * aerobicFatFraction) / organicSum) * 100;
+        sim.fatFuelPct = Math.round(clamp(fatPctRaw, 2, 85));
+        sim.carbFuelPct = 100 - sim.fatFuelPct;
+
+        // 清除速率與通量
+        const pcrDrain = (rawPcr / 65) * 11.5;
+        const pcrRecovery = (100 - sim.pcrStore) * (0.045 + (1 - I) * 0.14);
+        const lactateProd = Math.max(0, (rawGly - 6) * 0.032);
+        const excessLactate = Math.max(0, sim.bloodLactate - 1.0);
+        const heartClearance = excessLactate * (0.09 + (1 - I) * 0.08);
+        const liverClearance = excessLactate * (0.07 + (1 - I) * 0.07);
+        const liverGlycogenolysis = (sim.liverGlycogen > 10 && sim.bloodGlucose < 96)
+          ? (96 - sim.bloodGlucose) * 0.08 + I * 0.35
+          : 0.08;
+
+        sim.coriAtpCostRate = liverClearance * 22;
+        sim.fluxGlucoseToMuscle = clamp(0.25 + I * 0.95, 0.2, 1.4);
+        sim.fluxFfaToMito = clamp((sim.fatFuelPct / 100) * 1.45, 0.08, 1.3);
+        sim.fluxOxygenToMuscle = clamp(0.25 + (rawAer / 65) * 1.1, 0.2, 1.4);
+        sim.fluxLactateToBlood = clamp(lactateProd * 1.6, 0.02, 1.5);
+        sim.fluxLactateToHeart = clamp(heartClearance * 1.3, 0.03, 1.2);
+        sim.fluxLactateToLiver = clamp(liverClearance * 1.4, 0.03, 1.3);
+        sim.fluxLiverGluconeogenesis = clamp((liverClearance * 1.3 + liverGlycogenolysis * 0.3), 0.1, 1.3);
+        sim.pcrRefillRate = clamp(pcrRecovery / 6, 0, 1.2);
+
+        return { I, pcrDrain, pcrRecovery, lactateProd, heartClearance, liverClearance, liverGlycogenolysis };
+      }
+
+      function applyPreset(key, options = {}) {
+        const p = PRESETS[key];
+        if (!p) return;
+        const { recordMarker = true } = options;
+
+        sim.preset = key;
+        sim.lastPreset = key;
+        sim.intensity = p.intensity;
+        ui.sliderIntensity.value = p.intensity;
+
+        sim.pcrStore = p.pcrStore;
+        sim.muscleGlycogen = p.muscleGlycogen;
+        sim.bloodLactate = p.bloodLactate;
+        sim.bloodGlucose = p.bloodGlucose;
+        sim.liverGlycogen = p.liverGlycogen;
+        sim.rateAer = p.rateAer;
+
+        if (recordMarker && sim.history.length > 0) {
+          sim.presetMarkers.push({
+            idx: sim.history.length - 1,
+            label: p.short,
+            color: p.color
+          });
+        }
+
+        computePhysiologyState(0);
+        updatePresetButtonsUI();
+        updateIntensityLabel();
+        updateDashboardUI();
+      }
+
+      function updatePresetButtonsUI() {
+        ui.presetBtns.forEach(btn => {
+          const isActive = btn.dataset.preset === sim.preset;
+          if (isActive) {
+            btn.className = 'preset-btn min-h-[40px] sm:min-h-[42px] px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap border transition bg-sky-500/25 border-sky-400 text-sky-200 shadow-[0_0_12px_rgba(56,189,248,0.25)]';
+          } else {
+            btn.className = 'preset-btn min-h-[40px] sm:min-h-[42px] px-3 py-1.5 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap border transition bg-slate-900/85 border-slate-700/80 text-slate-300 hover:bg-slate-800';
+          }
+        });
+      }
+
+      function updateIntensityLabel() {
+        const v = sim.intensity;
+        let desc = '低強度活動';
+        if (sim.preset === 'epoc' && v <= 20) desc = '運動後恢復 (EPOC)';
+        else if (sim.preset === 'marathon' || sim.muscleGlycogen < 25) desc = '耐力後期／肝醣偏低';
+        else if (v <= 15) desc = '靜止／基礎代謝';
+        else if (v <= 45) desc = '有氧耐力區間';
+        else if (v <= 72) desc = '乳酸閾值／混氧區';
+        else if (v <= 90) desc = '無氧糖解高強度';
+        else desc = '極限爆發衝刺';
+        ui.intensityVal.textContent = `${v}% · ${desc}`;
+      }
+
+      function resetSimulation() {
+        sim.time = 0;
+        sim.history = [];
+        sim.presetMarkers = [];
+        sim.historyTimer = 0;
+        particles.length = 0;
+        floatingPulses.length = 0;
+        clearSpawnAccumulators();
+
+        const targetPreset = sim.preset === 'custom' ? (sim.lastPreset || 'jog') : sim.preset;
+        applyPreset(targetPreset, { recordMarker: false });
+        seedInitialParticles();
+      }
+
+      function seedInitialParticles() {
+        for (let i = 0; i < 14; i++) {
+          const r = i / 14;
+          spawnParticle('oxygen', 'lungsOxygenToArtery', 1, null, r);
+          spawnParticle('oxygen', 'arteryOxygenToMuscleMito', 1, null, r);
+          spawnParticle('glucose', 'arteryGlucoseToMuscle', 1, null, r);
+          spawnParticle('ffa', 'adiposeFfaToArtery', 0.9, null, r);
+          spawnParticle('ffa', 'arteryFfaToMuscleMito', 0.9, null, r);
+          spawnParticle('pyruvate', 'glycolysisToPyruvateFork', 1, null, r);
+          spawnParticle('atp', 'atpFromMitoToMyofibril', 1.1, null, r);
+          spawnParticle('glucose', 'liverGlucoseToArtery', 0.9, null, r);
+          if (sim.bloodLactate > 2.2) {
+            spawnParticle('lactate', 'veinLactateToLiver', 0.9, null, r);
+            spawnParticle('lactate', 'veinLactateToHeart', 0.9, null, r);
+          }
+        }
+      }
+
       function stepSimulation(dt) {
         if (!sim.running) return;
         const scaledDt = dt * sim.speed;
         sim.time += scaledDt;
         sim.pulsePhase += scaledDt * 3.4;
 
-        const I = sim.intensity / 100; // 0 ~ 1
-        if (I > 0.7) {
-          sim.highIntensityTimer += scaledDt;
-        } else {
-          sim.highIntensityTimer = Math.max(0, sim.highIntensityTimer - scaledDt * 1.5);
-        }
-
-        // 總 ATP 需求速率 (mmol/min 概念值: 靜止 ~12, 滿載 ~140)
-        const epocBonus = (sim.preset === 'epoc' || (I < 0.25 && sim.bloodLactate > 2.2))
-          ? Math.min(18, (sim.bloodLactate - 1.0) * 2.2)
-          : 0;
-        const totalDemand = 12 + Math.pow(I, 1.45) * 128 + epocBonus;
-        sim.totalAtpDemand = totalDemand;
-
-        // 1. 磷化物系統 (ATP-PCr) 出力：極高強度瞬間衝高，隨 PCr 存量下降而衰減
-        const pcrActivation = Math.pow(Math.max(0, (I - 0.35) / 0.65), 1.6);
-        const pcrAvailability = Math.max(0.04, sim.pcrStore / 100);
-        let rawPcr = totalDemand * 0.78 * pcrActivation * pcrAvailability;
-
-        // 2. 有氧系統出力：隨運動強度上升但受限於粒線體與最大攝氧上限
-        const aerobicCeiling = 54 + epocBonus * 1.3;
-        const aerobicTarget = Math.min(aerobicCeiling, 11 + I * 68 + epocBonus);
-        const rawAer = sim.rateAer + (aerobicTarget - sim.rateAer) * Math.min(1, scaledDt * 1.4);
-
-        // 3. 無氧糖解系統補齊剩餘高強度能量缺口
-        const remainingDemand = Math.max(1.2, totalDemand - rawPcr - rawAer);
-        const glyAvailability = Math.max(0.1, sim.muscleGlycogen / 100);
-        const rawGly = (remainingDemand * (0.35 + 0.65 * I) + Math.pow(I, 2.2) * 28) * glyAvailability;
-
-        const sumRates = Math.max(0.001, rawPcr + rawGly + rawAer);
-        sim.ratePcr = rawPcr;
-        sim.rateGly = rawGly;
-        sim.rateAer = rawAer;
-
-        sim.sharePcr = (rawPcr / sumRates) * 100;
-        sim.shareGly = (rawGly / sumRates) * 100;
-        sim.shareAer = (rawAer / sumRates) * 100;
-
-        // 計算醣類 vs 脂質燃料消耗比例 (Crossover Concept)：
-        // 低強度時有氧氧化以脂質 (FFA) 為主；高強度時脂質分解受抑制、醣類 (肝醣+血糖) 佔比飆升
-        const aerobicFatFraction = clamp(0.74 - Math.pow(I, 1.35) * 0.66 + (epocBonus > 2 ? 0.14 : 0), 0.05, 0.78);
-        const fatShare = clamp(sim.shareAer * aerobicFatFraction, 2, 75);
-        const carbShare = Math.max(0, 100 - fatShare);
-        sim.fatFuelPct = Math.round(fatShare);
-        sim.carbFuelPct = Math.round(carbShare);
+        const {
+          I,
+          pcrDrain,
+          pcrRecovery,
+          lactateProd,
+          heartClearance,
+          liverClearance,
+          liverGlycogenolysis
+        } = computePhysiologyState(scaledDt);
 
         // 更新生理存量微分方程
-        const pcrDrain = (rawPcr / 65) * 11.5;
-        const pcrRecovery = (100 - sim.pcrStore) * (0.045 + (1 - I) * 0.14);
         sim.pcrStore = clamp(sim.pcrStore + (pcrRecovery - pcrDrain) * scaledDt, 4, 100);
 
-        const glyDrain = (rawGly * 0.018 + rawAer * 0.005 * I);
+        const glyDrain = (sim.rateGly * 0.018 + sim.rateAer * 0.005 * I);
         const glyRefill = (I < 0.2 && sim.bloodGlucose > 85) ? 0.05 : 0;
         sim.muscleGlycogen = clamp(sim.muscleGlycogen + (glyRefill - glyDrain) * scaledDt, 5, 100);
 
-        const lactateProd = Math.max(0, (rawGly - 6) * 0.032);
-        const excessLactate = Math.max(0, sim.bloodLactate - 1.0);
-        const heartClearance = excessLactate * (0.09 + (1 - I) * 0.08);
-        const liverClearance = excessLactate * (0.07 + (1 - I) * 0.07);
         sim.bloodLactate = clamp(
           sim.bloodLactate + (lactateProd - heartClearance - liverClearance) * scaledDt,
           0.9,
@@ -960,113 +1381,116 @@
         );
 
         const muscleGlucoseUptake = (0.12 + I * 0.65);
-        const liverGlycogenolysis = (sim.liverGlycogen > 10 && sim.bloodGlucose < 96)
-          ? (96 - sim.bloodGlucose) * 0.08 + I * 0.35
-          : 0.08;
         const coriGlucoseOutput = liverClearance * 3.8;
         sim.bloodGlucose = clamp(
           sim.bloodGlucose + (liverGlycogenolysis + coriGlucoseOutput - muscleGlucoseUptake) * scaledDt,
           62,
           135
         );
+
+        // 靜止低強度且血糖正常時保持肝醣動態平衡，避免無意義耗竭
+        const basalBalance = (I <= 0.15 && sim.bloodGlucose >= 86) ? (88 - sim.liverGlycogen) * 0.015 : 0;
+        const liverGlyDrain = (I <= 0.15 && sim.bloodGlucose >= 88) ? 0.005 : liverGlycogenolysis * 0.14;
         sim.liverGlycogen = clamp(
-          sim.liverGlycogen + (coriGlucoseOutput * 0.04 - liverGlycogenolysis * 0.14) * scaledDt,
+          sim.liverGlycogen + (coriGlucoseOutput * 0.04 + basalBalance - liverGlyDrain) * scaledDt,
           8,
           100
         );
 
-        // 更新通量係數供視覺化渲染
-        sim.fluxGlucoseToMuscle = clamp(0.25 + I * 0.95, 0.2, 1.4);
-        sim.fluxFfaToMito = clamp((sim.fatFuelPct / 100) * 1.45, 0.08, 1.3);
-        sim.fluxOxygenToMuscle = clamp(0.25 + (rawAer / 65) * 1.1, 0.2, 1.4);
-        sim.fluxLactateToBlood = clamp(lactateProd * 1.6, 0.05, 1.5);
-        sim.fluxLactateToHeart = clamp(heartClearance * 1.3, 0.05, 1.2);
-        sim.fluxLactateToLiver = clamp(liverClearance * 1.4, 0.05, 1.3);
-        sim.fluxLiverGluconeogenesis = clamp((liverClearance * 1.3 + liverGlycogenolysis * 0.3), 0.1, 1.3);
-        sim.pcrRefillRate = clamp(pcrRecovery / 6, 0, 1.2);
-
         // 1. 肺泡攝入雙原子 O₂ 粒子
-        particleSpawnAccum.oxyLung += scaledDt * (1.8 + sim.fluxOxygenToMuscle * 4.5);
-        if (particleSpawnAccum.oxyLung >= 1) {
+        particleSpawnAccum.oxyLung = Math.min(3, particleSpawnAccum.oxyLung + scaledDt * (1.8 + sim.fluxOxygenToMuscle * 4.2));
+        while (particleSpawnAccum.oxyLung >= 1) {
           particleSpawnAccum.oxyLung -= 1;
           spawnParticle('oxygen', 'lungsOxygenToArtery', 0.95 + sim.fluxOxygenToMuscle * 0.5);
         }
 
         // 2. 動脈葡萄糖進入骨骼肌糖解區
-        particleSpawnAccum.glc += scaledDt * (1.0 + sim.fluxGlucoseToMuscle * 3.0);
-        if (particleSpawnAccum.glc >= 1) {
+        particleSpawnAccum.glc = Math.min(3, particleSpawnAccum.glc + scaledDt * (0.9 + sim.fluxGlucoseToMuscle * 2.8));
+        while (particleSpawnAccum.glc >= 1) {
           particleSpawnAccum.glc -= 1;
           spawnParticle('glucose', 'arteryGlucoseToMuscle', 0.85 + sim.fluxGlucoseToMuscle * 0.55);
         }
 
-        // 2B. 游離脂肪酸 (FFA 脂質) 進入肌肉粒線體與肝臟粒線體（低強度／EPOC 時活躍，衝刺時減少）
-        particleSpawnAccum.ffa += scaledDt * (0.4 + sim.fluxFfaToMito * 2.8);
-        if (particleSpawnAccum.ffa >= 1) {
+        // 2B. 脂肪組織脂解產生游離脂肪酸 (FFA) 入動脈
+        particleSpawnAccum.ffa = Math.min(3, particleSpawnAccum.ffa + scaledDt * (0.45 + sim.fluxFfaToMito * 2.8));
+        while (particleSpawnAccum.ffa >= 1) {
           particleSpawnAccum.ffa -= 1;
-          const toMuscle = Math.random() < 0.72;
-          spawnParticle('ffa', toMuscle ? 'arteryFfaToMuscleMito' : 'arteryFfaToLiverMito', 0.8 + sim.fluxFfaToMito * 0.45);
+          spawnParticle('ffa', 'adiposeFfaToArtery', 0.85 + sim.fluxFfaToMito * 0.45);
         }
 
         // 3. 糖解產生丙酮酸（Pyruvate）前往分岔路口
-        const totalGlycolyticFlux = (rawGly * 0.08 + rawAer * 0.05);
-        particleSpawnAccum.pyr += scaledDt * (1.0 + totalGlycolyticFlux * 0.9);
-        if (particleSpawnAccum.pyr >= 1) {
+        const totalGlycolyticFlux = (sim.rateGly * 0.08 + sim.rateAer * 0.05);
+        particleSpawnAccum.pyr = Math.min(3, particleSpawnAccum.pyr + scaledDt * (0.9 + totalGlycolyticFlux * 0.85));
+        while (particleSpawnAccum.pyr >= 1) {
           particleSpawnAccum.pyr -= 1;
           spawnParticle('pyruvate', 'glycolysisToPyruvateFork', 1.15);
         }
 
-        // 4. 肝臟糖質新生葡萄糖釋入動脈
-        particleSpawnAccum.liverGlc += scaledDt * (0.5 + sim.fluxLiverGluconeogenesis * 2.6);
-        if (particleSpawnAccum.liverGlc >= 1) {
+        // 3B. EPOC / 既有血乳酸池清除：直接於靜脈端生成乳酸流向肝臟與心肌（避免有氧恢復期靜脈無乳酸粒子）
+        const totalClearanceFlux = sim.fluxLactateToLiver + sim.fluxLactateToHeart;
+        const clearanceExcess = Math.max(0, totalClearanceFlux - sim.fluxLactateToBlood * 0.45);
+        if (sim.bloodLactate > 1.25 && clearanceExcess > 0.02) {
+          particleSpawnAccum.veinLactate = Math.min(3, particleSpawnAccum.veinLactate + scaledDt * (clearanceExcess * 2.8));
+          while (particleSpawnAccum.veinLactate >= 1) {
+            particleSpawnAccum.veinLactate -= 1;
+            const heartProb = sim.fluxLactateToHeart / Math.max(0.01, totalClearanceFlux);
+            const targetPath = Math.random() < heartProb ? 'veinLactateToHeart' : 'veinLactateToLiver';
+            spawnParticle('lactate', targetPath, 0.85 + totalClearanceFlux * 0.35);
+          }
+        }
+
+        // 4. 肝臟糖質新生 / 肝醣分解葡萄糖釋入動脈
+        particleSpawnAccum.liverGlc = Math.min(3, particleSpawnAccum.liverGlc + scaledDt * (0.5 + sim.fluxLiverGluconeogenesis * 2.5));
+        while (particleSpawnAccum.liverGlc >= 1) {
           particleSpawnAccum.liverGlc -= 1;
           spawnParticle('glucose', 'liverGlucoseToArtery', 0.8 + sim.fluxLiverGluconeogenesis * 0.5);
         }
 
         // 5. 有氧代謝廢物 CO₂ 返回肺部排出
-        particleSpawnAccum.co2 += scaledDt * (0.6 + sim.fluxOxygenToMuscle * 2.4);
-        if (particleSpawnAccum.co2 >= 1) {
+        particleSpawnAccum.co2 = Math.min(3, particleSpawnAccum.co2 + scaledDt * (0.6 + sim.fluxOxygenToMuscle * 2.2));
+        while (particleSpawnAccum.co2 >= 1) {
           particleSpawnAccum.co2 -= 1;
           spawnParticle('co2', 'muscleCo2ToLungs', 0.8 + sim.fluxOxygenToMuscle * 0.45);
         }
 
-        // 6. 【核心升級】三大系統直接噴發金色 ATP 能量粒子至肌原纖維收縮區！
-        // (a) ATP-PCr 系統：爆發性單顆快速 ATP 粒子
-        particleSpawnAccum.atpPcr += scaledDt * (rawPcr * 0.16);
-        if (particleSpawnAccum.atpPcr >= 1) {
+        // 6. 三大系統直接噴發金色 ATP 能量粒子至肌原纖維收縮區
+        // (a) ATP-PCr 系統：爆發性快速 ATP 粒子
+        particleSpawnAccum.atpPcr = Math.min(3, particleSpawnAccum.atpPcr + scaledDt * (sim.ratePcr * 0.14));
+        while (particleSpawnAccum.atpPcr >= 1) {
           particleSpawnAccum.atpPcr -= 1;
           spawnParticle('atp', 'atpFromPcrToMyofibril', 1.65, (Math.random() - 0.5) * 10);
         }
 
         // (b) 無氧糖解系統：成對 2 ATP 粒子流
-        particleSpawnAccum.atpGly += scaledDt * (rawGly * 0.09);
-        if (particleSpawnAccum.atpGly >= 1) {
+        particleSpawnAccum.atpGly = Math.min(3, particleSpawnAccum.atpGly + scaledDt * (sim.rateGly * 0.085));
+        while (particleSpawnAccum.atpGly >= 1) {
           particleSpawnAccum.atpGly -= 1;
           spawnParticle('atp', 'atpFromGlyToMyofibril', 1.25, -5);
           spawnParticle('atp', 'atpFromGlyToMyofibril', 1.22, 5);
         }
 
-        // (c) 有氧粒線體系統：高產能密集 ATP 粒子噴泉（一次噴發 3~4 顆象徵 ~30 ATP 高倍率！）
-        particleSpawnAccum.atpAer += scaledDt * (rawAer * 0.085);
-        if (particleSpawnAccum.atpAer >= 1) {
+        // (c) 有氧粒線體系統：高產能密集 ATP 粒子噴泉
+        particleSpawnAccum.atpAer = Math.min(3, particleSpawnAccum.atpAer + scaledDt * (sim.rateAer * 0.08));
+        while (particleSpawnAccum.atpAer >= 1) {
           particleSpawnAccum.atpAer -= 1;
           spawnParticle('atp', 'atpFromMitoToMyofibril', 1.15, -10);
           spawnParticle('atp', 'atpFromMitoToMyofibril', 1.20, 0);
           spawnParticle('atp', 'atpFromMitoToMyofibril', 1.12, 10);
         }
 
-        // (d) 恢復期 / 低強度：粒線體 ATP 回充 ATP-PCr 系統再生 PCr！
+        // (d) 恢復期 / 低強度：粒線體 ATP 回充 ATP-PCr 系統再生 PCr
         if (sim.pcrStore < 97 && I < 0.55) {
-          particleSpawnAccum.atpRefill += scaledDt * (0.8 + sim.pcrRefillRate * 2.5);
-          if (particleSpawnAccum.atpRefill >= 1) {
+          particleSpawnAccum.atpRefill = Math.min(3, particleSpawnAccum.atpRefill + scaledDt * (0.8 + sim.pcrRefillRate * 2.5));
+          while (particleSpawnAccum.atpRefill >= 1) {
             particleSpawnAccum.atpRefill -= 1;
             spawnParticle('atp', 'atpFromMitoToPcrRefill', 1.1, 0);
           }
         }
 
-        // (e) 肝臟粒線體消耗 -6 ATP 進入糖質新生！
-        if (sim.fluxLactateToLiver > 0.12) {
-          particleSpawnAccum.atpLiverCost += scaledDt * (0.9 + sim.fluxLactateToLiver * 2.8);
-          if (particleSpawnAccum.atpLiverCost >= 1) {
+        // (e) 肝臟粒線體消耗 -6 ATP 當量進入糖質新生
+        if (sim.fluxLactateToLiver > 0.10) {
+          particleSpawnAccum.atpLiverCost = Math.min(3, particleSpawnAccum.atpLiverCost + scaledDt * (0.8 + sim.fluxLactateToLiver * 2.6));
+          while (particleSpawnAccum.atpLiverCost >= 1) {
             particleSpawnAccum.atpLiverCost -= 1;
             spawnParticle('atp_cost', 'atpFromLiverMitoToCori', 1.1, -6);
             spawnParticle('atp_cost', 'atpFromLiverMitoToCori', 1.05, 6);
@@ -1075,63 +1499,66 @@
 
         // 局部 ATP 生成／消耗文字脈衝
         pulseSpawnAccum += scaledDt;
-        if (pulseSpawnAccum >= 0.85) {
+        if (pulseSpawnAccum >= 0.9) {
           pulseSpawnAccum = 0;
           if (sim.sharePcr > 16) {
-            spawnPulseText(265, 200, '⚡ +1 ATP (PCr放電)', '#f0abfc');
+            spawnPulseText(265, 198, '⚡ +1 ATP (PCr放電)', '#f0abfc');
           } else if (sim.pcrStore < 95 && I < 0.5) {
-            spawnPulseText(420, 320, '⚡ ATP 回充再生 PCr', '#e879f9');
+            spawnPulseText(420, 315, '⚡ ATP 回充再生 PCr', '#e879f9');
           }
           if (sim.shareGly > 15) {
-            spawnPulseText(265, 405, '⚡ +2 ATP (糖解)', '#fde047');
+            spawnPulseText(265, 396, '⚡ +2/+3 ATP (糖解)', '#fde047');
           }
           if (sim.shareAer > 22) {
-            spawnPulseText(255, 610, '⚡⚡ +30 ATP (有氧噴泉)', '#5eead4');
+            spawnPulseText(255, 608, '⚡⚡ +30 ATP (有氧噴泉)', '#5eead4');
           }
-          if (sim.fluxLactateToLiver > 0.2) {
-            spawnPulseText(1380, 560, '⚠ -6 ATP 消耗 (糖質新生)', '#fda4af');
+          if (sim.fluxLactateToLiver > 0.18) {
+            spawnPulseText(1380, 560, '⚠ -6 ATP 當量 (糖質新生)', '#fda4af');
           }
         }
 
-        // 更新所有粒子位置與分岔決策
+        // 等速更新所有粒子距離與動態分岔決策
         for (let i = particles.length - 1; i >= 0; i--) {
           const p = particles[i];
-          p.t += p.speed * scaledDt;
-          if (p.t >= 1) {
-            p.t -= 1;
-            p.seg += 1;
-            if (p.seg >= p.path.length - 1) {
-              // 分岔點 1：肺泡 O₂ 抵達動脈分流點 -> 75% 送往骨骼肌粒線體，25% 送往肝臟粒線體
-              if (p.path === PATHS.lungsOxygenToArtery) {
-                const goMuscle = Math.random() < 0.75;
-                p.path = goMuscle ? PATHS.arteryOxygenToMuscleMito : PATHS.arteryOxygenToLiverMito;
-                p.seg = 0;
-                p.t = 0;
-              }
-              // 分岔點 2：【丙酮酸分岔路口】依有氧比例決定「進入粒線體」或「溢出轉為乳酸」！
-              else if (p.path === PATHS.glycolysisToPyruvateFork) {
-                const aerobicRatio = sim.shareAer / Math.max(1, sim.shareAer + sim.shareGly * 1.15);
-                const enterMito = Math.random() < clamp(aerobicRatio, 0.15, 0.92);
-                if (enterMito) {
-                  p.path = PATHS.pyruvateToMito;
-                  p.seg = 0;
-                  p.t = 0;
-                } else {
-                  p.type = 'lactate'; // 丙酮酸被 LDH 還原轉變為乳酸！
-                  p.path = PATHS.pyruvateToLactateVein;
-                  p.seg = 0;
-                  p.t = 0;
-                }
-              }
-              // 分岔點 3：靜脈乳酸抵達分流點 -> 62% 往肝臟科里循環，38% 往心肌乳酸穿梭
-              else if (p.path === PATHS.pyruvateToLactateVein) {
-                const goHeart = Math.random() < 0.38;
-                p.path = goHeart ? PATHS.veinLactateToHeart : PATHS.veinLactateToLiver;
-                p.seg = 0;
-                p.t = 0;
+          const meta = PATH_META[p.pathKey];
+          if (!meta) {
+            particles.splice(i, 1);
+            continue;
+          }
+          p.dist += p.pxSpeed * scaledDt;
+          if (p.dist >= meta.totalLen) {
+            const overflow = Math.min(20, p.dist - meta.totalLen);
+            if (p.pathKey === 'lungsOxygenToArtery') {
+              const liverO2Frac = clamp(0.16 + sim.fluxLactateToLiver * 0.24, 0.16, 0.45);
+              p.pathKey = Math.random() < liverO2Frac ? 'arteryOxygenToLiverMito' : 'arteryOxygenToMuscleMito';
+              p.dist = overflow;
+            } else if (p.pathKey === 'adiposeFfaToArtery') {
+              const liverFfaFrac = clamp(0.20 + sim.fluxLactateToLiver * 0.25, 0.20, 0.50);
+              p.pathKey = Math.random() < liverFfaFrac ? 'arteryFfaToLiverMito' : 'arteryFfaToMuscleMito';
+              p.dist = overflow;
+            } else if (p.pathKey === 'liverGlucoseToArtery') {
+              if (Math.random() < 0.60) {
+                p.pathKey = 'arteryGlucoseToMuscle';
+                p.dist = overflow;
               } else {
                 particles.splice(i, 1);
               }
+            } else if (p.pathKey === 'glycolysisToPyruvateFork') {
+              const aerobicRatio = sim.shareAer / Math.max(1, sim.shareAer + sim.shareGly * 1.15);
+              if (Math.random() < clamp(aerobicRatio, 0.15, 0.92)) {
+                p.pathKey = 'pyruvateToMito';
+                p.dist = overflow;
+              } else {
+                p.type = 'lactate';
+                p.pathKey = 'pyruvateToLactateVein';
+                p.dist = overflow;
+              }
+            } else if (p.pathKey === 'pyruvateToLactateVein') {
+              const heartProb = sim.fluxLactateToHeart / Math.max(0.01, sim.fluxLactateToHeart + sim.fluxLactateToLiver);
+              p.pathKey = Math.random() < heartProb ? 'veinLactateToHeart' : 'veinLactateToLiver';
+              p.dist = overflow;
+            } else {
+              particles.splice(i, 1);
             }
           }
         }
@@ -1157,12 +1584,21 @@
           });
           if (sim.history.length > 90) {
             sim.history.shift();
+            for (let m = sim.presetMarkers.length - 1; m >= 0; m--) {
+              sim.presetMarkers[m].idx -= 1;
+              if (sim.presetMarkers[m].idx < 0) {
+                sim.presetMarkers.splice(m, 1);
+              }
+            }
           }
         }
       }
-      // 中央區塊：肺泡攝氧入口 + 血液循環流道（含氧動脈端 + 靜脈端）
+      // ==========================================
+      // 5. 畫布世界繪製函式
+      // ==========================================
+      // 中央區塊：肺泡攝氧入口 + 脂肪組織脂解 + 血液循環流道（含氧動脈端 + 靜脈端）
       function drawBloodstreamZone() {
-        // === 頂部：肺泡氣體交換入口 (Lungs / Alveoli O2 Source) ===
+        // === 頂部左：肺泡氣體交換入口 (Lungs / Alveoli O2 Source) ===
         roundRect(ctx, 515, 65, 230, 88, 26);
         const lungGrad = ctx.createLinearGradient(515, 65, 745, 153);
         lungGrad.addColorStop(0, 'rgba(6, 182, 212, 0.35)');
@@ -1173,7 +1609,6 @@
         ctx.strokeStyle = '#22d3ee';
         ctx.stroke();
 
-        // 繪製雙原子 O2 圖示徽章
         drawO2DumbbellIcon(ctx, 550, 108, 6.5, true);
 
         ctx.textAlign = 'left';
@@ -1184,6 +1619,27 @@
         ctx.font = '11px "Noto Sans TC", sans-serif';
         ctx.fillText('吸入 O₂ 進動脈 · 排出 CO₂', 575, 124);
 
+        // === 頂部右：脂肪組織脂解入口 (Adipose Lipolysis FFA Source) ===
+        roundRect(ctx, 830, 65, 255, 88, 26);
+        const adiGrad = ctx.createLinearGradient(830, 65, 1085, 153);
+        adiGrad.addColorStop(0, 'rgba(194, 65, 12, 0.35)');
+        adiGrad.addColorStop(1, 'rgba(154, 52, 18, 0.45)');
+        ctx.fillStyle = adiGrad;
+        ctx.fill();
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = '#fb923c';
+        ctx.stroke();
+
+        drawFfaIcon(ctx, 864, 108, 12);
+
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#ffedd5';
+        ctx.font = 'bold 15px "Noto Sans TC", sans-serif';
+        ctx.fillText('脂肪組織脂解 (FFA 來源)', 888, 103);
+        ctx.fillStyle = '#fdba74';
+        ctx.font = '11px "Noto Sans TC", sans-serif';
+        ctx.fillText('釋出游離脂肪酸入動脈 ▶', 888, 124);
+
         // 血管外框背景
         roundRect(ctx, 535, 175, 570, 395, 36);
         ctx.fillStyle = 'rgba(15, 23, 42, 0.74)';
@@ -1192,7 +1648,7 @@
         ctx.strokeStyle = 'rgba(56, 189, 248, 0.25)';
         ctx.stroke();
 
-        // 上層：含氧動脈端（紅色/青藍邊框，明確輸送 O₂ + 葡萄糖 至肌肉與肝臟）
+        // 上層：含氧動脈端（明確輸送 O₂ + 葡萄糖 + FFA 至肌肉與肝臟）
         roundRect(ctx, 555, 198, 530, 88, 22);
         const artGrad = ctx.createLinearGradient(555, 198, 1085, 198);
         artGrad.addColorStop(0, 'rgba(190, 18, 60, 0.32)');
@@ -1205,12 +1661,12 @@
         ctx.stroke();
 
         ctx.fillStyle = '#fecdd3';
-        ctx.font = 'bold 15px "Noto Sans TC", sans-serif';
+        ctx.font = 'bold 14.5px "Noto Sans TC", sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('◀ 含氧動脈血：肺泡 O₂ ＋ 葡萄糖 (Glucose) 輸送至肌肉與肝臟 ▶', 820, 236);
+        ctx.fillText('◀ 含氧動脈血：O₂ ＋ 葡萄糖 (Glc) ＋ 游離脂肪酸 (FFA) ▶', 820, 236);
         ctx.fillStyle = '#7dd3fc';
         ctx.font = '12px "Noto Sans TC", sans-serif';
-        ctx.fillText('O₂ 直達兩側粒線體作為有氧氧化最終電子接受者', 820, 260);
+        ctx.fillText('O₂ 與 FFA 直達兩側粒線體氧化 · Glc 經 GLUT4 進入骨骼肌', 820, 260);
 
         // 下層：靜脈端（回收肌肉乳酸送往肝臟或心肌穿梭 + CO₂ 回肺部）
         roundRect(ctx, 555, 465, 530, 86, 22);
@@ -1246,6 +1702,15 @@
         ctx.lineWidth = 2.5;
         ctx.stroke();
 
+        // 頂緣 MCT1 轉運蛋白通道徽章
+        roundRect(ctx, 812, 594, 56, 20, 7);
+        ctx.fillStyle = '#38bdf8';
+        ctx.fill();
+        ctx.fillStyle = '#0f172a';
+        ctx.font = 'bold 11px "Inter", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('MCT1', 840, 608);
+
         drawMitochondrionIcon(ctx, 715, 688, 42, 23, sim.fluxLactateToHeart);
 
         ctx.textAlign = 'left';
@@ -1267,6 +1732,25 @@
         }
       }
 
+      // 繪製二次貝茲弧線上的發光磷酸基流動光點
+      function drawQuadraticBead(x0, y0, cx, cy, x1, y1, t, color) {
+        const u = 1 - t;
+        const px = u * u * x0 + 2 * u * t * cx + t * t * x1;
+        const py = u * u * y0 + 2 * u * t * cy + t * t * y1;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(px, py, 3.8, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 10;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(px, py, 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.restore();
+      }
+
       // 左側區塊：骨骼肌細胞 (Skeletal Myocyte - 含肌原纖維耗能區 + 閉環 PCr + 丙酮酸分岔 + 粒線體)
       function drawSkeletalMyocyteZone() {
         // 肌細胞外膜（Sarcolemma）
@@ -1286,7 +1770,7 @@
         ctx.font = 'bold 21px "Noto Sans TC", sans-serif';
         ctx.fillText('骨骼肌細胞 (Skeletal Myocyte)', 272, 152);
 
-        // === 左側直立區：肌原纖維收縮引擎（所有 ATP 的最終去向！） ===
+        // === 左側直立區：肌原纖維收縮引擎（所有 ATP 的最終去向） ===
         const contractPulse = 0.5 + 0.5 * Math.sin(sim.pulsePhase * (1.2 + (sim.intensity / 100) * 3.5));
         roundRect(ctx, 62, 230, 128, 430, 24);
         ctx.fillStyle = `rgba(113, 63, 18, ${0.22 + (sim.intensity / 100) * 0.25})`;
@@ -1307,13 +1791,11 @@
         for (let row = 0; row < 5; row++) {
           const ry = 312 + row * 56;
           const slide = (sim.intensity / 100) * 8 * Math.sin(sim.pulsePhase * 2.5 + row);
-          // 肌動蛋白細絲
           ctx.fillStyle = '#38bdf8';
           roundRect(ctx, 78 + slide, ry, 42, 6, 3);
           ctx.fill();
           roundRect(ctx, 132 - slide, ry, 42, 6, 3);
           ctx.fill();
-          // 肌球蛋白粗絲與橫橋
           ctx.fillStyle = '#f59e0b';
           roundRect(ctx, 96, ry + 13, 60, 10, 4);
           ctx.fill();
@@ -1338,24 +1820,27 @@
         ctx.textAlign = 'left';
         ctx.fillStyle = '#f5d0fe';
         ctx.font = 'bold 15px "Noto Sans TC", sans-serif';
-        ctx.fillText(`① 磷化物循環 (${Math.round(sim.pcrStore)}%)`, 226, 198);
+        ctx.fillText(`① 磷化物循環 (${Math.round(sim.pcrStore)}%)`, 226, 194);
 
-        // 繪製閉環分子節點：左側 PCr (有磷酸基P)，右側 Cr (游離肌酸)
-        const pcrAngle = sim.pulsePhase * (sim.sharePcr > 15 ? 1.4 : -0.8);
+        // 上弧文字
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#fde047';
+        ctx.font = 'bold 10px "Noto Sans TC", sans-serif';
+        ctx.fillText('高強度放電 ➔ +1 ATP', 348, 210);
+
         // PCr 徽章
-        roundRect(ctx, 226, 214, 88, 34, 10);
+        roundRect(ctx, 224, 218, 92, 32, 10);
         ctx.fillStyle = 'rgba(217, 70, 239, 0.35)';
         ctx.fill();
         ctx.strokeStyle = '#f0abfc';
         ctx.lineWidth = 1.5;
         ctx.stroke();
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 12px "Inter", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('PCr (含高能P)', 270, 235);
+        ctx.font = 'bold 11.5px "Inter", sans-serif';
+        ctx.fillText('PCr (含高能P)', 270, 238);
 
         // Cr 徽章
-        roundRect(ctx, 382, 214, 86, 34, 10);
+        roundRect(ctx, 378, 218, 92, 32, 10);
         ctx.fillStyle = 'rgba(30, 27, 75, 0.75)';
         ctx.fill();
         ctx.strokeStyle = '#a855f7';
@@ -1363,34 +1848,44 @@
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.fillStyle = '#d8b4fe';
-        ctx.fillText('Cr (游離肌酸)', 425, 235);
+        ctx.fillText('Cr (游離肌酸)', 424, 238);
 
         // 上弧線：放電產能 PCr + ADP -> Cr + ATP
         ctx.beginPath();
-        ctx.moveTo(316, 220);
-        ctx.quadraticCurveTo(349, 200, 380, 220);
+        ctx.moveTo(318, 224);
+        ctx.quadraticCurveTo(348, 208, 376, 224);
         ctx.strokeStyle = '#fde047';
         ctx.lineWidth = 2;
         ctx.stroke();
-        ctx.fillStyle = '#fde047';
-        ctx.font = 'bold 10px "Noto Sans TC", sans-serif';
-        ctx.fillText('高強度放電 ➔ +1 ATP', 349, 207);
 
         // 下弧線：恢復充電 Cr + 粒線體ATP -> PCr
         ctx.beginPath();
-        ctx.moveTo(380, 244);
-        ctx.quadraticCurveTo(349, 266, 316, 244);
+        ctx.moveTo(376, 244);
+        ctx.quadraticCurveTo(348, 262, 318, 244);
         ctx.strokeStyle = '#5eead4';
         ctx.lineWidth = 2;
         ctx.stroke();
+
+        // 雙向循環動畫磷酸光點
+        if (sim.sharePcr > 4) {
+          const tDis = (sim.time * (0.9 + sim.sharePcr / 65)) % 1;
+          drawQuadraticBead(318, 224, 348, 208, 376, 224, tDis, '#fde047');
+          drawQuadraticBead(318, 224, 348, 208, 376, 224, (tDis + 0.5) % 1, '#fde047');
+        }
+        if (sim.pcrStore < 98 && sim.pcrRefillRate > 0.04) {
+          const tRec = (sim.time * (0.7 + sim.pcrRefillRate)) % 1;
+          drawQuadraticBead(376, 244, 348, 262, 318, 244, tRec, '#5eead4');
+        }
+
         ctx.fillStyle = '#5eead4';
-        ctx.fillText('◀ 恢復期有氧ATP回充', 349, 273);
+        ctx.font = 'bold 10px "Noto Sans TC", sans-serif';
+        ctx.fillText('◀ 恢復期有氧ATP回充', 348, 276);
 
         // PCr 存量進度條
-        roundRect(ctx, 226, 286, 242, 9, 4.5);
+        roundRect(ctx, 226, 288, 242, 8, 4);
         ctx.fillStyle = '#1e1b4b';
         ctx.fill();
-        roundRect(ctx, 226, 286, 242 * (sim.pcrStore / 100), 9, 4.5);
+        roundRect(ctx, 226, 288, 242 * (sim.pcrStore / 100), 8, 4);
         ctx.fillStyle = '#e879f9';
         ctx.fill();
 
@@ -1398,7 +1893,7 @@
           ctx.textAlign = 'left';
           ctx.fillStyle = '#f0abfc';
           ctx.font = '10px "Noto Sans TC", sans-serif';
-          ctx.fillText('雙向酵素: 肌酸激酶 (CK)', 226, 311);
+          ctx.fillText('雙向酵素: 肌酸激酶 (CK)', 226, 310);
         }
 
         // === ② 右中區：糖解作用與「丙酮酸分岔路口」 ===
@@ -1413,14 +1908,32 @@
         ctx.textAlign = 'left';
         ctx.fillStyle = '#fef3c7';
         ctx.font = 'bold 15px "Noto Sans TC", sans-serif';
-        ctx.fillText(`② 糖解與丙酮酸分岔 (${Math.round(sim.muscleGlycogen)}%)`, 226, 362);
+        ctx.fillText(`② 糖解與丙酮酸分岔 (${Math.round(sim.muscleGlycogen)}%)`, 226, 358);
+
+        // 肌肝醣存量進度條
+        roundRect(ctx, 226, 368, 242, 7, 3.5);
+        ctx.fillStyle = '#1e293b';
+        ctx.fill();
+        roundRect(ctx, 226, 368, 242 * (sim.muscleGlycogen / 100), 7, 3.5);
+        ctx.fillStyle = '#38bdf8';
+        ctx.fill();
 
         ctx.fillStyle = '#fde68a';
-        ctx.font = '12px "Noto Sans TC", sans-serif';
-        ctx.fillText('肌肝醣 / 血糖 ➔ 丙酮酸 (+2 ATP)', 226, 384);
+        ctx.font = '11.5px "Noto Sans TC", sans-serif';
+        ctx.fillText('肌肝醣(+3) / 血糖(+2) ➔ 丙酮酸', 226, 394);
 
-        // 丙酮酸分岔路口徽章 (Pyruvate Crossroads)
-        roundRect(ctx, 240, 482, 165, 46, 12);
+        if (camera.scale >= 0.95) {
+          ctx.textAlign = 'left';
+          ctx.fillStyle = '#fcd34d';
+          ctx.font = '10.5px "Noto Sans TC", sans-serif';
+          ctx.fillText('高強度 NADH 堆積', 222, 434);
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = '10px "Noto Sans TC", sans-serif';
+          ctx.fillText('LDH 再生 NAD⁺', 222, 450);
+        }
+
+        // 丙酮酸分岔路口徽章 (對齊垂直 x=348 丙酮酸流道)
+        roundRect(ctx, 262, 478, 172, 48, 12);
         ctx.fillStyle = 'rgba(88, 28, 135, 0.55)';
         ctx.fill();
         ctx.strokeStyle = '#c084fc';
@@ -1429,17 +1942,30 @@
         ctx.textAlign = 'center';
         ctx.fillStyle = '#f3e8ff';
         ctx.font = 'bold 12px "Noto Sans TC", sans-serif';
-        ctx.fillText('◆ 丙酮酸分岔路口 ◆', 322, 501);
+        ctx.fillText('◆ 丙酮酸分岔路口 ◆', 348, 497);
         ctx.fillStyle = '#d8b4fe';
         ctx.font = '10px "Noto Sans TC", sans-serif';
-        ctx.fillText('▼ 進粒線體氧化  |  ▶ 轉乳酸排出', 322, 519);
+        ctx.fillText('▼ 進粒線體氧化  |  ▶ 轉乳酸排出', 348, 515);
 
-        // MCT4 轉運蛋白通道（在細胞膜右側邊緣）
-        roundRect(ctx, 486, 484, 34, 62, 10);
+        // GLUT4 轉運蛋白通道（在肌細胞膜右側上端）
+        roundRect(ctx, 486, 368, 34, 50, 10);
+        ctx.fillStyle = '#38bdf8';
+        ctx.fill();
+        ctx.save();
+        ctx.translate(503, 393);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillStyle = '#0f172a';
+        ctx.font = 'bold 10.5px "Inter", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('GLUT4', 0, 4);
+        ctx.restore();
+
+        // MCT4 轉運蛋白通道（在肌細胞膜右側中段）
+        roundRect(ctx, 486, 476, 34, 54, 10);
         ctx.fillStyle = '#f59e0b';
         ctx.fill();
         ctx.save();
-        ctx.translate(503, 515);
+        ctx.translate(503, 503);
         ctx.rotate(-Math.PI / 2);
         ctx.fillStyle = '#0f172a';
         ctx.font = 'bold 11px "Inter", sans-serif';
@@ -1447,17 +1973,7 @@
         ctx.fillText('MCT4', 0, 4);
         ctx.restore();
 
-        if (camera.scale >= 0.95) {
-          ctx.textAlign = 'left';
-          ctx.fillStyle = '#fcd34d';
-          ctx.font = '11px "Noto Sans TC", sans-serif';
-          ctx.fillText('高強度 NADH 堆積 → LDH 轉乳酸', 226, 422);
-          ctx.fillStyle = '#94a3b8';
-          ctx.font = '10px "Noto Sans TC", sans-serif';
-          ctx.fillText('再生 NAD⁺ 維持糖解不中斷', 226, 440);
-        }
-
-        // === ③ 右下區：有氧系統（粒線體 Mitochondrion 接收丙酮酸 + 肺泡 O₂） ===
+        // === ③ 右下區：有氧系統（粒線體，文字置上、圖示置下居中無重疊） ===
         const aerGlow = 0.25 + (sim.shareAer / 100) * 0.75;
         roundRect(ctx, 210, 585, 275, 205, 26);
         ctx.fillStyle = `rgba(19, 78, 74, ${0.30 + aerGlow * 0.32})`;
@@ -1466,29 +1982,29 @@
         ctx.strokeStyle = `rgba(45, 212, 191, ${0.48 + aerGlow * 0.52})`;
         ctx.stroke();
 
-        // 粒線體雙層膜與嵴（Cristae）細節
-        drawMitochondrionIcon(ctx, 412, 688, 56, 34, aerGlow);
-
         ctx.textAlign = 'left';
         ctx.fillStyle = '#ccfbf1';
         ctx.font = 'bold 15px "Noto Sans TC", sans-serif';
-        ctx.fillText('③ 有氧系統（粒線體）', 226, 614);
+        ctx.fillText('③ 有氧系統（粒線體）', 226, 612);
 
         ctx.fillStyle = '#67e8f9';
-        ctx.font = 'bold 12px "Noto Sans TC", sans-serif';
-        ctx.fillText('接收: 丙酮酸 ＋ 肺泡 O₂ ＋ 脂肪', 226, 638);
+        ctx.font = 'bold 11.5px "Noto Sans TC", sans-serif';
+        ctx.fillText('接收: 丙酮酸 ＋ 肺泡 O₂ ＋ FFA', 226, 634);
         ctx.fillStyle = '#e2e8f0';
         ctx.font = '11px "Noto Sans TC", sans-serif';
-        ctx.fillText('檸檬酸循環 ＋ 電子傳遞鏈', 226, 658);
+        ctx.fillText('β-氧化 ＋ 檸檬酸循環 ＋ 電子傳遞鏈', 226, 654);
         ctx.fillStyle = '#fde047';
         ctx.font = 'bold 13px "Noto Sans TC", sans-serif';
-        ctx.fillText('⚡ 高產能噴泉: +30–32 ATP', 226, 684);
+        ctx.fillText('⚡ 高產能噴泉: +30–32 ATP', 226, 676);
+
+        // 粒線體雙層膜與嵴（Cristae）置於卡片下半部中央，徹底避開上方文字
+        drawMitochondrionIcon(ctx, 348, 729, 64, 27, aerGlow);
 
         if (camera.scale >= 0.95) {
+          ctx.textAlign = 'center';
           ctx.fillStyle = '#99f6e4';
           ctx.font = '10px "Noto Sans TC", sans-serif';
-          ctx.fillText('MPC 載體輸入丙酮酸 · 釋出 CO₂ + H₂O', 226, 710);
-          ctx.fillText('兼負有氧恢復期回充 PCr 任務', 226, 728);
+          ctx.fillText('MPC 輸入丙酮酸 · 釋出 CO₂ · 回充 PCr', 348, 776);
         }
       }
 
@@ -1503,6 +2019,19 @@
         ctx.lineWidth = 3.5;
         ctx.strokeStyle = '#34d399';
         ctx.stroke();
+
+        // 肝細胞左側膜 MCT1 乳酸攝取通道
+        roundRect(ctx, 1142, 468, 34, 54, 10);
+        ctx.fillStyle = '#10b981';
+        ctx.fill();
+        ctx.save();
+        ctx.translate(1159, 495);
+        ctx.rotate(-Math.PI / 2);
+        ctx.fillStyle = '#0f172a';
+        ctx.font = 'bold 11px "Inter", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('MCT1', 0, 4);
+        ctx.restore();
 
         ctx.textAlign = 'center';
         ctx.fillStyle = '#a7f3d0';
@@ -1551,11 +2080,11 @@
 
         ctx.fillStyle = '#fde68a';
         ctx.font = '13px "Noto Sans TC", sans-serif';
-        ctx.fillText('1. 攝取血中乳酸 → LDH 轉回丙酮酸', 1215, 412);
+        ctx.fillText('1. 經 MCT1 攝取血中乳酸 → 轉回丙酮酸', 1215, 412);
         ctx.fillStyle = '#93c5fd';
         ctx.fillText('2. 逆向合成新葡萄糖 → 釋入血液或存肝醣', 1215, 438);
 
-        // 能量代價警示框 (-6 ATP)
+        // 能量代價警示框 (-6 ATP 當量: 4 ATP + 2 GTP)
         roundRect(ctx, 1215, 456, 350, 68, 14);
         ctx.fillStyle = 'rgba(136, 19, 55, 0.45)';
         ctx.fill();
@@ -1564,11 +2093,11 @@
         ctx.stroke();
 
         ctx.fillStyle = '#fecdd3';
-        ctx.font = 'bold 13px "Noto Sans TC", sans-serif';
-        ctx.fillText('⚠ 能量代價：每合成 1 葡萄糖消耗 -6 ATP', 1228, 480);
+        ctx.font = 'bold 12.5px "Noto Sans TC", sans-serif';
+        ctx.fillText('⚠ 能量代價：每合成 1 葡萄糖耗 -6 ATP (4 ATP + 2 GTP)', 1226, 480);
         ctx.fillStyle = '#fda4af';
         ctx.font = '11px "Noto Sans TC", sans-serif';
-        ctx.fillText('可見下方肝臟粒線體向上輸送紅色 ATP 粒子支應！', 1228, 502);
+        ctx.fillText('可見下方肝臟粒線體向上輸送高能磷酸粒子支應！', 1226, 502);
 
         if (camera.scale >= 0.95) {
           ctx.fillStyle = '#6ee7b7';
@@ -1587,44 +2116,42 @@
         drawMitochondrionIcon(ctx, 1255, 678, 44, 24, 0.75);
         ctx.fillStyle = '#99f6e4';
         ctx.font = 'bold 14px "Noto Sans TC", sans-serif';
-        ctx.fillText('肝臟粒線體（脂肪酸 ＋ O₂ 氧化）', 1312, 666);
+        ctx.fillText('肝臟粒線體（FFA ＋ O₂ 氧化）', 1312, 666);
         ctx.fillStyle = '#cbd5e1';
         ctx.font = '12px "Noto Sans TC", sans-serif';
-        ctx.fillText('產生 ATP 向上供應糖質新生消耗', 1312, 690);
+        ctx.fillText('產生 ATP/GTP 向上供應糖質新生消耗', 1312, 690);
         ctx.fillStyle = '#67e8f9';
         ctx.font = '11px "Noto Sans TC", sans-serif';
-        ctx.fillText('接收肺泡動脈送來的 O₂ 粒子', 1312, 712);
+        ctx.fillText('接收肺泡動脈送來的 O₂ 與 FFA 粒子', 1312, 712);
       }
+
       // 繪製雙原子 O2 分子圖示（兩顆相連的青藍色球體）
       function drawO2DumbbellIcon(ctx, x, y, r, showText = false) {
         ctx.save();
         ctx.shadowColor = '#22d3ee';
         ctx.shadowBlur = 12;
+        drawO2DumbbellRaw(ctx, x, y, r, showText);
+        ctx.restore();
+      }
 
-        // 左球
+      // 繪製游離脂肪酸 FFA 圖示徽章
+      function drawFfaIcon(ctx, x, y, r) {
+        ctx.save();
+        ctx.shadowColor = '#fb923c';
+        ctx.shadowBlur = 12;
         ctx.beginPath();
-        ctx.arc(x - r * 0.65, y, r, 0, Math.PI * 2);
-        ctx.fillStyle = '#22d3ee';
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = '#fb923c';
         ctx.fill();
-        ctx.strokeStyle = '#ecfeff';
-        ctx.lineWidth = 1.2;
+        ctx.lineWidth = 1.4;
+        ctx.strokeStyle = '#ffedd5';
         ctx.stroke();
-
-        // 右球
-        ctx.beginPath();
-        ctx.arc(x + r * 0.65, y, r, 0, Math.PI * 2);
-        ctx.fillStyle = '#06b6d4';
-        ctx.fill();
-        ctx.stroke();
-
-        if (showText) {
-          ctx.shadowBlur = 0;
-          ctx.fillStyle = '#042f2e';
-          ctx.font = `bold ${Math.max(7, Math.round(r * 1.15))}px "Inter", sans-serif`;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText('O₂', x, y + 0.5);
-        }
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#431407';
+        ctx.font = 'bold 8.5px "Inter", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('FFA', x, y + 0.5);
         ctx.restore();
       }
 
@@ -1632,24 +2159,24 @@
       function drawMetabolicFlowArrows() {
         const dashOffset = -(sim.time * 48) % 24;
 
-        // 輔助判斷某分子流道目前的透明強調度
         const tubeAlpha = (molKey) => {
           if (!molState.visible[molKey]) return 0.05;
           if (molState.highlighted && molState.highlighted !== molKey) return 0.12;
           return molState.highlighted === molKey ? 1.0 : 0.72;
         };
 
-        // 1. 肺泡 O₂ 流入動脈與兩側粒線體（青藍色含氧導管）
+        // 1. 肺泡 O₂ 流入動脈與兩側粒線體
         drawFlowTube(PATHS.lungsOxygenToArtery, '#22d3ee', 3.5, dashOffset, tubeAlpha('oxygen'));
         drawFlowTube(PATHS.arteryOxygenToMuscleMito, '#22d3ee', 2.8 + sim.fluxOxygenToMuscle * 2.5, dashOffset, tubeAlpha('oxygen'));
-        drawFlowTube(PATHS.arteryOxygenToLiverMito, '#22d3ee', 2.4, dashOffset, tubeAlpha('oxygen'));
+        drawFlowTube(PATHS.arteryOxygenToLiverMito, '#22d3ee', 2.0 + sim.fluxLactateToLiver * 2.2, dashOffset, tubeAlpha('oxygen'));
 
-        // 2. 動脈葡萄糖進入骨骼肌糖解區 + 游離脂肪酸 (FFA) 進入兩側粒線體
+        // 2. 動脈葡萄糖與脂肪組織游離脂肪酸 (FFA)
         drawFlowTube(PATHS.arteryGlucoseToMuscle, '#38bdf8', 3 + sim.fluxGlucoseToMuscle * 2.8, dashOffset, tubeAlpha('glucose'));
+        drawFlowTube(PATHS.adiposeFfaToArtery, '#fb923c', 2.4 + sim.fluxFfaToMito * 2.2, dashOffset, tubeAlpha('ffa'));
         drawFlowTube(PATHS.arteryFfaToMuscleMito, '#fb923c', 2.2 + sim.fluxFfaToMito * 2.6, dashOffset, tubeAlpha('ffa'));
         drawFlowTube(PATHS.arteryFfaToLiverMito, '#fb923c', 2.0 + sim.fluxFfaToMito * 1.8, dashOffset, tubeAlpha('ffa'));
 
-        // 3. 糖解 -> 丙酮酸分岔 -> 進入粒線體 (青綠) vs 轉乳酸溢出 (琥珀)
+        // 3. 糖解 -> 丙酮酸分岔 -> 進入粒線體 vs 轉乳酸溢出
         drawFlowTube(PATHS.glycolysisToPyruvateFork, '#c084fc', 3.2, dashOffset, tubeAlpha('pyruvate'));
         drawFlowTube(PATHS.pyruvateToMito, '#2dd4bf', 2.5 + (sim.shareAer / 100) * 4.5, dashOffset, tubeAlpha('pyruvate'));
         drawFlowTube(PATHS.pyruvateToLactateVein, '#f59e0b', 2.2 + sim.fluxLactateToBlood * 4.2, dashOffset, tubeAlpha('lactate'));
@@ -1664,7 +2191,7 @@
         // 6. 代謝 CO₂ 返回肺泡排出
         drawFlowTube(PATHS.muscleCo2ToLungs, '#94a3b8', 2.0, dashOffset, tubeAlpha('co2'));
 
-        // 7. 【金色 ATP 能量匯流道】三大系統 -> 肌原纖維收縮區！
+        // 7. 三大系統 ATP 匯流道 -> 肌原纖維收縮區
         drawFlowTube(PATHS.atpFromPcrToMyofibril, '#fde047', 2 + (sim.sharePcr / 100) * 5, dashOffset, tubeAlpha('atp'));
         drawFlowTube(PATHS.atpFromGlyToMyofibril, '#fde047', 2 + (sim.shareGly / 100) * 5, dashOffset, tubeAlpha('atp'));
         drawFlowTube(PATHS.atpFromMitoToMyofibril, '#fde047', 2.5 + (sim.shareAer / 100) * 6, dashOffset, tubeAlpha('atp'));
@@ -1696,7 +2223,6 @@
       function drawMitochondrionIcon(ctx, cx, cy, rx, ry, glow) {
         ctx.save();
         ctx.translate(cx, cy);
-        // 外膜
         ctx.beginPath();
         ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(13, 148, 136, ${0.25 + glow * 0.3})`;
@@ -1705,7 +2231,6 @@
         ctx.strokeStyle = '#2dd4bf';
         ctx.stroke();
 
-        // 內膜嵴（波浪折線）
         ctx.beginPath();
         const innerRx = rx * 0.76;
         const innerRy = ry * 0.65;
@@ -1746,126 +2271,32 @@
         ctx.restore();
       }
 
-      function drawInternalArrow(ctx, x1, y1, x2, y2, color, width) {
-        ctx.save();
-        ctx.strokeStyle = color;
-        ctx.fillStyle = color;
-        ctx.lineWidth = width;
-        ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
-
-        const angle = Math.atan2(y2 - y1, x2 - x1);
-        const head = 8;
-        ctx.beginPath();
-        ctx.moveTo(x2, y2);
-        ctx.lineTo(x2 - head * Math.cos(angle - Math.PI / 6), y2 - head * Math.sin(angle - Math.PI / 6));
-        ctx.lineTo(x2 - head * Math.cos(angle + Math.PI / 6), y2 - head * Math.sin(angle + Math.PI / 6));
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-      }
-
       function drawParticles() {
+        let lastAlpha = 1;
         for (let i = 0; i < particles.length; i++) {
           const p = particles[i];
           const molKey = p.type === 'atp_cost' ? 'atp' : p.type;
-
-          // 若該分子已被使用者切換為隱藏，直接跳過繪製
           if (!molState.visible[molKey]) continue;
+
+          const pos = evaluatePathPoint(p.pathKey, p.dist, p.offset);
+          if (!pos) continue;
 
           const isDimmed = molState.highlighted !== null && molState.highlighted !== molKey;
           const isBoosted = molState.highlighted === molKey;
+          const showLabel = p.type === 'oxygen' ? camera.scale >= 0.85 : camera.scale >= 1.15;
+          const variant = isBoosted ? 'boosted' : (showLabel ? 'labeled' : 'normal');
+          const sprite = SPRITES[p.type] && SPRITES[p.type][variant];
+          if (!sprite) continue;
 
-          const a = p.path[p.seg];
-          const b = p.path[p.seg + 1];
-          if (!a || !b) continue;
-
-          const dx = b.x - a.x;
-          const dy = b.y - a.y;
-          const len = Math.hypot(dx, dy) || 1;
-          const nx = -dy / len;
-          const ny = dx / len;
-
-          const x = a.x + dx * p.t + nx * p.offset;
-          const y = a.y + dy * p.t + ny * p.offset;
-          const drawRadius = isBoosted ? p.radius * 1.28 : p.radius;
-
-          ctx.save();
-          if (isDimmed) {
-            ctx.globalAlpha = 0.14;
+          const nextAlpha = isDimmed ? 0.14 : 1;
+          if (nextAlpha !== lastAlpha) {
+            ctx.globalAlpha = nextAlpha;
+            lastAlpha = nextAlpha;
           }
-
-          // 雙原子氧氣 O₂ 專屬啞鈴圖示
-          if (p.type === 'oxygen') {
-            drawO2DumbbellIcon(ctx, x, y, drawRadius, camera.scale >= 0.85 || isBoosted);
-            ctx.restore();
-            continue;
-          }
-
-          // 金色 ATP 能量粒子（發光核心 + 閃電標記）
-          if (p.type === 'atp' || p.type === 'atp_cost') {
-            const isCost = p.type === 'atp_cost';
-            const fillCol = isCost ? '#fb7185' : '#fde047';
-            ctx.beginPath();
-            ctx.arc(x, y, drawRadius, 0, Math.PI * 2);
-            ctx.fillStyle = fillCol;
-            ctx.shadowColor = fillCol;
-            ctx.shadowBlur = isBoosted ? 22 : 14;
-            ctx.fill();
-            ctx.lineWidth = 1.2;
-            ctx.strokeStyle = '#ffffff';
-            ctx.stroke();
-
-            ctx.shadowBlur = 0;
-            ctx.fillStyle = '#0f172a';
-            ctx.font = 'bold 7.5px "Inter", sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(isCost ? '-P' : '⚡', x, y + 0.5);
-            ctx.restore();
-            continue;
-          }
-
-          let color = '#38bdf8'; // glucose
-          let tag = 'G';
-          if (p.type === 'ffa') {
-            color = '#fb923c';
-            tag = 'FFA';
-          } else if (p.type === 'lactate') {
-            color = '#f59e0b';
-            tag = 'L';
-          } else if (p.type === 'pyruvate') {
-            color = '#c084fc';
-            tag = 'Pyr';
-          } else if (p.type === 'co2') {
-            color = '#94a3b8';
-            tag = 'CO₂';
-          }
-
-          ctx.beginPath();
-          ctx.arc(x, y, drawRadius, 0, Math.PI * 2);
-          ctx.fillStyle = color;
-          ctx.shadowColor = color;
-          ctx.shadowBlur = isBoosted ? 20 : 10;
-          ctx.fill();
-
-          if (isBoosted) {
-            ctx.lineWidth = 1.6;
-            ctx.strokeStyle = '#ffffff';
-            ctx.stroke();
-          }
-
-          if (camera.scale >= 1.15 || isBoosted) {
-            ctx.shadowBlur = 0;
-            ctx.fillStyle = '#060b19';
-            ctx.font = 'bold 6.5px "Inter", sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(tag, x, y + 0.5);
-          }
-          ctx.restore();
+          ctx.drawImage(sprite.canvas, pos.x - sprite.half, pos.y - sprite.half, sprite.size, sprite.size);
+        }
+        if (lastAlpha !== 1) {
+          ctx.globalAlpha = 1;
         }
       }
 
@@ -1889,20 +2320,27 @@
         for (let i = 0; i < NODES.length; i++) {
           const n = NODES[i];
           const isSelected = sim.selectedNodeId === n.id;
+          const isHovered = sim.hoveredNodeId === n.id;
           ctx.save();
-          ctx.beginPath();
-          ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+          roundRect(ctx, n.x - 3, n.y - 3, n.w + 6, n.h + 6, n.rx + 2);
           if (isSelected) {
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 3.5;
             ctx.shadowColor = n.color;
             ctx.shadowBlur = 18;
             ctx.stroke();
+          } else if (isHovered) {
+            ctx.strokeStyle = n.color;
+            ctx.globalAlpha = 0.88;
+            ctx.lineWidth = 2.6;
+            ctx.shadowColor = n.color;
+            ctx.shadowBlur = 12;
+            ctx.stroke();
           } else {
             ctx.strokeStyle = n.color;
-            ctx.globalAlpha = 0.16 + pulse * 0.12;
-            ctx.lineWidth = 1.5;
-            ctx.setLineDash([6, 6]);
+            ctx.globalAlpha = 0.14 + pulse * 0.10;
+            ctx.lineWidth = 1.4;
+            ctx.setLineDash([7, 7]);
             ctx.stroke();
           }
           ctx.restore();
@@ -1952,8 +2390,90 @@
       }
 
       // ==========================================
-      // 6. UI 儀表板與即時曲線更新
+      // 6. UI 儀表板、即時旁白與 Sparkline 曲線更新
       // ==========================================
+      let lastHeaderBottom = -1;
+      let lastHudState = null;
+
+      function setMolPanelCollapsed(collapsed) {
+        sim.molPanelCollapsed = collapsed;
+        if (collapsed) {
+          ui.molPanelBody.classList.add('hidden');
+          ui.btnMolCollapse.textContent = '展開 ▾';
+        } else {
+          ui.molPanelBody.classList.remove('hidden');
+          ui.btnMolCollapse.textContent = '收合 ▴';
+        }
+        syncFloatingPanelOffsets(true);
+      }
+
+      function syncFloatingPanelOffsets(force = false) {
+        if (!ui.topHeader || !ui.bottomDashboard) return;
+        const headerBottom = Math.round(ui.topHeader.getBoundingClientRect().bottom);
+        if (!force && headerBottom === lastHeaderBottom && sim.hudVisible === lastHudState) {
+          return;
+        }
+        lastHeaderBottom = headerBottom;
+        lastHudState = sim.hudVisible;
+
+        const topOffset = headerBottom + 8;
+        const dashH = sim.hudVisible ? ui.bottomDashboard.offsetHeight : 0;
+        const bottomLimit = sim.hudVisible
+          ? Math.max(topOffset + 120, window.innerHeight - dashH - 8)
+          : window.innerHeight - 12;
+        const availH = Math.max(120, Math.round(bottomLimit - topOffset));
+
+        ui.zoomControls.style.top = `${topOffset}px`;
+        ui.molFilterPanel.style.top = `${topOffset}px`;
+
+        const panelHeader = ui.molFilterPanel.firstElementChild;
+        const panelHeaderH = panelHeader ? panelHeader.getBoundingClientRect().height : 32;
+        ui.molPanelBody.style.maxHeight = `${Math.max(88, Math.round(availH - panelHeaderH - 20))}px`;
+
+        if (window.innerWidth < 768) {
+          const molRect = ui.molFilterPanel.getBoundingClientRect();
+          const cardTop = Math.round(molRect.bottom + 8);
+          ui.nodeCard.style.top = `${cardTop}px`;
+          ui.nodeCard.style.maxHeight = `${Math.max(110, Math.round(bottomLimit - cardTop))}px`;
+        } else {
+          ui.nodeCard.style.top = `${topOffset}px`;
+          ui.nodeCard.style.maxHeight = `${availH}px`;
+        }
+      }
+
+      function updateNarrator() {
+        const I = sim.intensity / 100;
+        let dotColor = '#2dd4bf';
+        let text = '';
+
+        if (sim.preset === 'epoc' || (I < 0.25 && sim.bloodLactate > 2.2)) {
+          dotColor = '#38bdf8';
+          text = `EPOC 恢復期：粒線體以脂質氧化產出 ATP，同時回充肌肉 PCr 並經科里循環與心肌穿梭清除血乳酸（${sim.bloodLactate.toFixed(1)} mM）。`;
+        } else if (sim.muscleGlycogen < 25) {
+          dotColor = '#fb923c';
+          text = `肌肝醣耗竭（${Math.round(sim.muscleGlycogen)}% · 撞牆期）：無氧糖解受限、被迫提高脂質氧化比例，肝臟加速釋出葡萄糖維持血糖。`;
+        } else if (sim.sharePcr >= 40) {
+          dotColor = '#e879f9';
+          text = `極限爆發階段：ATP-PCr 系統瞬間放電（佔 ${Math.round(sim.sharePcr)}%），肌酸激酶全力供能；隨 PCr 下降將由無氧糖解接棒。`;
+        } else if (sim.bloodLactate >= 4.0) {
+          dotColor = '#fb7185';
+          text = `血乳酸達 ${sim.bloodLactate.toFixed(1)} mM（已越過 4.0 mM 閾值）：乳酸經 MCT4 湧入靜脈，肝臟科里循環（-6 ATP/Glc）與心肌穿梭全速運轉！`;
+        } else if (sim.shareGly >= 45) {
+          dotColor = '#f59e0b';
+          text = '無氧糖解加速：丙酮酸產量超過粒線體處理上限，於分岔路口大量經 LDH 轉為乳酸以再生 NAD⁺ 維持供能。';
+        } else if (I <= 0.15) {
+          dotColor = '#94a3b8';
+          text = `靜止基礎代謝：ATP 需求低且氧氣充裕，有氧系統以脂質 β-氧化為主力（${sim.fatFuelPct}%），為身體保留珍貴肝醣。`;
+        } else {
+          dotColor = '#2dd4bf';
+          text = `有氧／混氧供能（有氧 ${Math.round(sim.shareAer)}%）：肺泡 O₂ 充足送達粒線體；目前有機燃料為醣類 ${sim.carbFuelPct}%、脂質 ${sim.fatFuelPct}%。`;
+        }
+
+        ui.narratorDot.style.backgroundColor = dotColor;
+        ui.narratorDot.style.boxShadow = `0 0 8px ${dotColor}`;
+        ui.narratorText.textContent = text;
+      }
+
       function updateDashboardUI() {
         // 時間顯示
         const mins = Math.floor(sim.time / 60);
@@ -1989,7 +2509,23 @@
         ui.valLactate.textContent = `${sim.bloodLactate.toFixed(1)} mM`;
         ui.valGlucose.textContent = `${Math.round(sim.bloodGlucose)} mg/dL`;
         ui.valLgly.textContent = `${Math.round(sim.liverGlycogen)}%`;
+        ui.valCoriCost.textContent = sim.coriAtpCostRate >= 1.0
+          ? `~${Math.round(sim.coriAtpCostRate)} ATP/m`
+          : '低負荷';
 
+        // 血乳酸 >= 4.0 mM (OBLA 乳酸堆積閾值) 警示高亮
+        if (sim.bloodLactate >= 4.0) {
+          ui.valLactateCard.className = 'bg-rose-950/65 rounded-lg p-1.5 border border-rose-500/60 transition-colors';
+          ui.valLactate.className = 'text-xs sm:text-sm font-mono font-bold text-rose-300';
+          ui.valLactateBadge.classList.remove('hidden');
+        } else {
+          ui.valLactateCard.className = 'bg-slate-900/80 rounded-lg p-1.5 border border-slate-700/50 transition-colors';
+          ui.valLactate.className = 'text-xs sm:text-sm font-mono font-bold text-amber-400';
+          ui.valLactateBadge.classList.add('hidden');
+        }
+
+        updateNarrator();
+        syncFloatingPanelOffsets();
         renderSparkline();
       }
 
@@ -2009,16 +2545,49 @@
         sparkCtx.scale(dpr, dpr);
         sparkCtx.clearRect(0, 0, w, h);
 
+        // 參考水平格線 (25%, 50%, 75%)
+        sparkCtx.strokeStyle = 'rgba(148, 163, 184, 0.14)';
+        sparkCtx.lineWidth = 1;
+        for (const pct of [25, 50, 75]) {
+          const gy = Math.round(h - (pct / 100) * (h - 6) - 3) + 0.5;
+          sparkCtx.beginPath();
+          sparkCtx.moveTo(0, gy);
+          sparkCtx.lineTo(w, gy);
+          sparkCtx.stroke();
+        }
+        sparkCtx.fillStyle = 'rgba(148, 163, 184, 0.45)';
+        sparkCtx.font = '8px "Inter", sans-serif';
+        sparkCtx.textAlign = 'right';
+        sparkCtx.fillText('50%', w - 4, h * 0.5 - 1);
+
         const data = sim.history;
         if (data.length < 2) {
           sparkCtx.restore();
           return;
         }
 
+        const span = Math.max(20, data.length - 1);
+
+        // 情境切換垂直標記
+        for (let m = 0; m < sim.presetMarkers.length; m++) {
+          const mk = sim.presetMarkers[m];
+          if (mk.idx < 0 || mk.idx >= data.length) continue;
+          const mx = (mk.idx / span) * w;
+          sparkCtx.save();
+          sparkCtx.strokeStyle = mk.color;
+          sparkCtx.globalAlpha = 0.55;
+          sparkCtx.setLineDash([2, 2]);
+          sparkCtx.beginPath();
+          sparkCtx.moveTo(mx, 2);
+          sparkCtx.lineTo(mx, h - 2);
+          sparkCtx.stroke();
+          sparkCtx.restore();
+        }
+
         const drawSeries = (key, color) => {
           sparkCtx.beginPath();
           for (let i = 0; i < data.length; i++) {
-            const x = (i / 89) * w;
+            const x = (i / span) * w;
             const y = h - (data[i][key] / 100) * (h - 6) - 3;
             if (i === 0) sparkCtx.moveTo(x, y);
             else sparkCtx.lineTo(x, y);
@@ -2064,10 +2633,15 @@
       function resetCameraView() {
         const w = window.innerWidth;
         const h = window.innerHeight;
-        const fitScale = Math.min((w - 40) / WORLD.width, (h - 220) / WORLD.height);
+        const headerH = ui.topHeader ? ui.topHeader.getBoundingClientRect().height : 155;
+        const dashH = (sim.hudVisible && ui.bottomDashboard) ? ui.bottomDashboard.offsetHeight : 16;
+        const availH = Math.max(200, h - headerH - dashH - 18);
+        const availW = Math.max(260, w - 40);
+        const fitScale = Math.min(availW / 1600, availH / 780);
         camera.scale = clamp(fitScale, camera.minScale, 1.05);
-        camera.x = WORLD.width / 2;
-        camera.y = WORLD.height / 2 + 25;
+        camera.x = 830;
+        const bandCenterScreenY = headerH + (h - dashH - headerH) / 2;
+        camera.y = 448 - (bandCenterScreenY - h / 2) / camera.scale;
         updateZoomBadge();
       }
 
@@ -2078,10 +2652,19 @@
         ui.nodeDesc.textContent = node.desc;
         ui.nodeEnzyme.textContent = node.enzyme;
         ui.nodeAtp.textContent = node.atp;
+        if (window.innerWidth < 768 && !sim.molPanelCollapsed) {
+          setMolPanelCollapsed(true);
+        }
         ui.nodeCard.classList.remove('hidden');
+        syncFloatingPanelOffsets(true);
       }
 
-      // Pointer Events 多點觸控狀態機（支援單指平移、雙指捏合縮放、點擊節點）
+      function closeNodeDetail() {
+        sim.selectedNodeId = null;
+        ui.nodeCard.classList.add('hidden');
+      }
+
+      // Pointer Events 多點觸控狀態機（支援單指平移、雙指捏合縮放、Hover 提示、點擊節點與點擊空白關閉）
       const pointers = new Map();
       let isDragging = false;
       let dragMoved = false;
@@ -2105,7 +2688,15 @@
       });
 
       canvas.addEventListener('pointermove', (e) => {
-        if (!pointers.has(e.pointerId)) return;
+        if (!pointers.has(e.pointerId)) {
+          if (pointers.size === 0 && !isDragging) {
+            const worldPt = screenToWorld(e.clientX, e.clientY);
+            const hit = hitTestNode(worldPt.x, worldPt.y);
+            sim.hoveredNodeId = hit ? hit.id : null;
+            canvas.classList.toggle('pointer-hover', Boolean(hit));
+          }
+          return;
+        }
         pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
         if (pointers.size === 2) {
@@ -2128,6 +2719,11 @@
         }
       });
 
+      canvas.addEventListener('pointerleave', () => {
+        sim.hoveredNodeId = null;
+        canvas.classList.remove('pointer-hover');
+      });
+
       function handlePointerEnd(e) {
         const wasSingleTap = pointers.size === 1 && !dragMoved;
         pointers.delete(e.pointerId);
@@ -2145,12 +2741,11 @@
 
         if (wasSingleTap) {
           const worldPt = screenToWorld(e.clientX, e.clientY);
-          for (let i = 0; i < NODES.length; i++) {
-            const n = NODES[i];
-            if (Math.hypot(worldPt.x - n.x, worldPt.y - n.y) <= n.r) {
-              openNodeDetail(n);
-              return;
-            }
+          const hit = hitTestNode(worldPt.x, worldPt.y);
+          if (hit) {
+            openNodeDetail(hit);
+          } else if (sim.selectedNodeId !== null) {
+            closeNodeDetail();
           }
         }
       }
@@ -2182,10 +2777,9 @@
                 : 'bg-slate-950/60 border-slate-800/70 text-slate-500 opacity-60'
           }`;
 
-          // 左側：點選聚焦 Highlight 按鈕
           const focusBtn = document.createElement('button');
           focusBtn.type = 'button';
-          focusBtn.className = 'flex-1 min-h-[32px] flex items-center gap-2 text-left truncate';
+          focusBtn.className = 'flex-1 min-h-[30px] flex items-center gap-2 text-left truncate';
           focusBtn.title = '點選聚焦 Highlight 此分子路徑（再次點選取消）';
           focusBtn.innerHTML = `
             <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${m.color}; box-shadow:0 0 8px ${m.color}"></span>
@@ -2199,10 +2793,9 @@
             renderMoleculeToggleUI();
           });
 
-          // 右側：顯示 / 隱藏 Toggle 按鈕
           const visBtn = document.createElement('button');
           visBtn.type = 'button';
-          visBtn.className = `min-w-[32px] min-h-[32px] rounded-lg flex items-center justify-center text-xs border transition ${
+          visBtn.className = `min-w-[30px] min-h-[30px] rounded-lg flex items-center justify-center text-xs border transition ${
             isVis
               ? 'bg-slate-700/80 border-slate-600 text-slate-200 hover:bg-slate-600'
               : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
@@ -2223,6 +2816,10 @@
           ui.molToggleList.appendChild(row);
         });
       }
+
+      ui.btnMolCollapse.addEventListener('click', () => {
+        setMolPanelCollapsed(!sim.molPanelCollapsed);
+      });
 
       ui.btnMolReset.addEventListener('click', () => {
         MOLECULE_TYPES.forEach(m => {
@@ -2246,30 +2843,36 @@
       });
 
       // ==========================================
-      // 9. UI 按鈕與滑桿事件綁定
+      // 9. UI 按鈕、滑桿與鍵盤快捷鍵事件綁定
       // ==========================================
-      ui.btnPlayPause.addEventListener('click', () => {
+      function togglePlayPause() {
         sim.running = !sim.running;
         ui.playIcon.textContent = sim.running ? '⏸' : '▶';
         ui.playLabel.textContent = sim.running ? '暫停' : '繼續';
-      });
+      }
 
+      ui.btnPlayPause.addEventListener('click', togglePlayPause);
       ui.btnResetSim.addEventListener('click', resetSimulation);
 
       ui.btnToggleHud.addEventListener('click', () => {
         sim.hudVisible = !sim.hudVisible;
         if (sim.hudVisible) {
           ui.bottomDashboard.classList.remove('translate-y-full');
+          ui.btnToggleHud.className = 'min-w-[44px] min-h-[44px] px-3 rounded-xl bg-slate-800/90 hover:bg-slate-700 active:bg-slate-600 border border-slate-600/60 text-slate-200 font-medium text-xs sm:text-sm flex items-center justify-center gap-1 transition';
         } else {
           ui.bottomDashboard.classList.add('translate-y-full');
+          ui.btnToggleHud.className = 'min-w-[44px] min-h-[44px] px-3 rounded-xl bg-sky-500/25 hover:bg-sky-500/35 border border-sky-400 text-sky-200 font-semibold text-xs sm:text-sm flex items-center justify-center gap-1 transition';
         }
+        syncFloatingPanelOffsets(true);
       });
 
       ui.sliderIntensity.addEventListener('input', (e) => {
         sim.intensity = Number(e.target.value);
         sim.preset = 'custom';
+        computePhysiologyState(0);
         updatePresetButtonsUI();
         updateIntensityLabel();
+        updateDashboardUI();
       });
 
       ui.sliderSpeed.addEventListener('input', (e) => {
@@ -2294,14 +2897,48 @@
       });
 
       ui.btnResetView.addEventListener('click', resetCameraView);
+      ui.btnCloseNode.addEventListener('click', closeNodeDetail);
 
-      ui.btnCloseNode.addEventListener('click', () => {
-        sim.selectedNodeId = null;
-        ui.nodeCard.classList.add('hidden');
+      window.addEventListener('keydown', (e) => {
+        const target = e.target;
+        const tag = target && target.tagName ? target.tagName.toUpperCase() : '';
+        const isTextEntry = tag === 'TEXTAREA' || tag === 'SELECT' || (tag === 'INPUT' && target.type !== 'range') || (target && target.isContentEditable);
+
+        if (e.key === 'Escape') {
+          if (!ui.knowledgeModal.classList.contains('hidden')) {
+            ui.knowledgeModal.classList.add('hidden');
+            return;
+          }
+          if (sim.selectedNodeId !== null) {
+            closeNodeDetail();
+          }
+          return;
+        }
+
+        if (!ui.knowledgeModal.classList.contains('hidden')) return;
+
+        if (e.code === 'Space') {
+          if (tag === 'BUTTON' || tag === 'A' || isTextEntry) return;
+          e.preventDefault();
+          togglePlayPause();
+          return;
+        }
+
+        if (isTextEntry || e.ctrlKey || e.metaKey || e.altKey) return;
+
+        if (e.key === 'r' || e.key === 'R') {
+          resetCameraView();
+        } else if (e.key === '+' || e.key === '=') {
+          const rect = canvas.getBoundingClientRect();
+          zoomAtScreenPoint(camera.scale * 1.22, rect.width / 2, rect.height / 2);
+        } else if (e.key === '-' || e.key === '_') {
+          const rect = canvas.getBoundingClientRect();
+          zoomAtScreenPoint(camera.scale * 0.82, rect.width / 2, rect.height / 2);
+        }
       });
 
       // ==========================================
-      // 9. 響應式畫布調整與主動畫迴圈
+      // 10. 響應式畫布調整、主動畫迴圈與啟動初始化
       // ==========================================
       function resizeCanvas() {
         const dpr = window.devicePixelRatio || 1;
@@ -2313,6 +2950,7 @@
 
       window.addEventListener('resize', () => {
         resizeCanvas();
+        syncFloatingPanelOffsets(true);
       });
 
       let lastTimestamp = 0;
@@ -2336,21 +2974,15 @@
       }
 
       window.onload = function () {
+        initPathMeta();
+        buildMoleculeSprites();
         resizeCanvas();
-        resetCameraView();
+        setMolPanelCollapsed(window.innerWidth < 768);
         renderMoleculeToggleUI();
-        applyPreset('jog');
-        // 預先填充各類粒子（O₂ 雙原子、葡萄糖、游離脂肪酸 FFA、丙酮酸、金色 ATP 能量粒子）讓畫面開啟即完整呈現
-        for (let i = 0; i < 16; i++) {
-          spawnParticle('oxygen', 'lungsOxygenToArtery', 1);
-          spawnParticle('oxygen', 'arteryOxygenToMuscleMito', 1);
-          spawnParticle('glucose', 'arteryGlucoseToMuscle', 1);
-          spawnParticle('ffa', 'arteryFfaToMuscleMito', 0.9);
-          spawnParticle('pyruvate', 'glycolysisToPyruvateFork', 1);
-          spawnParticle('atp', 'atpFromMitoToMyofibril', 1.1);
-          spawnParticle('lactate', 'pyruvateToLactateVein', 0.9);
-          spawnParticle('glucose', 'liverGlucoseToArtery', 0.9);
-        }
+        applyPreset('jog', { recordMarker: false });
+        syncFloatingPanelOffsets(true);
+        resetCameraView();
+        seedInitialParticles();
         requestAnimationFrame(mainLoop);
       };
     })();
