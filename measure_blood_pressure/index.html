@@ -1,0 +1,1251 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>肱動脈血壓量測原理互動動畫</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    html, body {
+      height: 100dvh;
+      width: 100vw;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      font-family: 'Noto Sans TC', 'Inter', system-ui, -apple-system, sans-serif;
+      background-color: #060911;
+      color: #f1f5f9;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    /* 精簡滑桿樣式 */
+    input[type="range"].bp-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+      cursor: pointer;
+    }
+    input[type="range"].bp-slider::-webkit-slider-runnable-track {
+      height: 8px;
+      border-radius: 9999px;
+      background: linear-gradient(90deg, #10b981 0%, #38bdf8 40%, #f59e0b 62%, #ef4444 100%);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+    }
+    input[type="range"].bp-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 9999px;
+      background: #ffffff;
+      border: 2.5px solid #0284c7;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.85);
+      margin-top: -7px;
+      transition: transform 0.1s ease;
+    }
+    input[type="range"].bp-slider::-webkit-slider-thumb:hover {
+      transform: scale(1.12);
+    }
+    input[type="range"].bp-slider::-moz-range-track {
+      height: 8px;
+      border-radius: 9999px;
+      background: linear-gradient(90deg, #10b981 0%, #38bdf8 40%, #f59e0b 62%, #ef4444 100%);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+    }
+    input[type="range"].bp-slider::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      border-radius: 9999px;
+      background: #ffffff;
+      border: 2.5px solid #0284c7;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.85);
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+<body class="h-[100dvh] w-screen overflow-hidden flex flex-col bg-[#060911] text-slate-100 antialiased">
+
+  <!-- 1. 極簡頂部懸浮狀態與工具列 (佔比極小，最大化主畫布) -->
+  <header class="shrink-0 h-11 px-3 sm:px-4 border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-md flex items-center justify-between gap-2 z-20">
+    <div class="flex items-center gap-2 min-w-0">
+      <span class="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-[0_0_8px_#f43f5e] shrink-0"></span>
+      <h1 class="text-xs sm:text-sm font-bold tracking-tight text-white truncate">
+        肱動脈血壓量測原理互動模擬
+      </h1>
+      <span id="cuffBadge" class="hidden md:inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shrink-0">
+        低於舒張壓
+      </span>
+    </div>
+
+    <!-- 右側精簡控制項 -->
+    <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+      <div class="flex items-center gap-1 bg-slate-900 border border-slate-700/80 rounded-lg px-2 py-1 text-[11px] sm:text-xs">
+        <span class="text-slate-400 hidden sm:inline">血壓</span>
+        <select id="bpPresetSelect" aria-label="選擇模擬血壓基準" class="bg-transparent text-sky-300 font-bold focus:outline-none cursor-pointer">
+          <option value="120/80" class="bg-slate-900 text-slate-100" selected>120/80</option>
+          <option value="155/95" class="bg-slate-900 text-slate-100">155/95</option>
+          <option value="95/60" class="bg-slate-900 text-slate-100">95/60</option>
+          <option value="140/90" class="bg-slate-900 text-slate-100">140/90</option>
+        </select>
+      </div>
+
+      <button id="waveToggleBtn" type="button" title="顯示/隱藏右上角迷你波形" class="px-2 py-1 rounded-lg text-[11px] sm:text-xs font-medium bg-slate-900 hover:bg-slate-800 border border-slate-700/80 text-slate-300 transition cursor-pointer">
+        📈 <span class="hidden sm:inline">波形</span>
+      </button>
+
+      <button id="soundToggleBtn" type="button" title="切換柯洛特科夫音音效" class="px-2 py-1 rounded-lg text-[11px] sm:text-xs font-medium bg-slate-900 hover:bg-slate-800 border border-slate-700/80 text-slate-200 transition cursor-pointer">
+        <span id="soundIcon">🔊</span>
+      </button>
+
+      <button id="infoDrawerBtn" type="button" class="px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-600/80 text-sky-300 transition cursor-pointer">
+        ℹ️ 原理與階段
+      </button>
+    </div>
+  </header>
+
+  <!-- 2. 主量測動畫大視窗 (佔螢幕 ~86% 面積，整合類比指針表、氣管、局部受壓肱動脈、聽診聲波與迷你波形) -->
+  <main class="relative flex-1 w-full min-h-0 overflow-hidden bg-[#060911]">
+    <canvas id="mainStageCanvas"></canvas>
+
+    <!-- 可收合的「原理與四階段跳轉」浮動抽屜（預設隱藏，不佔畫面） -->
+    <aside id="infoDrawer" class="hidden absolute top-2.5 right-2.5 left-2.5 sm:left-auto sm:w-[400px] max-h-[calc(100%-20px)] overflow-y-auto rounded-2xl bg-slate-900/95 backdrop-blur-xl border border-slate-700/90 p-3.5 shadow-2xl z-30 space-y-3">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+        <span class="text-xs sm:text-sm font-bold text-white">量測階段快速跳轉與即時機制</span>
+        <button id="closeDrawerBtn" type="button" class="text-slate-400 hover:text-white text-xs px-2 py-0.5 rounded bg-slate-800 cursor-pointer">✕ 關閉</button>
+      </div>
+
+      <!-- 即時機制說明 -->
+      <div id="mechanismBanner" class="rounded-xl bg-slate-800/85 border border-slate-700/80 p-2.5 text-xs text-slate-200 leading-relaxed">
+        正在載入機制說明...
+      </div>
+
+      <!-- 四大階段快速定格按鈕 -->
+      <div class="grid grid-cols-2 gap-2">
+        <button data-stage="above_sys" type="button" class="stage-btn text-left p-2 rounded-xl border border-slate-700/80 bg-slate-800/70 hover:bg-slate-800 transition cursor-pointer">
+          <div class="text-xs font-bold text-rose-400">① 高於收縮壓</div>
+          <div class="text-[11px] text-slate-400 mt-0.5">中央壓扁阻斷・無聲</div>
+        </button>
+        <button data-stage="at_sys" type="button" class="stage-btn text-left p-2 rounded-xl border border-slate-700/80 bg-slate-800/70 hover:bg-slate-800 transition cursor-pointer">
+          <div class="text-xs font-bold text-amber-400">② 等於收縮壓</div>
+          <div class="text-[11px] text-slate-400 mt-0.5">衝開狹窄・第一聲敲擊</div>
+        </button>
+        <button data-stage="between" type="button" class="stage-btn text-left p-2 rounded-xl border border-slate-700/80 bg-slate-800/70 hover:bg-slate-800 transition cursor-pointer">
+          <div class="text-xs font-bold text-sky-400">③ 收縮〜舒張間</div>
+          <div class="text-[11px] text-slate-400 mt-0.5">間歇噴射・下游亂流</div>
+        </button>
+        <button data-stage="below_dia" type="button" class="stage-btn text-left p-2 rounded-xl border border-slate-700/80 bg-slate-800/70 hover:bg-slate-800 transition cursor-pointer">
+          <div class="text-xs font-bold text-emerald-400">④ 低於舒張壓</div>
+          <div class="text-[11px] text-slate-400 mt-0.5">全段層流・聲音消失</div>
+        </button>
+      </div>
+    </aside>
+  </main>
+
+  <!-- 3. 極簡底部單列操控塢 (Slim Bottom Control Dock) -->
+  <footer class="shrink-0 h-14 px-3 sm:px-5 border-t border-slate-800/90 bg-slate-950/95 backdrop-blur-md flex items-center gap-2 sm:gap-3.5 z-20">
+    <!-- 自動完整量測按鈕 -->
+    <button id="autoDeflateBtn" type="button" class="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-bold bg-sky-600 hover:bg-sky-500 text-white shadow-md shadow-sky-600/25 transition cursor-pointer">
+      <span id="autoDeflateIcon">▶</span>
+      <span id="autoDeflateLabel">完整量測</span>
+    </button>
+
+    <!-- 手動按住充氣 / 放氣 -->
+    <div class="shrink-0 flex items-center gap-1.5">
+      <button id="holdInflateBtn" type="button" class="px-2.5 py-2 rounded-xl bg-rose-600/90 hover:bg-rose-500 text-white text-xs font-bold transition cursor-pointer">
+        ＋充氣
+      </button>
+      <button id="holdDeflateBtn" type="button" class="px-2.5 py-2 rounded-xl bg-emerald-600/90 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer">
+        －放氣
+      </button>
+    </div>
+
+    <!-- 緊湊壓力滑桿 -->
+    <div class="flex-1 flex items-center gap-2.5 min-w-0">
+      <input id="cuffSlider" type="range" min="0" max="220" step="1" value="0" class="bp-slider w-full" aria-label="壓脈帶壓力滑桿" />
+      <div class="shrink-0 text-right tabular-nums w-20 sm:w-24">
+        <span id="cuffValueDisplay" class="text-base sm:text-lg font-bold text-white">0</span>
+        <span class="text-[11px] text-slate-400">mmHg</span>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // ==========================================
+      // 1. 狀態管理與生理模型參數
+      // ==========================================
+      const state = {
+        cuffPressure: 0,            // 壓脈帶壓力 (0 ~ 240 mmHg)，預設從 0 開始
+        systolic: 120,              // 模擬收縮壓
+        diastolic: 80,              // 模擬舒張壓
+        heartRate: 72,              // 每分鐘心跳數 (bpm)
+        cycleMode: 'idle',          // 'idle' | 'inflating' | 'deflating'
+        targetInflatePressure: 165, // 自動充氣目標高壓 (SBP + 40)
+        manualHoldDir: 0,           // 1: 按住充氣, -1: 按住放氣, 0: 無
+        detectedSys: null,          // 洩壓過程偵測鎖定的收縮壓
+        detectedDia: null,          // 洩壓過程偵測鎖定的舒張壓
+        soundEnabled: true,         // 是否啟用 Web Audio 脈衝音效
+        showMiniWave: true,         // 是否顯示右上角迷你波形浮窗
+        phase: 0,                   // 心搏週期相位 (0 ~ 1)
+        lastBeatIndex: -1,
+        korotkoffBursts: [],        // 柯洛特科夫音脈衝事件（同時驅動聽診聲波紋與波形）
+        oscHistory: new Array(120).fill(0),
+        audioCtx: null
+      };
+
+      const els = {
+        bpPresetSelect: document.getElementById('bpPresetSelect'),
+        waveToggleBtn: document.getElementById('waveToggleBtn'),
+        soundToggleBtn: document.getElementById('soundToggleBtn'),
+        soundIcon: document.getElementById('soundIcon'),
+        infoDrawerBtn: document.getElementById('infoDrawerBtn'),
+        infoDrawer: document.getElementById('infoDrawer'),
+        closeDrawerBtn: document.getElementById('closeDrawerBtn'),
+        autoDeflateBtn: document.getElementById('autoDeflateBtn'),
+        autoDeflateIcon: document.getElementById('autoDeflateIcon'),
+        autoDeflateLabel: document.getElementById('autoDeflateLabel'),
+        holdInflateBtn: document.getElementById('holdInflateBtn'),
+        holdDeflateBtn: document.getElementById('holdDeflateBtn'),
+        cuffSlider: document.getElementById('cuffSlider'),
+        cuffValueDisplay: document.getElementById('cuffValueDisplay'),
+        cuffBadge: document.getElementById('cuffBadge'),
+        mechanismBanner: document.getElementById('mechanismBanner'),
+        stageButtons: document.querySelectorAll('.stage-btn'),
+        mainStageCanvas: document.getElementById('mainStageCanvas')
+      };
+
+      // 血流粒子陣列（增加密度讓放大後的血管更生動）
+      const NUM_PARTICLES = 120;
+      const particles = [];
+
+      function initParticles() {
+        particles.length = 0;
+        for (let i = 0; i < NUM_PARTICLES; i++) {
+          particles.push({
+            xNorm: Math.random(),
+            yOffsetNorm: (Math.random() * 2 - 1) * 0.76,
+            radius: 3.0 + Math.random() * 1.8,
+            turbPhase: Math.random() * Math.PI * 2,
+            turbSpeed: 5.5 + Math.random() * 6.5
+          });
+        }
+      }
+
+      // ==========================================
+      // 2. 生理波形計算與階段判讀
+      // ==========================================
+      function getArterialPressureAtPhase(p) {
+        const { systolic, diastolic } = state;
+        const pulsePress = systolic - diastolic;
+        let wave = 0;
+        if (p < 0.36) {
+          const t = p / 0.36;
+          wave = Math.pow(Math.sin(t * Math.PI * 0.5), 1.25);
+        } else {
+          const t = (p - 0.36) / 0.64;
+          const notch = Math.exp(-Math.pow((t - 0.14) / 0.08, 2)) * 0.14;
+          wave = Math.exp(-t * 3.1) * 0.92 + notch;
+        }
+        return diastolic + pulsePress * Math.max(0, Math.min(1, wave));
+      }
+
+      function evaluateMeasurementStage() {
+        const P = state.cuffPressure;
+        const S = state.systolic;
+        const D = state.diastolic;
+
+        if (P > S) {
+          return {
+            key: 'above_sys',
+            shortTitle: '① 高於收縮壓：中央局部完全阻斷',
+            badgeText: '高於收縮壓（局部閉合）',
+            badgeClass: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
+            accentColor: '#fb7185',
+            banner: `【① 高於收縮壓】壓脈帶 ${Math.round(P)} mmHg > 收縮壓 ${S} mmHg。只有中央壓脈帶區被壓扁閉合，左側上游血管依然充盈搏動，右側下游無血流通過，聽診無聲。`
+          };
+        } else if (Math.abs(P - S) <= 3 && P <= S) {
+          return {
+            key: 'at_sys',
+            shortTitle: '② 等於收縮壓：衝開狹窄・第一聲敲擊音',
+            badgeText: '等於收縮壓（第一聲）',
+            badgeClass: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+            accentColor: '#fbbf24',
+            banner: `【② 等於收縮壓】指針降至 ${Math.round(P)} mmHg（收縮壓 ${S} mmHg）。心室收縮峰值瞬間撐開壓脈帶狹窄處，血液噴入下游形成亂流，聽診器測得第一聲敲擊音！`
+          };
+        } else if (P > D) {
+          return {
+            key: 'between',
+            shortTitle: '③ 收縮壓〜舒張壓間：間歇噴射・下游亂流',
+            badgeText: '收縮壓〜舒張壓間（亂流）',
+            badgeClass: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
+            accentColor: '#38bdf8',
+            banner: `【③ 介於收縮壓與舒張壓之間】指針 ${Math.round(P)} mmHg。中央受壓段隨心跳「收縮衝開→舒張壓扁」，下游產生強烈漩渦亂流與規律柯洛特科夫敲擊音。`
+          };
+        } else {
+          return {
+            key: 'below_dia',
+            shortTitle: '④ 低於舒張壓：全段恢復平穩層流・聲音消失',
+            badgeText: '低於舒張壓（平穩層流）',
+            badgeClass: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+            accentColor: '#34d399',
+            banner: `【④ 低於舒張壓】指針降至 ${Math.round(P)} mmHg（低於舒張壓 ${D} mmHg）。中央血管完全恢復正常管徑，全段血流恢復平穩「層流」，敲擊聲消失。`
+          };
+        }
+      }
+
+      function getOscillometricEnvelope() {
+        const map = state.diastolic + (state.systolic - state.diastolic) * 0.35;
+        const span = Math.max(24, (state.systolic - state.diastolic) * 0.95);
+        const diff = state.cuffPressure - map;
+        return Math.exp(-Math.pow(diff / span, 2));
+      }
+
+      // ==========================================
+      // 3. Web Audio 柯洛特科夫音模擬音效
+      // ==========================================
+      function ensureAudioContext() {
+        if (!state.soundEnabled) return null;
+        try {
+          if (!state.audioCtx) {
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            if (AudioContextClass) {
+              state.audioCtx = new AudioContextClass();
+            }
+          }
+          if (state.audioCtx && state.audioCtx.state === 'suspended') {
+            state.audioCtx.resume();
+          }
+          return state.audioCtx;
+        } catch (err) {
+          return null;
+        }
+      }
+
+      function playKorotkoffPulse(intensity) {
+        if (!state.soundEnabled || intensity <= 0.05) return;
+        const ctx = ensureAudioContext();
+        if (!ctx) return;
+
+        try {
+          const now = ctx.currentTime;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          const baseFreq = state.cuffPressure > state.diastolic + 12 ? 108 : 80;
+          osc.frequency.setValueAtTime(baseFreq, now);
+          osc.frequency.exponentialRampToValueAtTime(40, now + 0.085);
+
+          const peakGain = Math.min(0.28, 0.04 + intensity * 0.22);
+          gain.gain.setValueAtTime(0.0001, now);
+          gain.gain.linearRampToValueAtTime(peakGain, now + 0.008);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.095);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc.start(now);
+          osc.stop(now + 0.1);
+        } catch (err) {
+          // 忽略瀏覽器音訊限制
+        }
+      }
+
+      // ==========================================
+      // 4. UI 同步
+      // ==========================================
+      function updateAutoBtnUI() {
+        if (state.cycleMode === 'inflating') {
+          els.autoDeflateIcon.textContent = '⏸';
+          els.autoDeflateLabel.textContent = '充氣中...';
+        } else if (state.cycleMode === 'deflating') {
+          els.autoDeflateIcon.textContent = '⏸';
+          els.autoDeflateLabel.textContent = '洩壓中...';
+        } else {
+          els.autoDeflateIcon.textContent = '▶';
+          els.autoDeflateLabel.textContent = '完整量測';
+        }
+      }
+
+      function syncUI() {
+        const P = state.cuffPressure;
+        const info = evaluateMeasurementStage();
+
+        els.cuffValueDisplay.textContent = Math.round(P);
+        els.cuffBadge.textContent = info.badgeText;
+        els.cuffBadge.className = `hidden md:inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold border shrink-0 ${info.badgeClass}`;
+        els.mechanismBanner.textContent = info.banner;
+
+        els.stageButtons.forEach((btn) => {
+          const isMatch = btn.dataset.stage === info.key;
+          btn.classList.toggle('ring-2', isMatch);
+          btn.classList.toggle('ring-sky-400/80', isMatch);
+          btn.classList.toggle('bg-slate-800', isMatch);
+        });
+      }
+
+      function setCuffPressure(val) {
+        const clamped = Math.max(0, Math.min(240, Number(val)));
+        state.cuffPressure = clamped;
+        els.cuffSlider.value = Math.min(220, Math.round(clamped));
+      }
+
+      // ==========================================
+      // 5. 響應式單一大畫布渲染引擎
+      //    整合：
+      //    (A) 占據畫面主體的超大型「上臂壓脈帶局部壓縮＋三區段肱動脈血流＋聽診器聲波」
+      //    (B) 左上角無縫連接導氣管的「傳統類比指針式血壓表 (0–240 mmHg)」
+      //    (C) 右上角可收合的「迷你示波震盪＆柯洛特科夫音波形條」
+      // ==========================================
+      function resizeCanvasToDisplaySize(canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const targetW = Math.max(1, Math.round(rect.width * dpr));
+        const targetH = Math.max(1, Math.round(rect.height * dpr));
+        if (canvas.width !== targetW || canvas.height !== targetH) {
+          canvas.width = targetW;
+          canvas.height = targetH;
+        }
+        return { width: canvas.width, height: canvas.height, dpr };
+      }
+
+      function drawUnifiedStage(now, liveArterialPressure) {
+        const canvas = els.mainStageCanvas;
+        const ctx = canvas.getContext('2d');
+        const { width: w, height: h, dpr } = resizeCanvasToDisplaySize(canvas);
+        ctx.clearRect(0, 0, w, h);
+
+        const P = state.cuffPressure;
+        const S = state.systolic;
+        const D = state.diastolic;
+        const stageInfo = evaluateMeasurementStage();
+        const isPortrait = w < h * 0.95;
+
+        // 1. 醫療儀器感細微背景網格
+        ctx.save();
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.045)';
+        ctx.lineWidth = 1 * dpr;
+        const gridStep = 40 * dpr;
+        for (let gx = 0; gx < w; gx += gridStep) {
+          ctx.beginPath();
+          ctx.moveTo(gx, 0);
+          ctx.lineTo(gx, h);
+          ctx.stroke();
+        }
+        for (let gy = 0; gy < h; gy += gridStep) {
+          ctx.beginPath();
+          ctx.moveTo(0, gy);
+          ctx.lineTo(w, gy);
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        // 2. 計算版面配置：讓上臂與血管佔據畫面中央偏下超大空間，左上角放置類比指針表並以氣管連接壓脈帶
+        const gaugeRadius = isPortrait
+          ? Math.min(w * 0.23, h * 0.145)
+          : Math.min(w * 0.135, h * 0.22);
+        const gaugeCx = gaugeRadius + (isPortrait ? 18 * dpr : 28 * dpr);
+        const gaugeCy = gaugeRadius + (isPortrait ? 18 * dpr : 22 * dpr);
+
+        // 上臂與血管垂直中心位置（讓血管佔滿整個螢幕寬度！）
+        const centerY = isPortrait ? h * 0.62 : h * 0.60;
+        const armHalfH = isPortrait ? h * 0.21 : h * 0.26;
+        const armTop = centerY - armHalfH;
+        const armBottom = centerY + armHalfH;
+
+        // 壓脈帶位於正中央（佔螢幕寬度 30%），左右留下寬廣的上游與下游血管
+        const cuffLeft = w * 0.35;
+        const cuffRight = w * 0.65;
+        const cuffWidth = cuffRight - cuffLeft;
+        const transitionLen = Math.min(42 * dpr, w * 0.045);
+
+        const inflationRatio = Math.min(1, P / 220);
+        const cuffOuterPad = (8 + inflationRatio * 20) * dpr;
+
+        // 3. 繪製連接「類比血壓表」到「中央壓脈帶氣囊」的橡膠導氣管！
+        ctx.save();
+        const tubeStartX = gaugeCx + gaugeRadius * 0.72;
+        const tubeStartY = gaugeCy + gaugeRadius * 0.68;
+        const tubeEndX = cuffLeft + cuffWidth * 0.22;
+        const tubeEndY = armTop - cuffOuterPad * 0.5;
+
+        ctx.beginPath();
+        ctx.moveTo(tubeStartX, tubeStartY);
+        ctx.bezierCurveTo(
+          tubeStartX + 45 * dpr,
+          tubeEndY - 35 * dpr,
+          tubeEndX - 30 * dpr,
+          tubeEndY - 45 * dpr,
+          tubeEndX,
+          tubeEndY
+        );
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 9 * dpr;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        ctx.strokeStyle = '#475569';
+        ctx.lineWidth = 4.5 * dpr;
+        ctx.stroke();
+        ctx.restore();
+
+        // 4. 三區段垂直分界參考線
+        ctx.save();
+        ctx.setLineDash([5 * dpr, 5 * dpr]);
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.22)';
+        ctx.lineWidth = 1.2 * dpr;
+        ctx.beginPath();
+        ctx.moveTo(cuffLeft, armTop - 26 * dpr);
+        ctx.lineTo(cuffLeft, armBottom + 20 * dpr);
+        ctx.moveTo(cuffRight, armTop - 26 * dpr);
+        ctx.lineTo(cuffRight, armBottom + 20 * dpr);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+
+        // 5. 繪製上臂橫切面組織輪廓（中央隨壓脈帶充氣向內凹陷）
+        ctx.save();
+        const armGrad = ctx.createLinearGradient(0, armTop, 0, armBottom);
+        armGrad.addColorStop(0, '#361f1d');
+        armGrad.addColorStop(0.5, '#4e2c27');
+        armGrad.addColorStop(1, '#2f1a18');
+
+        const skinIndent = inflationRatio * 12 * dpr;
+        ctx.fillStyle = armGrad;
+        ctx.beginPath();
+        ctx.moveTo(0, armTop);
+        ctx.lineTo(cuffLeft - 18 * dpr, armTop);
+        ctx.quadraticCurveTo(cuffLeft, armTop + skinIndent, cuffLeft + 18 * dpr, armTop + skinIndent);
+        ctx.lineTo(cuffRight - 18 * dpr, armTop + skinIndent);
+        ctx.quadraticCurveTo(cuffRight, armTop + skinIndent, cuffRight + 18 * dpr, armTop);
+        ctx.lineTo(w, armTop);
+        ctx.lineTo(w, armBottom);
+        ctx.lineTo(cuffRight + 18 * dpr, armBottom);
+        ctx.quadraticCurveTo(cuffRight, armBottom - skinIndent, cuffRight - 18 * dpr, armBottom - skinIndent);
+        ctx.lineTo(cuffLeft + 18 * dpr, armBottom - skinIndent);
+        ctx.quadraticCurveTo(cuffLeft, armBottom - skinIndent, cuffLeft - 18 * dpr, armBottom);
+        ctx.lineTo(0, armBottom);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        // 6. 計算三區段局部管腔半徑（只有中央壓脈帶覆蓋段會被壓扁！）
+        const pulseNorm = (liveArterialPressure - D) / Math.max(1, S - D);
+        const pulseScale = 0.90 + pulseNorm * 0.22;
+        const baseRadius = Math.min(armHalfH * 0.34, 38 * dpr);
+
+        const upstreamHalfR = baseRadius * pulseScale;
+        const netCompression = Math.max(0, (P - liveArterialPressure) / 55);
+        const compressedFactor = Math.min(1, netCompression);
+        const cuffHalfR = Math.max(1.8 * dpr, upstreamHalfR * (1 - compressedFactor * 0.95));
+
+        const isCurrentlyOpen = liveArterialPressure > P;
+        const downstreamHalfR = isCurrentlyOpen
+          ? baseRadius * (0.90 + pulseNorm * 0.18)
+          : baseRadius * 0.86;
+
+        const getLocalHalfRadius = (x) => {
+          if (x <= cuffLeft - transitionLen) {
+            return upstreamHalfR;
+          } else if (x < cuffLeft + 16 * dpr) {
+            const t = (x - (cuffLeft - transitionLen)) / (transitionLen + 16 * dpr);
+            const smooth = t * t * (3 - 2 * t);
+            return upstreamHalfR * (1 - smooth) + cuffHalfR * smooth;
+          } else if (x <= cuffRight - 16 * dpr) {
+            return cuffHalfR;
+          } else if (x < cuffRight + transitionLen) {
+            const t = (x - (cuffRight - 16 * dpr)) / (transitionLen + 16 * dpr);
+            const smooth = t * t * (3 - 2 * t);
+            return cuffHalfR * (1 - smooth) + downstreamHalfR * smooth;
+          } else {
+            return downstreamHalfR;
+          }
+        };
+
+        // 7. 繪製超大型肱動脈管腔與動脈壁
+        const buildVesselPath = () => {
+          const steps = 160;
+          ctx.beginPath();
+          for (let i = 0; i <= steps; i++) {
+            const x = (i / steps) * w;
+            const y = centerY - getLocalHalfRadius(x);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          for (let i = steps; i >= 0; i--) {
+            const x = (i / steps) * w;
+            const y = centerY + getLocalHalfRadius(x);
+            ctx.lineTo(x, y);
+          }
+          ctx.closePath();
+        };
+
+        ctx.save();
+        buildVesselPath();
+        const lumenGrad = ctx.createLinearGradient(0, centerY - baseRadius, 0, centerY + baseRadius);
+        lumenGrad.addColorStop(0, '#4c0519');
+        lumenGrad.addColorStop(0.5, '#9f1239');
+        lumenGrad.addColorStop(1, '#4c0519');
+        ctx.fillStyle = lumenGrad;
+        ctx.fill();
+
+        // 動脈管壁高光邊線
+        ctx.strokeStyle = '#fb7185';
+        ctx.lineWidth = 3.8 * dpr;
+        const wallSteps = 160;
+        ctx.beginPath();
+        for (let i = 0; i <= wallSteps; i++) {
+          const x = (i / wallSteps) * w;
+          const y = centerY - getLocalHalfRadius(x);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        ctx.beginPath();
+        for (let i = 0; i <= wallSteps; i++) {
+          const x = (i / wallSteps) * w;
+          const y = centerY + getLocalHalfRadius(x);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.restore();
+
+        // 8. 繪製血流紅血球粒子（層流 vs 狹窄噴射亂流）
+        const isTurbulentZone = P <= S && P > D && isCurrentlyOpen;
+        const isAtSystolicTurbulence = Math.abs(P - S) <= 4 && isCurrentlyOpen;
+        const turbulentActive = isTurbulentZone || isAtSystolicTurbulence;
+
+        ctx.save();
+        buildVesselPath();
+        ctx.clip();
+
+        const dt = 0.016;
+        for (let i = 0; i < particles.length; i++) {
+          const pt = particles[i];
+          const px = pt.xNorm * w;
+
+          let speedNorm = 0.24;
+          if (!isCurrentlyOpen) {
+            if (px < cuffLeft - transitionLen * 0.4) {
+              speedNorm = Math.sin(state.phase * Math.PI * 2) * 0.04;
+            } else {
+              speedNorm = 0;
+            }
+          } else if (turbulentActive && px >= cuffLeft - 12 * dpr) {
+            speedNorm = 0.56;
+          } else if (P <= D) {
+            const radialFactor = 1 - Math.abs(pt.yOffsetNorm) * 0.45;
+            speedNorm = 0.28 * radialFactor;
+          }
+
+          pt.xNorm += speedNorm * dt;
+          if (pt.xNorm > 1.02) {
+            pt.xNorm = -0.02;
+            pt.yOffsetNorm = (Math.random() * 2 - 1) * 0.76;
+          } else if (pt.xNorm < -0.02) {
+            pt.xNorm = 0.01;
+          }
+
+          const localHalfR = getLocalHalfRadius(px);
+          let py = centerY + pt.yOffsetNorm * Math.max(1.4 * dpr, localHalfR * 0.78);
+
+          if (turbulentActive && px > cuffLeft + cuffWidth * 0.45 && px < cuffRight + w * 0.30) {
+            pt.turbPhase += pt.turbSpeed * dt * 2.7;
+            const spread = Math.min(1, (px - (cuffLeft + cuffWidth * 0.45)) / (55 * dpr));
+            py += Math.sin(pt.turbPhase) * (localHalfR * 0.68) * spread;
+          }
+
+          const blockedInCuff = !isCurrentlyOpen && px > cuffLeft + 8 * dpr && px < cuffRight - 8 * dpr;
+          if (!blockedInCuff) {
+            ctx.beginPath();
+            ctx.arc(px, py, pt.radius * dpr, 0, Math.PI * 2);
+            ctx.fillStyle = turbulentActive && px > cuffLeft + cuffWidth * 0.3
+              ? 'rgba(253, 224, 71, 0.95)'
+              : 'rgba(254, 205, 211, 0.94)';
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+
+        // 9. 繪製中央充氣壓脈帶氣囊與向下/向上擠壓箭頭
+        ctx.save();
+        const cuffGradTop = ctx.createLinearGradient(0, armTop - cuffOuterPad * 0.6, 0, centerY - cuffHalfR);
+        cuffGradTop.addColorStop(0, 'rgba(14, 165, 233, 0.58)');
+        cuffGradTop.addColorStop(1, 'rgba(2, 132, 199, 0.32)');
+
+        const cuffGradBot = ctx.createLinearGradient(0, centerY + cuffHalfR, 0, armBottom + cuffOuterPad * 0.6);
+        cuffGradBot.addColorStop(0, 'rgba(2, 132, 199, 0.32)');
+        cuffGradBot.addColorStop(1, 'rgba(14, 165, 233, 0.58)');
+
+        const topBagBottom = Math.min(centerY - cuffHalfR - 4 * dpr, armTop + (centerY - armTop) * 0.70 + inflationRatio * 18 * dpr);
+        ctx.fillStyle = cuffGradTop;
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2.2 * dpr;
+        ctx.beginPath();
+        ctx.roundRect(cuffLeft, armTop - cuffOuterPad * 0.65, cuffWidth, Math.max(16 * dpr, topBagBottom - (armTop - cuffOuterPad * 0.65)), 12 * dpr);
+        ctx.fill();
+        ctx.stroke();
+
+        const botBagTop = Math.max(centerY + cuffHalfR + 4 * dpr, armBottom - (armBottom - centerY) * 0.70 - inflationRatio * 18 * dpr);
+        ctx.fillStyle = cuffGradBot;
+        ctx.beginPath();
+        ctx.roundRect(cuffLeft, botBagTop, cuffWidth, Math.max(16 * dpr, (armBottom + cuffOuterPad * 0.65) - botBagTop), 12 * dpr);
+        ctx.fill();
+        ctx.stroke();
+
+        // 局部擠壓箭頭
+        const arrowAlpha = Math.min(0.95, 0.25 + inflationRatio * 0.75);
+        ctx.strokeStyle = `rgba(186, 230, 253, ${arrowAlpha})`;
+        ctx.fillStyle = `rgba(186, 230, 253, ${arrowAlpha})`;
+        ctx.lineWidth = 2.2 * dpr;
+        const arrowCount = 5;
+        for (let i = 0; i < arrowCount; i++) {
+          const ax = cuffLeft + ((i + 0.5) / arrowCount) * cuffWidth;
+          const topArrowY = armTop + 6 * dpr;
+          ctx.beginPath();
+          ctx.moveTo(ax, topArrowY);
+          ctx.lineTo(ax, topArrowY + 15 * dpr);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(ax - 4.5 * dpr, topArrowY + 11 * dpr);
+          ctx.lineTo(ax + 4.5 * dpr, topArrowY + 11 * dpr);
+          ctx.lineTo(ax, topArrowY + 17 * dpr);
+          ctx.closePath();
+          ctx.fill();
+
+          const botArrowY = armBottom - 6 * dpr;
+          ctx.beginPath();
+          ctx.moveTo(ax, botArrowY);
+          ctx.lineTo(ax, botArrowY - 15 * dpr);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(ax - 4.5 * dpr, botArrowY - 11 * dpr);
+          ctx.lineTo(ax + 4.5 * dpr, botArrowY - 11 * dpr);
+          ctx.lineTo(ax, botArrowY - 17 * dpr);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.restore();
+
+        // 10. 下游聽診器探頭 (Stethoscope Bell) 與柯洛特科夫聲擴散波紋
+        const stethX = cuffRight + Math.min(54 * dpr, w * 0.055);
+        const stethY = armBottom + 6 * dpr;
+        ctx.save();
+        // 聲波擴散圈（當有柯洛特科夫音脈衝時從下游血管處向外擴散）
+        for (let b = 0; b < state.korotkoffBursts.length; b++) {
+          const burst = state.korotkoffBursts[b];
+          const age = (now - burst.time) / 1000;
+          if (age >= 0 && age < 0.75) {
+            const progress = age / 0.75;
+            const waveR = (14 + progress * 58) * dpr;
+            const alpha = (1 - progress) * 0.75 * burst.intensity;
+            ctx.beginPath();
+            ctx.arc(stethX, centerY + baseRadius * 0.8, waveR, 0.1 * Math.PI, 0.9 * Math.PI);
+            ctx.strokeStyle = `rgba(251, 191, 36, ${alpha})`;
+            ctx.lineWidth = 2.5 * dpr;
+            ctx.stroke();
+          }
+        }
+
+        // 聽診器金屬探頭圖示
+        ctx.fillStyle = '#334155';
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 2 * dpr;
+        ctx.beginPath();
+        ctx.roundRect(stethX - 16 * dpr, stethY - 4 * dpr, 32 * dpr, 11 * dpr, 4 * dpr);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(stethX, stethY + 7 * dpr);
+        ctx.lineTo(stethX, stethY + 22 * dpr);
+        ctx.lineTo(stethX + 18 * dpr, stethY + 28 * dpr);
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = 3 * dpr;
+        ctx.stroke();
+
+        ctx.font = `600 ${11 * dpr}px "Noto Sans TC", sans-serif`;
+        ctx.fillStyle = '#cbd5e1';
+        ctx.textAlign = 'left';
+        ctx.fillText('聽診器', stethX + 22 * dpr, stethY + 31 * dpr);
+        ctx.restore();
+
+        // 11. 三區段與目前狀態清晰標示
+        ctx.save();
+        // 中央頂部大型狀態標題膠囊
+        const bannerText = stageInfo.shortTitle;
+        ctx.font = `700 ${Math.max(12, Math.min(16, w * 0.015)) * dpr}px "Noto Sans TC", sans-serif`;
+        const textW = ctx.measureText(bannerText).width;
+        const pillW = textW + 28 * dpr;
+        const pillH = 28 * dpr;
+        const pillX = w * 0.5 - pillW * 0.5;
+        const pillY = 12 * dpr;
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+        ctx.strokeStyle = stageInfo.accentColor;
+        ctx.lineWidth = 1.5 * dpr;
+        ctx.beginPath();
+        ctx.roundRect(pillX, pillY, pillW, pillH, 999 * dpr);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = stageInfo.accentColor;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(bannerText, w * 0.5, pillY + pillH * 0.52);
+
+        // 三區段標籤（貼近上臂上方）
+        const labelY = armTop - cuffOuterPad * 0.65 - 10 * dpr;
+        ctx.font = `700 ${12 * dpr}px "Noto Sans TC", sans-serif`;
+        ctx.textBaseline = 'bottom';
+
+        ctx.fillStyle = '#fda4af';
+        ctx.textAlign = 'left';
+        ctx.fillText('① 上游未受壓（持續搏動）', 14 * dpr, labelY);
+
+        ctx.fillStyle = '#7dd3fc';
+        ctx.textAlign = 'center';
+        ctx.fillText(`② 壓脈帶局部壓縮區 (${Math.round(P)} mmHg)`, w * 0.5, labelY);
+
+        ctx.textAlign = 'right';
+        ctx.fillStyle = turbulentActive ? '#fde047' : (P <= D ? '#6ee7b7' : '#fca5a5');
+        const rightText = turbulentActive
+          ? '③ 下游（亂流噴射震動）'
+          : (P <= D ? '③ 下游（平穩層流）' : '③ 下游（血流阻斷）');
+        ctx.fillText(rightText, w - 14 * dpr, labelY);
+        ctx.restore();
+
+        // 12. 繪製左上角「傳統類比機械指針式血壓表 (0–240 mmHg)」
+        drawAnalogGaugeOverlay(ctx, gaugeCx, gaugeCy, gaugeRadius, dpr);
+
+        // 13. 繪製右上角「可收合迷你示波＆柯洛特科夫音波形浮窗」
+        if (state.showMiniWave) {
+          drawMiniWaveOverlay(ctx, w, dpr, now);
+        }
+      }
+
+      // 傳統類比指針式血壓表繪製
+      function drawAnalogGaugeOverlay(ctx, cx, cy, radius, dpr) {
+        const P = state.cuffPressure;
+        const S = state.systolic;
+        const D = state.diastolic;
+
+        const startAngle = Math.PI * 0.75;
+        const sweepAngle = Math.PI * 1.5;
+        const pressureToAngle = (val) => {
+          const clamped = Math.max(0, Math.min(240, val));
+          return startAngle + (clamped / 240) * sweepAngle;
+        };
+
+        ctx.save();
+
+        // 外框陰影與金屬錶圈
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.75)';
+        ctx.shadowBlur = 16 * dpr;
+        const bezelGrad = ctx.createLinearGradient(cx - radius, cy - radius, cx + radius, cy + radius);
+        bezelGrad.addColorStop(0, '#cbd5e1');
+        bezelGrad.addColorStop(0.5, '#334155');
+        bezelGrad.addColorStop(1, '#94a3b8');
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.fillStyle = bezelGrad;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // 錶盤深色底
+        const dialRadius = radius * 0.90;
+        const dialGrad = ctx.createRadialGradient(cx, cy - dialRadius * 0.2, dialRadius * 0.1, cx, cy, dialRadius);
+        dialGrad.addColorStop(0, '#1e293b');
+        dialGrad.addColorStop(1, '#090d16');
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, dialRadius, 0, Math.PI * 2);
+        ctx.fillStyle = dialGrad;
+        ctx.fill();
+
+        // 色彩區間弧帶
+        const arcRadius = dialRadius * 0.84;
+        ctx.lineWidth = 4.5 * dpr;
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, arcRadius, pressureToAngle(0), pressureToAngle(D));
+        ctx.strokeStyle = 'rgba(16, 185, 129, 0.5)';
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, arcRadius, pressureToAngle(D), pressureToAngle(S));
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.6)';
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, arcRadius, pressureToAngle(S), pressureToAngle(240));
+        ctx.strokeStyle = 'rgba(244, 63, 94, 0.5)';
+        ctx.stroke();
+
+        // 刻度與數字 (0 ~ 240)
+        for (let val = 0; val <= 240; val += 10) {
+          const ang = pressureToAngle(val);
+          const isMajor = val % 40 === 0 || val === 120 || val === 80;
+          const outerR = dialRadius * 0.93;
+          const innerR = isMajor ? dialRadius * 0.76 : dialRadius * 0.84;
+
+          ctx.beginPath();
+          ctx.moveTo(cx + Math.cos(ang) * innerR, cy + Math.sin(ang) * innerR);
+          ctx.lineTo(cx + Math.cos(ang) * outerR, cy + Math.sin(ang) * outerR);
+          ctx.strokeStyle = isMajor ? '#f8fafc' : 'rgba(148, 163, 184, 0.55)';
+          ctx.lineWidth = (isMajor ? 2 : 1) * dpr;
+          ctx.stroke();
+
+          if (val % 40 === 0) {
+            const textR = dialRadius * 0.60;
+            ctx.font = `700 ${9.5 * dpr}px "Inter", sans-serif`;
+            ctx.fillStyle = '#e2e8f0';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(String(val), cx + Math.cos(ang) * textR, cy + Math.sin(ang) * textR);
+          }
+        }
+
+        // 收縮壓 (紅) 與 舒張壓 (綠) 參考標記線
+        const drawRefMark = (val, color) => {
+          const ang = pressureToAngle(val);
+          ctx.beginPath();
+          ctx.moveTo(cx + Math.cos(ang) * (dialRadius * 0.72), cy + Math.sin(ang) * (dialRadius * 0.72));
+          ctx.lineTo(cx + Math.cos(ang) * (dialRadius * 0.97), cy + Math.sin(ang) * (dialRadius * 0.97));
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 2.6 * dpr;
+          ctx.stroke();
+        };
+        drawRefMark(S, '#fb7185');
+        drawRefMark(D, '#34d399');
+
+        // 錶盤中心讀數與單位
+        ctx.font = `600 ${8.5 * dpr}px "Inter", sans-serif`;
+        ctx.fillStyle = '#94a3b8';
+        ctx.textAlign = 'center';
+        ctx.fillText('mmHg', cx, cy - dialRadius * 0.24);
+
+        ctx.font = `700 ${13 * dpr}px "Inter", monospace`;
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillText(`${Math.round(P)}`, cx, cy + dialRadius * 0.42);
+
+        // 若自動偵測鎖定成功，在錶盤下方顯示偵測讀數膠囊
+        if (state.detectedSys !== null || state.detectedDia !== null) {
+          const sText = state.detectedSys !== null ? state.detectedSys : '--';
+          const dText = state.detectedDia !== null ? state.detectedDia : '--';
+          const badgeY = cy + radius + 12 * dpr;
+          ctx.font = `700 ${10.5 * dpr}px "Noto Sans TC", sans-serif`;
+          ctx.fillStyle = '#fde047';
+          ctx.fillText(`測得：${sText}/${dText}`, cx, badgeY);
+        }
+
+        // 紅色機械指針（量測區間加入真實脈搏微跳）
+        const oscEnv = getOscillometricEnvelope();
+        const isInOscZone = P <= S + 8 && P >= D - 8 && P > 5;
+        const needleJitter = isInOscZone
+          ? Math.sin(state.phase * Math.PI * 2) * oscEnv * 2.4
+          : 0;
+
+        const needleAngle = pressureToAngle(P + needleJitter);
+        const needleLen = dialRadius * 0.85;
+        const tailLen = dialRadius * 0.20;
+
+        ctx.translate(cx, cy);
+        ctx.rotate(needleAngle);
+
+        ctx.beginPath();
+        ctx.moveTo(-tailLen, -2.5 * dpr);
+        ctx.lineTo(needleLen, -0.8 * dpr);
+        ctx.lineTo(needleLen, 0.8 * dpr);
+        ctx.lineTo(-tailLen, 2.5 * dpr);
+        ctx.closePath();
+        ctx.fillStyle = '#ef4444';
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(0, 0, 6.5 * dpr, 0, Math.PI * 2);
+        ctx.fillStyle = '#e2e8f0';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(0, 0, 3 * dpr, 0, Math.PI * 2);
+        ctx.fillStyle = '#475569';
+        ctx.fill();
+
+        ctx.restore();
+      }
+
+      // 右上角迷你雙通道波形浮窗（精巧不遮擋主血管）
+      function drawMiniWaveOverlay(ctx, canvasW, dpr, now) {
+        const boxW = Math.min(220 * dpr, canvasW * 0.28);
+        const boxH = 74 * dpr;
+        const boxX = canvasW - boxW - 14 * dpr;
+        const boxY = 12 * dpr;
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(9, 13, 22, 0.82)';
+        ctx.strokeStyle = 'rgba(71, 85, 105, 0.7)';
+        ctx.lineWidth = 1.2 * dpr;
+        ctx.beginPath();
+        ctx.roundRect(boxX, boxY, boxW, boxH, 10 * dpr);
+        ctx.fill();
+        ctx.stroke();
+
+        const padX = 8 * dpr;
+        const plotLeft = boxX + padX;
+        const plotW = boxW - padX * 2;
+
+        // 上半：示波法氣囊震盪波
+        const oscMidY = boxY + boxH * 0.30;
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.6 * dpr;
+        ctx.beginPath();
+        const hist = state.oscHistory;
+        for (let i = 0; i < hist.length; i++) {
+          const x = plotLeft + (i / (hist.length - 1)) * plotW;
+          const y = oscMidY - hist[i] * (boxH * 0.18);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        // 下半：柯洛特科夫音脈衝
+        const korMidY = boxY + boxH * 0.76;
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 1.8 * dpr;
+        ctx.beginPath();
+        const samples = 90;
+        for (let s = 0; s <= samples; s++) {
+          const tNorm = s / samples;
+          const ageMs = (1 - tNorm) * 2200;
+          const x = plotLeft + tNorm * plotW;
+          let val = 0;
+          for (let b = 0; b < state.korotkoffBursts.length; b++) {
+            const burst = state.korotkoffBursts[b];
+            const dtMs = (now - burst.time) - ageMs;
+            if (Math.abs(dtMs) < 90) {
+              const env = Math.exp(-Math.pow(dtMs / 32, 2));
+              const ringing = Math.sin(dtMs * 0.28) * Math.exp(-Math.max(0, dtMs) / 45);
+              val += burst.intensity * env * ringing;
+            }
+          }
+          const y = korMidY - Math.max(-1, Math.min(1, val)) * (boxH * 0.18);
+          if (s === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        ctx.font = `600 ${8.5 * dpr}px "Noto Sans TC", sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#7dd3fc';
+        ctx.fillText('示波震盪', plotLeft, boxY + 11 * dpr);
+        ctx.fillStyle = '#fcd34d';
+        ctx.fillText('柯氏音脈衝', plotLeft, boxY + boxH * 0.56);
+        ctx.restore();
+      }
+
+      // ==========================================
+      // 6. 主動畫迴圈
+      // ==========================================
+      let lastFrameTime = performance.now();
+
+      function animate(now) {
+        const dtSec = Math.min(0.05, Math.max(0.001, (now - lastFrameTime) / 1000));
+        lastFrameTime = now;
+
+        state.korotkoffBursts = state.korotkoffBursts.filter((b) => now - b.time < 2200);
+
+        if (state.cycleMode === 'inflating') {
+          const inflateSpeed = 48;
+          const nextP = state.cuffPressure + dtSec * inflateSpeed;
+          if (nextP >= state.targetInflatePressure) {
+            setCuffPressure(state.targetInflatePressure);
+            state.cycleMode = 'deflating';
+            updateAutoBtnUI();
+          } else {
+            setCuffPressure(nextP);
+          }
+        } else if (state.cycleMode === 'deflating') {
+          const prevP = state.cuffPressure;
+          const deflateSpeed = 8.5;
+          const nextP = Math.max(0, prevP - dtSec * deflateSpeed);
+
+          if (state.detectedSys === null && prevP >= state.systolic && nextP <= state.systolic) {
+            state.detectedSys = state.systolic;
+          }
+          if (state.detectedDia === null && prevP >= state.diastolic && nextP <= state.diastolic) {
+            state.detectedDia = state.diastolic;
+          }
+
+          setCuffPressure(nextP);
+
+          if (nextP <= 0) {
+            state.cycleMode = 'idle';
+            updateAutoBtnUI();
+          }
+        } else if (state.manualHoldDir !== 0) {
+          const holdSpeed = 36;
+          setCuffPressure(state.cuffPressure + state.manualHoldDir * dtSec * holdSpeed);
+        }
+
+        const beatDurationSec = 60 / state.heartRate;
+        const totalPhaseFloat = (now / 1000) / beatDurationSec;
+        const currentBeatIndex = Math.floor(totalPhaseFloat);
+        state.phase = totalPhaseFloat - currentBeatIndex;
+
+        const liveArterialPressure = getArterialPressureAtPhase(state.phase);
+        const oscEnv = getOscillometricEnvelope();
+
+        const isInSoundZone = state.cuffPressure <= state.systolic + 1 && state.cuffPressure > state.diastolic;
+        const soundIntensity = isInSoundZone
+          ? Math.max(0.25, Math.min(1, 0.45 + oscEnv * 0.65))
+          : 0;
+
+        if (currentBeatIndex !== state.lastBeatIndex) {
+          state.lastBeatIndex = currentBeatIndex;
+          if (soundIntensity > 0) {
+            state.korotkoffBursts.push({
+              time: now,
+              intensity: soundIntensity,
+              pressure: state.cuffPressure
+            });
+            playKorotkoffPulse(soundIntensity);
+          }
+        }
+
+        const pulseWave = Math.max(0, (liveArterialPressure - state.diastolic) / Math.max(1, state.systolic - state.diastolic));
+        const canTransmitOsc = state.cuffPressure <= state.systolic + 18 && state.cuffPressure >= 15;
+        const oscSample = canTransmitOsc
+          ? Math.pow(pulseWave, 1.4) * (0.15 + oscEnv * 0.85) * Math.sin(state.phase * Math.PI)
+          : 0;
+        state.oscHistory.push(oscSample);
+        if (state.oscHistory.length > 120) {
+          state.oscHistory.shift();
+        }
+
+        syncUI();
+        drawUnifiedStage(now, liveArterialPressure);
+
+        requestAnimationFrame(animate);
+      }
+
+      // ==========================================
+      // 7. 事件綁定
+      // ==========================================
+      function stopAutoCycle() {
+        if (state.cycleMode !== 'idle') {
+          state.cycleMode = 'idle';
+          updateAutoBtnUI();
+        }
+      }
+
+      els.cuffSlider.addEventListener('input', (e) => {
+        stopAutoCycle();
+        setCuffPressure(e.target.value);
+      });
+
+      els.bpPresetSelect.addEventListener('change', (e) => {
+        const parts = e.target.value.split('/');
+        state.systolic = Number(parts[0]) || 120;
+        state.diastolic = Number(parts[1]) || 80;
+        state.detectedSys = null;
+        state.detectedDia = null;
+      });
+
+      els.waveToggleBtn.addEventListener('click', () => {
+        state.showMiniWave = !state.showMiniWave;
+        els.waveToggleBtn.classList.toggle('opacity-50', !state.showMiniWave);
+      });
+
+      els.soundToggleBtn.addEventListener('click', () => {
+        state.soundEnabled = !state.soundEnabled;
+        els.soundIcon.textContent = state.soundEnabled ? '🔊' : '🔇';
+        if (state.soundEnabled) {
+          ensureAudioContext();
+        }
+      });
+
+      els.infoDrawerBtn.addEventListener('click', () => {
+        els.infoDrawer.classList.toggle('hidden');
+      });
+
+      els.closeDrawerBtn.addEventListener('click', () => {
+        els.infoDrawer.classList.add('hidden');
+      });
+
+      els.autoDeflateBtn.addEventListener('click', () => {
+        ensureAudioContext();
+        if (state.cycleMode === 'idle') {
+          setCuffPressure(0);
+          state.detectedSys = null;
+          state.detectedDia = null;
+          state.targetInflatePressure = Math.min(230, state.systolic + 40);
+          state.cycleMode = 'inflating';
+        } else {
+          state.cycleMode = 'idle';
+        }
+        updateAutoBtnUI();
+      });
+
+      const bindHoldButton = (btn, dir) => {
+        const startHold = (e) => {
+          e.preventDefault();
+          stopAutoCycle();
+          ensureAudioContext();
+          state.manualHoldDir = dir;
+        };
+        const endHold = () => {
+          if (state.manualHoldDir === dir) {
+            state.manualHoldDir = 0;
+          }
+        };
+        btn.addEventListener('mousedown', startHold);
+        btn.addEventListener('touchstart', startHold, { passive: false });
+        window.addEventListener('mouseup', endHold);
+        window.addEventListener('touchend', endHold);
+      };
+
+      bindHoldButton(els.holdInflateBtn, 1);
+      bindHoldButton(els.holdDeflateBtn, -1);
+
+      els.stageButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          stopAutoCycle();
+          const stage = btn.dataset.stage;
+          const S = state.systolic;
+          const D = state.diastolic;
+
+          if (stage === 'above_sys') {
+            setCuffPressure(Math.min(220, S + 30));
+          } else if (stage === 'at_sys') {
+            setCuffPressure(S);
+          } else if (stage === 'between') {
+            setCuffPressure(Math.round((S + D) / 2));
+          } else if (stage === 'below_dia') {
+            setCuffPressure(Math.max(0, D - 25));
+          }
+        });
+      });
+
+      // 初始化啟動
+      initParticles();
+      setCuffPressure(0);
+      updateAutoBtnUI();
+      requestAnimationFrame(animate);
+    })();
+  </script>
+</body>
+</html>

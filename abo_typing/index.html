@@ -1,0 +1,2437 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>ABO血型檢測原理與巨微觀凝集反應（改良操作實驗流程版）</title>
+  <style>
+    /* ==========================================================================
+       臨床醫學實驗室風格 UI 樣式（零外部依賴，內嵌完整響應式排版）
+       ========================================================================== */
+    :root {
+      --bg-deep: #0b1324;
+      --bg-panel: #111c33;
+      --bg-card: #162440;
+      --border-subtle: rgba(148, 163, 184, 0.22);
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent-anti-a: #0ea5e9;
+      --accent-anti-b: #f59e0b;
+      --accent-rbc: #e11d48;
+      --accent-ok: #10b981;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-deep);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", sans-serif;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* 頂部標題與檢體選擇列 */
+    .topbar {
+      flex: none;
+      background: linear-gradient(180deg, #13203b 0%, #0f192e 100%);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 8px 14px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      z-index: 20;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #f43f5e, #be123c);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 10px rgba(225, 29, 72, 0.45);
+      flex-shrink: 0;
+    }
+
+    .brand-title {
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      margin: 0;
+      line-height: 1.25;
+    }
+
+    .brand-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    /* 分段按鈕群組 */
+    .segmented-group {
+      display: flex;
+      align-items: center;
+      background: rgba(8, 14, 28, 0.78);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 3px;
+      gap: 3px;
+      flex-wrap: wrap;
+    }
+
+    .group-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      padding: 0 8px;
+      font-weight: 600;
+    }
+
+    button {
+      font-family: inherit;
+      cursor: pointer;
+      border: none;
+      outline: none;
+      min-height: 44px;
+      min-width: 44px;
+      border-radius: 9px;
+      font-size: 13px;
+      font-weight: 700;
+      transition: transform 0.14s ease, background-color 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+
+    button:active {
+      transform: scale(0.96);
+    }
+
+    .sample-btn {
+      background: transparent;
+      color: #cbd5e1;
+      padding: 0 12px;
+    }
+
+    .sample-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .sample-btn.active {
+      background: #e11d48;
+      color: #ffffff;
+      box-shadow: 0 2px 8px rgba(225, 29, 72, 0.45);
+    }
+
+    .sample-btn.unknown-btn.active {
+      background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+      box-shadow: 0 2px 10px rgba(139, 92, 246, 0.5);
+    }
+
+    .guide-toggle-btn {
+      background: #1e293b;
+      color: #fde047;
+      border: 1px solid rgba(253, 224, 71, 0.35);
+      padding: 0 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .guide-toggle-btn:hover {
+      background: #283548;
+    }
+
+    /* 主畫布容器 */
+    .stage-wrap {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    #labCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+
+    /* 微觀視窗右上角浮動控制列（縮放、速度、抗體結構） */
+    .micro-floating-controls {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+      z-index: 15;
+      pointer-events: none;
+    }
+
+    .float-pill {
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 3px;
+      gap: 2px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    }
+
+    .float-btn {
+      min-height: 40px;
+      min-width: 40px;
+      padding: 0 10px;
+      background: transparent;
+      color: #cbd5e1;
+      font-size: 12px;
+    }
+
+    .float-btn:hover {
+      background: rgba(255, 255, 255, 0.09);
+    }
+
+    .float-btn.active-emerald {
+      background: #059669;
+      color: #ffffff;
+    }
+
+    .float-btn.active-slate {
+      background: #334155;
+      color: #ffffff;
+    }
+
+    .zoom-readout {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      color: #e2e8f0;
+      min-width: 46px;
+      text-align: center;
+    }
+
+    /* 右上角可收合「原理與判讀對照表」抽屜 */
+    .guide-drawer {
+      position: absolute;
+      top: 64px;
+      right: 12px;
+      bottom: 12px;
+      width: 360px;
+      max-width: calc(100vw - 24px);
+      background: rgba(15, 23, 42, 0.96);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      border-radius: 16px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+      z-index: 30;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .guide-drawer.hidden {
+      display: none;
+    }
+
+    .drawer-header {
+      padding: 12px 16px;
+      background: #162440;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .drawer-header h2 {
+      margin: 0;
+      font-size: 14px;
+      color: #fde047;
+    }
+
+    .drawer-body {
+      padding: 14px 16px;
+      overflow-y: auto;
+      font-size: 12.5px;
+      line-height: 1.6;
+      color: #cbd5e1;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .legend-box {
+      background: rgba(8, 14, 28, 0.75);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 10px 12px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .ref-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      text-align: center;
+    }
+
+    .ref-table th, .ref-table td {
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      padding: 6px 4px;
+    }
+
+    .ref-table th {
+      background: rgba(30, 41, 59, 0.9);
+      color: #f8fafc;
+    }
+
+    /* 底部實驗操作台列 */
+    .bottom-dock {
+      flex: none;
+      height: 68px;
+      background: linear-gradient(0deg, #0d1629 0%, #13203b 100%);
+      border-top: 1px solid var(--border-subtle);
+      padding: 8px 14px;
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      z-index: 20;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+
+    .step-indicator {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(8, 14, 28, 0.85);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 12px;
+      padding: 6px 12px;
+      width: 280px;
+      min-width: 280px;
+      max-width: 280px;
+      height: 50px;
+      flex-shrink: 0;
+    }
+
+    .step-indicator-text {
+      min-width: 0;
+      flex: 1;
+    }
+
+    #selectedWellBanner {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .pulse-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #38bdf8;
+      box-shadow: 0 0 10px #38bdf8;
+      animation: pulseGlow 1.6s infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes pulseGlow {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.35); opacity: 0.65; }
+    }
+
+    .reagent-actions {
+      display: flex;
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .btn-anti-a {
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      color: #ffffff;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 3px 12px rgba(2, 132, 199, 0.45);
+      border: 1px solid rgba(125, 211, 252, 0.4);
+    }
+
+    .btn-anti-a:hover {
+      background: linear-gradient(135deg, #0ea5e9, #0284c7);
+    }
+
+    .btn-anti-b {
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      color: #0f172a;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 3px 12px rgba(245, 158, 11, 0.4);
+      border: 1px solid rgba(253, 230, 138, 0.6);
+    }
+
+    .btn-anti-b:hover {
+      background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    }
+
+    .btn-anti-h {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #ffffff;
+      padding: 0 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 3px 12px rgba(16, 185, 129, 0.4);
+      border: 1px solid rgba(167, 243, 208, 0.5);
+    }
+
+    .btn-anti-h:hover {
+      background: linear-gradient(135deg, #34d399, #10b981);
+    }
+
+    .btn-reagent-disabled {
+      opacity: 0.42;
+      cursor: not-allowed;
+      filter: grayscale(0.45);
+      box-shadow: none !important;
+    }
+
+    .toast-banner {
+      position: fixed;
+      top: 66px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-14px);
+      background: rgba(15, 23, 42, 0.96);
+      color: #fde047;
+      border: 1px solid rgba(253, 224, 71, 0.55);
+      padding: 9px 18px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 700;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+      z-index: 60;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.22s ease, transform 0.22s ease;
+      max-width: 92vw;
+      text-align: center;
+    }
+
+    .toast-banner.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .btn-wash {
+      background: #1e293b;
+      color: #e2e8f0;
+      border: 1px solid var(--border-subtle);
+      padding: 0 13px;
+    }
+
+    .btn-wash:hover {
+      background: #334155;
+    }
+
+    /* 右下角判讀與未知挑戰作答區 */
+    .result-panel {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(8, 14, 28, 0.88);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 6px 12px;
+      height: 50px;
+      width: 340px;
+      min-width: 340px;
+      max-width: 340px;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    .result-info-text {
+      font-size: 12px;
+      line-height: 1.4;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* 未知血型挑戰獨立浮動作答面板（避免擠壓底部操作列產生捲軸） */
+    .unknown-quiz-overlay {
+      position: absolute;
+      left: 14px;
+      bottom: 14px;
+      width: calc(38% - 28px);
+      min-width: 300px;
+      max-width: 440px;
+      background: rgba(15, 23, 42, 0.94);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(139, 92, 246, 0.55);
+      border-radius: 14px;
+      padding: 12px 14px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+      z-index: 18;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .unknown-quiz-overlay.hidden {
+      display: none;
+    }
+
+    .quiz-options-row {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+    }
+
+    .quiz-btn {
+      min-height: 40px;
+      min-width: 0;
+      padding: 0 4px;
+      background: #1e293b;
+      color: #f8fafc;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .quiz-btn:hover {
+      background: #334155;
+    }
+
+    .quiz-btn.correct {
+      background: #059669;
+      border-color: #34d399;
+      color: #ffffff;
+    }
+
+    .quiz-btn.wrong {
+      background: #be123c;
+      border-color: #fb7185;
+      color: #ffffff;
+    }
+
+    @media (max-width: 768px) {
+      .brand-sub { display: none; }
+      .group-label { display: none; }
+      .topbar { padding: 6px 10px; }
+      .bottom-dock { height: 64px; padding: 6px 10px; }
+      .unknown-quiz-overlay {
+        left: 10px;
+        right: 10px;
+        width: auto;
+        max-width: none;
+        bottom: 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 頂部工具列：步驟一（選擇受檢檢體）與原理對照表開關 -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="#ffffff">
+          <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+        </svg>
+      </div>
+      <div>
+        <h1 class="brand-title">ABO 血型檢測原理與巨微觀凝集反應</h1>
+        <p class="brand-sub">先點選反應槽觀察紅血球 → 再手動滴入抗A或抗B血清觀察分子交聯</p>
+      </div>
+    </div>
+
+    <!-- 步驟一：選擇受檢者血液檢體 -->
+    <div class="segmented-group" role="group" aria-label="選擇受檢者檢體">
+      <span class="group-label">步驟 1｜選擇檢體：</span>
+      <button class="sample-btn active" data-sample="A">A 型檢體</button>
+      <button class="sample-btn" data-sample="B">B 型檢體</button>
+      <button class="sample-btn" data-sample="AB">AB 型檢體</button>
+      <button class="sample-btn" data-sample="O">O 型檢體</button>
+      <button class="sample-btn" data-sample="PARA_BOMBAY" title="紅血球極度缺乏H抗原，常規抗A/抗B皆不凝集，易誤判為O型">🧬 亞孟買血型</button>
+      <button class="sample-btn unknown-btn" data-sample="UNKNOWN">🎲 未知血型挑戰（？型）</button>
+    </div>
+
+    <button id="toggleGuideBtn" class="guide-toggle-btn">
+      <span>📋</span>
+      <span>原理與判讀對照表</span>
+    </button>
+  </header>
+
+  <!-- 中央雙視窗互動 Canvas（左側巨觀玻片操作台 + 右側微觀顯微鏡視場） -->
+  <main class="stage-wrap">
+    <canvas id="labCanvas"></canvas>
+
+    <!-- 未知血型挑戰專屬作答面板 -->
+    <section id="unknownQuizOverlay" class="unknown-quiz-overlay hidden" aria-label="未知血型判讀作答區"></section>
+
+    <!-- 微觀視窗右上角浮動控制（抗體形態、模擬速度、縮放與視野重置） -->
+    <div class="micro-floating-controls">
+      <div class="float-pill" title="切換抗體分子結構">
+        <button id="btnIgM" class="float-btn active-emerald">IgM 五聚體</button>
+        <button id="btnIgG" class="float-btn">IgG 單體 (Y型)</button>
+      </div>
+
+      <div class="float-pill" title="模擬速度控制">
+        <button id="btnPause" class="float-btn">⏸ 暫停</button>
+        <button class="float-btn speed-opt" data-speed="0.3">0.3x 慢動作</button>
+        <button class="float-btn speed-opt active-slate" data-speed="1">1x 正常</button>
+      </div>
+
+      <div class="float-pill" title="顯微鏡倍率縮放">
+        <button id="btnZoomOut" class="float-btn">−</button>
+        <span id="zoomLabel" class="zoom-readout">100%</span>
+        <button id="btnZoomIn" class="float-btn">＋</button>
+        <button id="btnResetCam" class="float-btn">重置視野</button>
+      </div>
+    </div>
+
+    <!-- 右上角可收合「原理與判讀對照表」抽屜 -->
+    <aside id="guideDrawer" class="guide-drawer hidden">
+      <div class="drawer-header">
+        <h2>🔬 抗原–抗體專一性與判讀對照表</h2>
+        <button id="closeGuideBtn" class="float-btn" style="min-width:36px;min-height:36px;">✕</button>
+      </div>
+      <div class="drawer-body">
+        <div class="legend-box">
+          <div class="legend-item">
+            <span style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid #fb7185;display:inline-block;"></span>
+            <span><strong>A 抗原</strong>（紅色尖角三角）</span>
+          </div>
+          <div class="legend-item">
+            <span style="width:12px;height:7px;border-radius:12px 12px 0 0;background:#38bdf8;display:inline-block;"></span>
+            <span><strong>B 抗原</strong>（藍色半圓突起）</span>
+          </div>
+          <div class="legend-item">
+            <span style="width:10px;height:10px;border-radius:50%;background:#34d399;display:inline-block;"></span>
+            <span><strong>H 抗原</strong>（綠色圓珠前驅物）</span>
+          </div>
+          <div class="legend-item">
+            <span style="width:12px;height:12px;border-radius:3px;background:#0ea5e9;display:inline-block;"></span>
+            <span><strong>抗A / 抗B / 抗H 血清</strong></span>
+          </div>
+        </div>
+
+        <div>
+          <strong style="color:#f8fafc;">實驗操作與進階規則：</strong>
+          <ol style="margin:6px 0 0 18px;padding:0;">
+            <li><strong>點選反應槽 1 或 2</strong>：鏡頭平滑聚焦至該槽，先觀察尚未加入試劑的紅血球與表面抗原。</li>
+            <li><strong>選擇並滴加抗血清</strong>：同一反應槽<strong>禁止重複滴入相同試劑</strong>（避免稀釋與操作誤差）；若<strong>接續滴入不同試劑</strong>，則會保留既有結合並疊加新抗體擴散！</li>
+            <li><strong>亞孟買血型（Para-Bombay）鑑別</strong>：因缺乏岩藻糖轉移酶（FUT1突變），紅血球表面幾乎無 H 抗原，無法合成 A/B 抗原。常規抗A、抗B皆不凝集（易誤判為 O 型），需加滴<strong>抗H血清（Anti-H）</strong>鑑別：一般 O 型會強凝集（＋），亞孟買血型則不凝集或極微弱（−）。</li>
+          </ol>
+        </div>
+
+        <table class="ref-table">
+          <thead>
+            <tr>
+              <th>血型</th>
+              <th>紅血球抗原</th>
+              <th>抗A血清</th>
+              <th>抗B血清</th>
+              <th>抗H血清</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>A 型</strong></td>
+              <td>H ＋ A 抗原</td>
+              <td style="color:#fb7185;font-weight:bold;">凝集 (＋)</td>
+              <td style="color:#34d399;">不凝集 (−)</td>
+              <td style="color:#94a3b8;">弱/部分</td>
+            </tr>
+            <tr>
+              <td><strong>B 型</strong></td>
+              <td>H ＋ B 抗原</td>
+              <td style="color:#34d399;">不凝集 (−)</td>
+              <td style="color:#fb7185;font-weight:bold;">凝集 (＋)</td>
+              <td style="color:#94a3b8;">弱/部分</td>
+            </tr>
+            <tr>
+              <td><strong>AB 型</strong></td>
+              <td>H ＋ A ＋ B</td>
+              <td style="color:#fb7185;font-weight:bold;">凝集 (＋)</td>
+              <td style="color:#fb7185;font-weight:bold;">凝集 (＋)</td>
+              <td style="color:#94a3b8;">極弱</td>
+            </tr>
+            <tr>
+              <td><strong>O 型</strong></td>
+              <td>大量 H 抗原</td>
+              <td style="color:#34d399;">不凝集 (−)</td>
+              <td style="color:#34d399;">不凝集 (−)</td>
+              <td style="color:#fb7185;font-weight:bold;">強凝集 (＋)</td>
+            </tr>
+            <tr>
+              <td><strong>亞孟買型</strong></td>
+              <td>極缺 H 抗原</td>
+              <td style="color:#34d399;">不凝集 (−)</td>
+              <td style="color:#34d399;">不凝集 (−)</td>
+              <td style="color:#34d399;font-weight:bold;">不凝集 (−)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </aside>
+  </main>
+
+  <!-- 實驗操作防呆與提示 Toast -->
+  <div id="toastBanner" class="toast-banner" role="status" aria-live="polite"></div>
+
+  <!-- 底部操作列：步驟二提示、步驟三滴定試劑瓶、單槽清洗與判讀區 -->
+  <footer class="bottom-dock">
+    <!-- 當前聚焦反應槽提示 -->
+    <div class="step-indicator">
+      <span class="pulse-dot" id="focusPulseDot"></span>
+      <div class="step-indicator-text" style="font-size:12px;line-height:1.35;">
+        <div style="color:#94a3b8;">步驟 2｜目前觀察與操作目標：</div>
+        <div id="selectedWellBanner" style="font-weight:800;color:#38bdf8;font-size:13.5px;">
+          反應槽 #1（尚未滴加試劑）
+        </div>
+      </div>
+    </div>
+
+    <!-- 步驟三：手動選擇並滴入抗血清（針對目前選取的反應槽） -->
+    <div class="reagent-actions">
+      <button id="dropAntiABtn" class="btn-anti-a">
+        <span style="width:11px;height:11px;border-radius:50%;background:#bae6fd;display:inline-block;"></span>
+        <span id="dropAntiALabel">滴入 抗A血清 → #1</span>
+      </button>
+
+      <button id="dropAntiBBtn" class="btn-anti-b">
+        <span style="width:11px;height:11px;border-radius:50%;background:#fef3c7;display:inline-block;"></span>
+        <span id="dropAntiBLabel">滴入 抗B血清 → #1</span>
+      </button>
+
+      <button id="dropAntiHBtn" class="btn-anti-h" title="用於區分一般 O 型（含豐富 H 抗原）與亞孟買血型（缺乏 H 抗原）">
+        <span style="width:11px;height:11px;border-radius:50%;background:#a7f3d0;display:inline-block;"></span>
+        <span id="dropAntiHLabel">滴入 抗H血清 → #1</span>
+      </button>
+
+      <button id="washCurrentWellBtn" class="btn-wash" title="清空目前選取的反應槽並重新裝入新鮮紅血球">
+        🧼 清洗此槽
+      </button>
+
+      <button id="washAllWellsBtn" class="btn-wash" title="清空兩槽並重新開始">
+        ↺ 全部重來
+      </button>
+    </div>
+
+    <!-- 右下角：已知模式顯示即時生物學提示；未知挑戰模式顯示學生作答驗證按鈕 -->
+    <div class="result-panel" id="resultPanel">
+      <!-- 動態由 JS 填充 -->
+    </div>
+  </footer>
+
+  <script>
+    /**
+     * ============================================================================
+     * ABO 血型檢測原理與巨微觀凝集反應 — 兩段式實驗流程與物理模擬引擎
+     * ============================================================================
+     * 設計核心：
+     * 1. 杜絕畫面突兀跳動：
+     *    - 點擊左側反應槽 #1 或 #2 時，僅切換 activeWellIndex 並啟動微觀鏡頭平滑緩動
+     *      （Smooth Lerp Camera Transition）移至該反應槽的微觀座標空間，絕不自動偷加試劑。
+     *    - 使用者可先靜心觀察該槽內的紅血球與膜表面抗原，再手動點擊「滴入 抗A血清」
+     *      或「滴入 抗B血清」。
+     * 2. 因果連貫的滴液與擴散動畫：
+     *    - 巨觀微量滴管移動至目標反應槽上方滴下液滴 → 激起液面漣漪 → 同時微觀視野中央
+     *      出現擴散波紋，抗體分子從液滴中心向外擴散進入紅血球群中。
+     * 3. 鎖鑰互補咬合閃光與彈簧交聯動力學：
+     *    - A抗原為紅色尖角三角形突起，抗A抗體Fab端具V型互補凹槽；
+     *    - B抗原為藍色半圓形突起，抗B抗體Fab端具C型互補凹槽；
+     *    - O型表面平滑（僅顯示微小H前驅基底點）。
+     *    - 咬合瞬間在結合位點觸發擴散光環（Binding Flash），多價抗體逐步拉攏紅血球成團。
+     */
+    (function () {
+      'use strict';
+
+      // ------------------------------------------------------------------------
+      // 1. 血型資料庫（新增亞孟買血型 PARA_BOMBAY 與抗H凝集特性）
+      // ------------------------------------------------------------------------
+      const BLOOD_TYPES = ['A', 'B', 'AB', 'O', 'PARA_BOMBAY'];
+
+      const BLOOD_DATA = {
+        A: {
+          name: 'A 型',
+          shortLabel: 'A 型',
+          hasA: true,
+          hasB: false,
+          hDensity: 'low', // 僅少量未轉化完的 H 抗原
+          antigenDesc: 'A 抗原（紅色三角形）＋微量 H 前驅',
+          plasmaAbDesc: '血漿含天然抗B抗體'
+        },
+        B: {
+          name: 'B 型',
+          shortLabel: 'B 型',
+          hasA: false,
+          hasB: true,
+          hDensity: 'low',
+          antigenDesc: 'B 抗原（藍色半圓形）＋微量 H 前驅',
+          plasmaAbDesc: '血漿含天然抗A抗體'
+        },
+        AB: {
+          name: 'AB 型',
+          shortLabel: 'AB 型',
+          hasA: true,
+          hasB: true,
+          hDensity: 'none',
+          antigenDesc: 'A 抗原 ＋ B 抗原（交錯分布）',
+          plasmaAbDesc: '血漿無抗A及抗B抗體'
+        },
+        O: {
+          name: 'O 型',
+          shortLabel: 'O 型',
+          hasA: false,
+          hasB: false,
+          hDensity: 'high', // 大量暴露的 H 抗原（遇到抗H血清會強凝集）
+          antigenDesc: '無 A/B 抗原，表面富含綠色 H 抗原',
+          plasmaAbDesc: '血漿含抗A ＋ 抗B抗體'
+        },
+        PARA_BOMBAY: {
+          name: '亞孟買血型',
+          shortLabel: '亞孟買',
+          hasA: false,
+          hasB: false,
+          hDensity: 'deficient', // FUT1 基因突變，紅血球表面極度缺乏 H 抗原（僅極偶發1個殘留位點）
+          antigenDesc: '極度缺乏 H 抗原（表面光滑無 A/B/H）',
+          plasmaAbDesc: '常規抗A/抗B皆陰性，加抗H亦不凝集'
+        }
+      };
+
+      // ------------------------------------------------------------------------
+      // 2. 全域狀態管理
+      // ------------------------------------------------------------------------
+      const state = {
+        sampleMode: 'A',        // 'A' | 'B' | 'AB' | 'O' | 'PARA_BOMBAY' | 'UNKNOWN'
+        actualBloodType: 'A',   // 實際隱藏/公開的受檢者血型
+        unknownGuess: null,     // 未知模式下學生的作答選項
+        activeWell: 0,          // 0 = 左側反應槽 #1, 1 = 右側反應槽 #2
+        antibodyForm: 'IgM',    // 'IgM' | 'IgG'
+        paused: false,
+        speed: 1.0,
+        // 微觀鏡頭狀態（支援平滑緩動切換反應槽、拖拽平移與雙指縮放）
+        camera: {
+          panX: 0,
+          panY: 0,
+          zoom: 1.0,
+          targetZoom: 1.0,
+          stageShiftX: 0,
+          transitionAlpha: 1.0
+        },
+        // 巨觀滴管動畫狀態
+        pipette: {
+          active: false,
+          wellIndex: 0,
+          reagent: 'A', // 'A' | 'B' | 'H'
+          progress: 0,
+          droppedTriggered: false
+        },
+        // 巨觀反應槽點擊命中區域
+        wellHitBoxes: [null, null]
+      };
+
+      let toastTimer = null;
+      function showToast(msg) {
+        const el = document.getElementById('toastBanner');
+        el.textContent = msg;
+        el.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => {
+          el.classList.remove('show');
+        }, 3200);
+      }
+
+      // ------------------------------------------------------------------------
+      // 3. 單一反應槽物理與生化反應模擬類別（支援接續滴加不同試劑）
+      // ------------------------------------------------------------------------
+      class WellSimulation {
+        constructor(index) {
+          this.index = index;           // 0 (#1) 或 1 (#2)
+          this.reagents = [];           // 依序加入的試劑陣列，例如 ['A'] 或 ['A', 'B']
+          this.elapsedAfterDrop = 0;    // 最近一次滴入血清後經過的秒數
+          this.worldRadius = 320;       // 微觀圓形視場邏輯半徑
+          this.rbcs = [];
+          this.antibodies = [];
+          this.diffusionWaves = [];     // 中央滴液擴散波紋
+          this.bindingFlashes = [];     // 抗原-抗體咬合瞬間閃光特效
+          this.macroRipples = [];       // 巨觀液面漣漪
+          this.clumpLevel = 0;          // 0 ~ 1，巨觀凝集顆粒結塊程度
+          this.macroDots = [];          // 巨觀液滴內的紅血球微粒分布
+          this.resetWell();
+        }
+
+        hasReagent(r) {
+          return this.reagents.includes(r);
+        }
+
+        // 清洗並重新裝入新鮮受檢者紅血球（尚未滴加任何血清）
+        resetWell() {
+          this.reagents = [];
+          this.elapsedAfterDrop = 0;
+          this.rbcs = [];
+          this.antibodies = [];
+          this.diffusionWaves = [];
+          this.bindingFlashes = [];
+          this.macroRipples = [];
+          this.clumpLevel = 0;
+
+          const profile = BLOOD_DATA[state.actualBloodType];
+          const rbcCount = 22;
+          const rbcRadius = 26;
+
+          for (let i = 0; i < rbcCount; i++) {
+            let x = 0, y = 0;
+            for (let tries = 0; tries < 70; tries++) {
+              const ang = Math.random() * Math.PI * 2;
+              const dist = Math.sqrt(Math.random()) * (this.worldRadius - rbcRadius * 1.7);
+              x = Math.cos(ang) * dist;
+              y = Math.sin(ang) * dist;
+              let overlap = false;
+              for (const other of this.rbcs) {
+                if (Math.hypot(x - other.x, y - other.y) < rbcRadius * 2.2) {
+                  overlap = true;
+                  break;
+                }
+              }
+              if (!overlap) break;
+            }
+
+            // 建立紅血球表面抗原（8個均勻方位角）
+            const antigens = [];
+            const sites = 8;
+            for (let s = 0; s < sites; s++) {
+              const localAngle = (s / sites) * Math.PI * 2;
+              let kind = 'NONE';
+              if (profile.hasA && profile.hasB) {
+                kind = s % 2 === 0 ? 'A' : 'B';
+              } else if (profile.hasA) {
+                // A型：主要為A抗原，偶帶1個未轉化的H抗原
+                kind = s === 3 ? 'H' : 'A';
+              } else if (profile.hasB) {
+                // B型：主要為B抗原，偶帶1個未轉化的H抗原
+                kind = s === 3 ? 'H' : 'B';
+              } else if (profile.hDensity === 'high') {
+                // 一般O型：8個位點皆為完整H抗原（可被抗H血清強凝集）
+                kind = 'H';
+              } else if (profile.hDensity === 'deficient') {
+                // 亞孟買血型：極度缺乏H抗原，僅極少數細胞偶帶1個殘留微弱H位點（不足以形成交聯網）
+                kind = (i % 7 === 0 && s === 0) ? 'H' : 'NONE';
+              }
+
+              antigens.push({
+                id: `${i}_${s}`,
+                localAngle,
+                kind, // 'A' | 'B' | 'H' | 'NONE'
+                boundBy: null
+              });
+            }
+
+            this.rbcs.push({
+              id: i,
+              x,
+              y,
+              vx: (Math.random() - 0.5) * 20,
+              vy: (Math.random() - 0.5) * 20,
+              radius: rbcRadius,
+              angle: Math.random() * Math.PI * 2,
+              vAngle: (Math.random() - 0.5) * 0.45,
+              antigens
+            });
+          }
+
+          // 建立巨觀反應槽內部的微粒分布點
+          this.macroDots = [];
+          const hubs = [
+            { x: -0.34, y: -0.26 },
+            { x: 0.30, y: -0.24 },
+            { x: -0.22, y: 0.32 },
+            { x: 0.34, y: 0.28 },
+            { x: 0.0, y: -0.02 },
+            { x: -0.44, y: 0.06 },
+            { x: 0.08, y: 0.44 }
+          ];
+          for (let i = 0; i < 140; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const r = Math.sqrt(Math.random()) * 0.86;
+            const h = hubs[i % hubs.length];
+            this.macroDots.push({
+              baseX: Math.cos(a) * r,
+              baseY: Math.sin(a) * r,
+              clumpX: h.x + (Math.random() - 0.5) * 0.21,
+              clumpY: h.y + (Math.random() - 0.5) * 0.21,
+              size: 1.5 + Math.random() * 2.1,
+              phase: Math.random() * Math.PI * 2
+            });
+          }
+        }
+
+        // 當滴管液滴落入槽中的瞬間：若為接續滴加不同血清，保留既有抗體與結合，再從中央擴散新抗體！
+        injectSerumDroplet(reagentType) {
+          if (this.hasReagent(reagentType)) return;
+          this.reagents.push(reagentType);
+          this.elapsedAfterDrop = 0;
+
+          // 巨觀液面同心圓漣漪
+          this.macroRipples.push({ r: 0.08, alpha: 0.95, reagent: reagentType });
+          this.macroRipples.push({ r: 0.02, alpha: 0.75, reagent: reagentType });
+
+          // 微觀視野中央液滴擴散波紋
+          this.diffusionWaves.push({ radius: 14, alpha: 0.95, reagent: reagentType });
+          this.diffusionWaves.push({ radius: 4, alpha: 0.7, reagent: reagentType });
+
+          // 接續加藥：不清除既有已結合的抗體，而是將新一批抗體疊加擴散進場
+          const startId = this.antibodies.length;
+          const abTotal = 24;
+          const armCount = state.antibodyForm === 'IgM' ? 5 : 2;
+          for (let i = 0; i < abTotal; i++) {
+            const spreadAngle = (i / abTotal) * Math.PI * 2 + (Math.random() - 0.5) * 0.35;
+            const startDist = 6 + Math.random() * 24;
+            const burstSpeed = 95 + Math.random() * 145;
+            const arms = [];
+            for (let k = 0; k < armCount; k++) {
+              arms.push({ index: k, boundAntigen: null });
+            }
+
+            this.antibodies.push({
+              id: startId + i,
+              specificity: reagentType, // 'A' | 'B' | 'H'
+              x: Math.cos(spreadAngle) * startDist,
+              y: Math.sin(spreadAngle) * startDist,
+              vx: Math.cos(spreadAngle) * burstSpeed,
+              vy: Math.sin(spreadAngle) * burstSpeed,
+              angle: Math.random() * Math.PI * 2,
+              vAngle: (Math.random() - 0.5) * 1.8,
+              arms
+            });
+          }
+        }
+
+        // 切換 IgM / IgG 形態時更新現有抗體
+        switchAntibodyForm() {
+          if (this.reagents.length === 0) return;
+          for (const rbc of this.rbcs) {
+            for (const ag of rbc.antigens) {
+              ag.boundBy = null;
+            }
+          }
+          const armCount = state.antibodyForm === 'IgM' ? 5 : 2;
+          for (const ab of this.antibodies) {
+            ab.arms = [];
+            for (let k = 0; k < armCount; k++) {
+              ab.arms.push({ index: k, boundAntigen: null });
+            }
+          }
+        }
+
+        getAntigenWorldPos(rbc, antigen) {
+          const totalAngle = rbc.angle + antigen.localAngle;
+          const dist = rbc.radius + 5;
+          return {
+            x: rbc.x + Math.cos(totalAngle) * dist,
+            y: rbc.y + Math.sin(totalAngle) * dist,
+            angle: totalAngle
+          };
+        }
+
+        // 步進更新微觀與巨觀狀態
+        step(dt) {
+          if (dt <= 0) return;
+
+          // 更新巨觀液面漣漪
+          for (let i = this.macroRipples.length - 1; i >= 0; i--) {
+            const rp = this.macroRipples[i];
+            rp.r += 0.85 * dt;
+            rp.alpha -= 0.9 * dt;
+            if (rp.alpha <= 0 || rp.r > 0.98) this.macroRipples.splice(i, 1);
+          }
+
+          // 更新微觀液滴擴散波紋
+          for (let i = this.diffusionWaves.length - 1; i >= 0; i--) {
+            const w = this.diffusionWaves[i];
+            w.radius += 250 * dt;
+            w.alpha -= 0.65 * dt;
+            if (w.alpha <= 0) this.diffusionWaves.splice(i, 1);
+          }
+
+          // 更新鎖鑰咬合瞬間閃光特效
+          for (let i = this.bindingFlashes.length - 1; i >= 0; i--) {
+            const fl = this.bindingFlashes[i];
+            fl.radius += 34 * dt;
+            fl.alpha -= 1.8 * dt;
+            if (fl.alpha <= 0) this.bindingFlashes.splice(i, 1);
+          }
+
+          if (this.reagents.length > 0) {
+            this.elapsedAfterDrop += dt;
+          }
+
+          const armReach = state.antibodyForm === 'IgM' ? 19 : 14;
+          const lockRadius = 15.5;
+
+          // 1. 抗體布朗運動、親和力吸引與鎖鑰結合
+          for (const ab of this.antibodies) {
+            const boundArms = ab.arms.filter(a => a.boundAntigen !== null);
+
+            if (boundArms.length === 0) {
+              // 自由游離的抗體
+              ab.vx += (Math.random() - 0.5) * 95 * dt;
+              ab.vy += (Math.random() - 0.5) * 95 * dt;
+              ab.vx *= Math.pow(0.38, dt);
+              ab.vy *= Math.pow(0.38, dt);
+
+              // 尋找附近互補且未結合的抗原（短距離親和力）
+              let nearest = null;
+              let minDist = 78;
+              for (const rbc of this.rbcs) {
+                for (const ag of rbc.antigens) {
+                  if (ag.kind === ab.specificity && !ag.boundBy) {
+                    const pos = this.getAntigenWorldPos(rbc, ag);
+                    const d = Math.hypot(pos.x - ab.x, pos.y - ab.y);
+                    if (d < minDist) {
+                      minDist = d;
+                      nearest = pos;
+                    }
+                  }
+                }
+              }
+
+              if (nearest) {
+                const dx = nearest.x - ab.x;
+                const dy = nearest.y - ab.y;
+                const d = Math.max(1, minDist);
+                ab.vx += (dx / d) * 145 * dt;
+                ab.vy += (dy / d) * 145 * dt;
+              }
+
+              ab.x += ab.vx * dt;
+              ab.y += ab.vy * dt;
+              ab.angle += ab.vAngle * dt;
+
+              // 圓形視場邊界反彈
+              const distFromCenter = Math.hypot(ab.x, ab.y);
+              if (distFromCenter > this.worldRadius - 18) {
+                const nx = ab.x / distFromCenter;
+                const ny = ab.y / distFromCenter;
+                ab.x = nx * (this.worldRadius - 18);
+                ab.y = ny * (this.worldRadius - 18);
+                const dot = ab.vx * nx + ab.vy * ny;
+                ab.vx -= 2 * dot * nx;
+                ab.vy -= 2 * dot * ny;
+              }
+            } else {
+              // 已結合至少一個抗原的抗體：平滑跟隨結合點並準備交聯第二顆紅血球
+              let sx = 0, sy = 0;
+              for (const arm of boundArms) {
+                const pos = this.getAntigenWorldPos(arm.boundAntigen.rbc, arm.boundAntigen.ag);
+                sx += pos.x + Math.cos(pos.angle) * (armReach * 0.85);
+                sy += pos.y + Math.sin(pos.angle) * (armReach * 0.85);
+              }
+              const tx = sx / boundArms.length;
+              const ty = sy / boundArms.length;
+              ab.x += (tx - ab.x) * Math.min(1, 15 * dt);
+              ab.y += (ty - ab.y) * Math.min(1, 15 * dt);
+              ab.vx = 0;
+              ab.vy = 0;
+
+              const p0 = this.getAntigenWorldPos(boundArms[0].boundAntigen.rbc, boundArms[0].boundAntigen.ag);
+              ab.angle = Math.atan2(p0.y - ab.y, p0.x - ab.x);
+            }
+
+            // 檢查空閒結合臂是否能咬合互補抗原
+            const linkedRbcIds = new Set(boundArms.map(a => a.boundAntigen.rbc.id));
+            for (const arm of ab.arms) {
+              if (arm.boundAntigen) continue;
+              const armAngle = state.antibodyForm === 'IgM'
+                ? ab.angle + (arm.index / ab.arms.length) * Math.PI * 2
+                : ab.angle + (arm.index === 0 ? -0.52 : 0.52);
+              const tipX = ab.x + Math.cos(armAngle) * armReach;
+              const tipY = ab.y + Math.sin(armAngle) * armReach;
+
+              for (const rbc of this.rbcs) {
+                // 優先交聯不同顆紅血球
+                if (linkedRbcIds.has(rbc.id) && boundArms.length >= 1) continue;
+                for (const ag of rbc.antigens) {
+                  if (ag.kind === ab.specificity && !ag.boundBy) {
+                    const pos = this.getAntigenWorldPos(rbc, ag);
+                    if (Math.hypot(pos.x - tipX, pos.y - tipY) <= lockRadius) {
+                      arm.boundAntigen = { rbc, ag };
+                      ag.boundBy = { ab, arm };
+                      linkedRbcIds.add(rbc.id);
+
+                      // 觸發「鎖鑰咬合瞬間閃光與吸附波紋」
+                      const flashColor = ab.specificity === 'A'
+                        ? '#38bdf8'
+                        : ab.specificity === 'B'
+                          ? '#fbbf24'
+                          : '#34d399';
+                      this.bindingFlashes.push({
+                        x: pos.x,
+                        y: pos.y,
+                        radius: 4,
+                        alpha: 1.0,
+                        color: flashColor
+                      });
+                      break;
+                    }
+                  }
+                }
+                if (arm.boundAntigen) break;
+              }
+            }
+          }
+
+          // 2. 交聯彈簧力（將被同一抗體抓住的多顆紅血球拉近聚集）
+          let crossLinkPairs = 0;
+          for (const ab of this.antibodies) {
+            const boundArms = ab.arms.filter(a => a.boundAntigen !== null);
+            if (boundArms.length >= 2) {
+              for (let i = 0; i < boundArms.length - 1; i++) {
+                const r1 = boundArms[i].boundAntigen.rbc;
+                const r2 = boundArms[i + 1].boundAntigen.rbc;
+                if (r1.id === r2.id) continue;
+                crossLinkPairs++;
+
+                const dx = r2.x - r1.x;
+                const dy = r2.y - r1.y;
+                const dist = Math.max(1, Math.hypot(dx, dy));
+                const idealDist = r1.radius + r2.radius + (state.antibodyForm === 'IgM' ? 23 : 15);
+                const stretch = dist - idealDist;
+                const kSpring = 3.4;
+                const fx = (dx / dist) * stretch * kSpring;
+                const fy = (dy / dist) * stretch * kSpring;
+
+                r1.vx += fx * dt;
+                r1.vy += fy * dt;
+                r2.vx -= fx * dt;
+                r2.vy -= fy * dt;
+              }
+            }
+          }
+
+          // 3. 紅血球布朗運動與細胞間軟碰撞排斥
+          for (let i = 0; i < this.rbcs.length; i++) {
+            const r1 = this.rbcs[i];
+            const isBound = r1.antigens.some(ag => ag.boundBy !== null);
+            const jitter = isBound ? 5 : 22;
+            r1.vx += (Math.random() - 0.5) * jitter * dt;
+            r1.vy += (Math.random() - 0.5) * jitter * dt;
+
+            for (let j = i + 1; j < this.rbcs.length; j++) {
+              const r2 = this.rbcs[j];
+              const dx = r2.x - r1.x;
+              const dy = r2.y - r1.y;
+              const dist = Math.hypot(dx, dy);
+              const minSep = r1.radius + r2.radius + 7;
+              if (dist > 0 && dist < minSep) {
+                const overlap = minSep - dist;
+                const nx = dx / dist;
+                const ny = dy / dist;
+                const push = overlap * 16 * dt;
+                r1.vx -= nx * push;
+                r1.vy -= ny * push;
+                r2.vx += nx * push;
+                r2.vy += ny * push;
+              }
+            }
+
+            const damping = isBound ? 0.16 : 0.42;
+            r1.vx *= Math.pow(damping, dt);
+            r1.vy *= Math.pow(damping, dt);
+            r1.x += r1.vx * dt;
+            r1.y += r1.vy * dt;
+            r1.angle += r1.vAngle * (isBound ? 0.25 : 1.0) * dt;
+
+            const distCenter = Math.hypot(r1.x, r1.y);
+            const maxR = this.worldRadius - r1.radius - 10;
+            if (distCenter > maxR) {
+              const nx = r1.x / distCenter;
+              const ny = r1.y / distCenter;
+              r1.x = nx * maxR;
+              r1.y = ny * maxR;
+              const dot = r1.vx * nx + r1.vy * ny;
+              r1.vx -= 1.6 * dot * nx;
+              r1.vy -= 1.6 * dot * ny;
+            }
+          }
+          // 4. 漸進式同步更新巨觀凝集顆粒化進程（支援任意已加入試劑組合的累計交聯判定）
+          const profile = BLOOD_DATA[state.actualBloodType];
+          const hasCompatibleReagent =
+            (this.hasReagent('A') && profile.hasA) ||
+            (this.hasReagent('B') && profile.hasB) ||
+            (this.hasReagent('H') && profile.hDensity === 'high');
+
+          if (this.reagents.length > 0 && (hasCompatibleReagent || crossLinkPairs >= 3)) {
+            const linkFactor = Math.min(1, crossLinkPairs / 6);
+            const timeFactor = hasCompatibleReagent ? Math.min(1, this.elapsedAfterDrop / 3.0) : 0;
+            const targetClump = Math.max(linkFactor * 0.9, timeFactor);
+            this.clumpLevel += (targetClump - this.clumpLevel) * Math.min(1, 2.5 * dt);
+          } else {
+            this.clumpLevel += (0 - this.clumpLevel) * Math.min(1, 4.0 * dt);
+          }
+        }
+
+        // 判斷目前該反應槽是否已呈現陽性凝集
+        isAgglutinated() {
+          return this.reagents.length > 0 && this.clumpLevel > 0.32;
+        }
+      }
+
+      // 建立兩個獨立反應槽：反應槽 #1 (wells[0]) 與 反應槽 #2 (wells[1])
+      const wells = [new WellSimulation(0), new WellSimulation(1)];
+
+      // ------------------------------------------------------------------------
+      // 4. Canvas 高 DPI 設定與繪圖工具
+      // ------------------------------------------------------------------------
+      const canvas = document.getElementById('labCanvas');
+      const ctx = canvas.getContext('2d');
+      let viewW = 0;
+      let viewH = 0;
+
+      function resizeCanvas() {
+        const rect = canvas.parentElement.getBoundingClientRect();
+        const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+        viewW = rect.width;
+        viewH = rect.height;
+        canvas.width = Math.floor(viewW * dpr);
+        canvas.height = Math.floor(viewH * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+
+      function roundRect(c, x, y, w, h, r) {
+        const safeW = Math.max(0, w);
+        const safeH = Math.max(0, h);
+        const rad = Math.max(0, Math.min(r, safeW / 2, safeH / 2));
+        c.beginPath();
+        c.moveTo(x + rad, y);
+        c.arcTo(x + safeW, y, x + safeW, y + safeH, rad);
+        c.arcTo(x + safeW, y + safeH, x, y + safeH, rad);
+        c.arcTo(x, y + safeH, x, y, rad);
+        c.arcTo(x, y, x + safeW, y, rad);
+        c.closePath();
+      }
+
+      // ------------------------------------------------------------------------
+      // 5. 左側視窗：巨觀玻片操作台繪製（Macro Slide & Two Wells）
+      // ------------------------------------------------------------------------
+      function renderMacroBench(x, y, w, h) {
+        if (w <= 0 || h <= 0) return;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x, y, w, h);
+        ctx.clip();
+
+        // 實驗室深海藍防滑工作台背景
+        const bgGrad = ctx.createLinearGradient(x, y, x, y + h);
+        bgGrad.addColorStop(0, '#0c1528');
+        bgGrad.addColorStop(1, '#14223d');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(x, y, w, h);
+
+        // 細微實驗台格線
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.06)';
+        ctx.lineWidth = 1;
+        for (let gx = x; gx < x + w; gx += 26) {
+          ctx.beginPath();
+          ctx.moveTo(gx, y);
+          ctx.lineTo(gx, y + h);
+          ctx.stroke();
+        }
+        for (let gy = y; gy < y + h; gy += 26) {
+          ctx.beginPath();
+          ctx.moveTo(x, gy);
+          ctx.lineTo(x + w, gy);
+          ctx.stroke();
+        }
+
+        // 頂部區域標題徽章
+        const badgeW = Math.max(0, Math.min(w - 24, 240));
+        if (badgeW > 12) {
+          roundRect(ctx, x + 12, y + 12, badgeW, 30, 8);
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+          ctx.stroke();
+          ctx.fillStyle = '#e2e8f0';
+          ctx.font = 'bold 12px sans-serif';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('🧪 巨觀實驗台：玻片反應盤（點擊選槽）', x + 22, y + 27);
+        }
+
+        // 計算白瓷/玻璃反應盤尺寸（自適應橫向或縱向）
+        const isVerticalStack = w < 330 && h > w * 1.1;
+        const plateW = isVerticalStack ? Math.min(w * 0.84, 240) : Math.min(w * 0.90, 440);
+        const plateH = isVerticalStack ? Math.min(h * 0.72, 360) : Math.min(h * 0.62, 245);
+        const plateX = x + (w - plateW) / 2;
+        const plateY = y + (h - plateH) / 2 + 14;
+
+        // 反應盤立體陰影
+        ctx.save();
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+        ctx.shadowBlur = 22;
+        ctx.shadowOffsetY = 10;
+        roundRect(ctx, plateX, plateY, plateW, plateH, 18);
+        ctx.fillStyle = '#e2e8f0';
+        ctx.fill();
+        ctx.restore();
+
+        // 純白實驗室瓷盤漸層質感
+        const plateGrad = ctx.createLinearGradient(plateX, plateY, plateX + plateW, plateY + plateH);
+        plateGrad.addColorStop(0, '#f8fafc');
+        plateGrad.addColorStop(0.55, '#f1f5f9');
+        plateGrad.addColorStop(1, '#cbd5e1');
+        roundRect(ctx, plateX, plateY, plateW, plateH, 18);
+        ctx.fillStyle = plateGrad;
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+
+        // 盤頂檢體編號標籤
+        roundRect(ctx, plateX + 14, plateY + 12, plateW - 28, 28, 7);
+        ctx.fillStyle = '#1e293b';
+        ctx.fill();
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'center';
+        const sampleTitle = state.sampleMode === 'UNKNOWN'
+          ? '檢體編號：#2026-X（未知血型挑戰）'
+          : `檢體編號：受檢者 ${BLOOD_DATA[state.actualBloodType].name}血液`;
+        ctx.fillText(sampleTitle, plateX + plateW / 2, plateY + 26);
+
+        // 計算兩個反應槽位置
+        const wellR = isVerticalStack
+          ? Math.min(plateW * 0.30, plateH * 0.17, 56)
+          : Math.min(plateW * 0.19, plateH * 0.28, 66);
+
+        const c1 = isVerticalStack
+          ? { x: plateX + plateW / 2, y: plateY + plateH * 0.37 }
+          : { x: plateX + plateW * 0.29, y: plateY + plateH * 0.56 };
+
+        const c2 = isVerticalStack
+          ? { x: plateX + plateW / 2, y: plateY + plateH * 0.74 }
+          : { x: plateX + plateW * 0.71, y: plateY + plateH * 0.56 };
+
+        state.wellHitBoxes[0] = { x: c1.x, y: c1.y, r: wellR + 14 };
+        state.wellHitBoxes[1] = { x: c2.x, y: c2.y, r: wellR + 14 };
+
+        drawMacroWell(c1.x, c1.y, wellR, 0, wells[0]);
+        drawMacroWell(c2.x, c2.y, wellR, 1, wells[1]);
+
+        // 繪製微量滴管動畫（Pipette Drop Animation）
+        if (state.pipette.active) {
+          const targetCenter = state.pipette.wellIndex === 0 ? c1 : c2;
+          drawPipetteDrop(targetCenter.x, targetCenter.y, wellR, state.pipette.reagent, state.pipette.progress);
+        }
+
+        ctx.restore();
+      }
+
+      function drawMacroWell(cx, cy, r, idx, sim) {
+        const isSelected = state.activeWell === idx;
+        const now = performance.now() * 0.004;
+
+        // 1. 若為目前選取的反應槽，繪製清晰呼吸燈高亮選取框
+        if (isSelected) {
+          const pulseR = r + 10 + Math.sin(now) * 2.5;
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(cx, cy, pulseR, 0, Math.PI * 2);
+          ctx.strokeStyle = '#0ea5e9';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.arc(cx, cy, r + 6, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(14, 165, 233, 0.14)';
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // 2. 凹槽玻璃邊框
+        ctx.beginPath();
+        ctx.arc(cx, cy, r + 2, 0, Math.PI * 2);
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = isSelected ? '#0284c7' : '#94a3b8';
+        ctx.stroke();
+
+        // 3. 反應槽內部液滴渲染
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.clip();
+
+        const clump = sim.clumpLevel; // 0 = 均勻懸浮液, 1 = 顆粒凝集結塊與清澈背景分離
+        const latestReagent = sim.reagents.length > 0 ? sim.reagents[sim.reagents.length - 1] : null;
+
+        if (!latestReagent) {
+          // 尚未滴加試劑：均勻飽滿鮮紅血滴
+          const freshGrad = ctx.createRadialGradient(cx - r * 0.2, cy - r * 0.2, r * 0.1, cx, cy, r);
+          freshGrad.addColorStop(0, '#dc2626');
+          freshGrad.addColorStop(0.85, '#b91c1c');
+          freshGrad.addColorStop(1, '#7f1d1d');
+          ctx.fillStyle = freshGrad;
+          ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+        } else {
+          // 已滴入血清：隨著 clumpLevel 增加，背景液體由深紅逐漸轉為澄清淡藍/淡琥珀/淡翠綠色
+          ctx.fillStyle = '#991b1b';
+          ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+
+          const clearAlpha = 0.22 + clump * 0.70;
+          let clearBg = `rgba(224, 242, 254, ${clearAlpha})`;
+          let rimTint = 'rgba(14, 165, 233, 0.38)';
+          if (sim.reagents.length >= 2) {
+            clearBg = `rgba(233, 213, 255, ${clearAlpha})`;
+            rimTint = 'rgba(168, 85, 247, 0.42)';
+          } else if (latestReagent === 'B') {
+            clearBg = `rgba(254, 243, 199, ${clearAlpha})`;
+            rimTint = 'rgba(245, 158, 11, 0.38)';
+          } else if (latestReagent === 'H') {
+            clearBg = `rgba(209, 250, 229, ${clearAlpha})`;
+            rimTint = 'rgba(16, 185, 129, 0.38)';
+          }
+
+          ctx.fillStyle = clearBg;
+          ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+
+          // 尚未凝集部分的均勻紅血球懸浮層
+          const suspensionAlpha = Math.max(0.06, 0.90 - clump * 0.84);
+          const suspGrad = ctx.createRadialGradient(cx, cy, r * 0.1, cx, cy, r);
+          suspGrad.addColorStop(0, `rgba(220, 38, 38, ${suspensionAlpha})`);
+          suspGrad.addColorStop(0.9, `rgba(185, 28, 28, ${suspensionAlpha})`);
+          suspGrad.addColorStop(1, rimTint);
+          ctx.fillStyle = suspGrad;
+          ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+        }
+
+        // 繪製巨觀紅血球微粒（凝集時漸進聚集成肉眼可見的暗紅沙粒狀結塊）
+        const t = performance.now() * 0.002;
+        for (const d of sim.macroDots) {
+          const px = cx + (d.baseX * (1 - clump) + d.clumpX * clump) * (r * 0.86) + Math.cos(t + d.phase) * 0.7;
+          const py = cy + (d.baseY * (1 - clump) + d.clumpY * clump) * (r * 0.86) + Math.sin(t + d.phase) * 0.7;
+          const dotR = d.size * (0.65 + clump * 0.95);
+          ctx.beginPath();
+          ctx.arc(px, py, dotR, 0, Math.PI * 2);
+          ctx.fillStyle = clump > 0.22
+            ? `rgba(127, 29, 29, ${0.30 + clump * 0.70})`
+            : 'rgba(254, 202, 202, 0.22)';
+          ctx.fill();
+        }
+
+        // 液面滴入同心圓漣漪
+        for (const rp of sim.macroRipples) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, rp.r * r, 0, Math.PI * 2);
+          ctx.strokeStyle = rp.reagent === 'A'
+            ? `rgba(14, 165, 233, ${rp.alpha})`
+            : rp.reagent === 'B'
+              ? `rgba(245, 158, 11, ${rp.alpha})`
+              : `rgba(16, 185, 129, ${rp.alpha})`;
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+        }
+
+        // 液滴高光反射
+        const gloss = ctx.createLinearGradient(cx - r, cy - r, cx + r * 0.4, cy + r * 0.4);
+        gloss.addColorStop(0, 'rgba(255, 255, 255, 0.35)');
+        gloss.addColorStop(0.5, 'rgba(255, 255, 255, 0.02)');
+        gloss.addColorStop(1, 'rgba(0, 0, 0, 0.15)');
+        ctx.fillStyle = gloss;
+        ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+
+        ctx.restore();
+
+        // 4. 槽位上方標題與觀察中提示
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.fillStyle = isSelected ? '#0284c7' : '#334155';
+        ctx.fillText(
+          isSelected ? `👁 觀察中：反應槽 #${idx + 1}` : `反應槽 #${idx + 1}`,
+          cx,
+          cy - r - 14
+        );
+
+        // 5. 槽位下方試劑與凝集狀態膠囊
+        let pillText = '待滴定（點擊選取）';
+        let pillBg = '#334155';
+        let pillFg = '#e2e8f0';
+
+        if (sim.reagents.length > 0) {
+          const rNames = sim.reagents.map(r => `抗${r}`).join('＋');
+          if (sim.isAgglutinated()) {
+            pillText = `${rNames}｜凝集 (＋)`;
+            pillBg = '#e11d48';
+            pillFg = '#ffffff';
+          } else {
+            pillText = `${rNames}｜不凝集 (−)`;
+            pillBg = '#0f766e';
+            pillFg = '#ccfbf1';
+          }
+        }
+
+        const pw = 136;
+        const ph = 22;
+        roundRect(ctx, cx - pw / 2, cy + r + 9, pw, ph, 11);
+        ctx.fillStyle = pillBg;
+        ctx.fill();
+        ctx.fillStyle = pillFg;
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillText(pillText, cx, cy + r + 20);
+      }
+
+      // 微量滴管（Pipette）動畫
+      function drawPipetteDrop(cx, cy, wellR, reagent, progress) {
+        ctx.save();
+        const liquidColor = reagent === 'A' ? '#0ea5e9' : (reagent === 'B' ? '#f59e0b' : '#10b981');
+        const tipX = cx;
+        const tipY = cy - wellR - 14;
+        const lift = Math.sin(progress * Math.PI) * -10;
+        const alpha = progress < 0.85 ? 1 : (1 - progress) / 0.15;
+        ctx.globalAlpha = Math.max(0, alpha);
+
+        // 滴管管身（傾斜 28 度對準反應槽中心）
+        ctx.save();
+        ctx.translate(tipX + 16, tipY - 18 + lift);
+        ctx.rotate(-0.48);
+
+        // 玻璃管外殼
+        ctx.fillStyle = 'rgba(248, 250, 252, 0.9)';
+        ctx.strokeStyle = '#475569';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(-7, -34);
+        ctx.lineTo(7, -34);
+        ctx.lineTo(2.5, 4);
+        ctx.lineTo(-2.5, 4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // 試劑液柱
+        ctx.fillStyle = liquidColor;
+        ctx.beginPath();
+        ctx.moveTo(-5, -22);
+        ctx.lineTo(5, -22);
+        ctx.lineTo(2, 3);
+        ctx.lineTo(-2, 3);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        // 落下的試劑液滴（在 progress = 0.48 時接觸液面並觸發微觀擴散）
+        if (progress >= 0.15 && progress <= 0.55) {
+          const dropFrac = (progress - 0.15) / 0.40;
+          const dropY = tipY - 10 + dropFrac * (wellR + 12);
+          ctx.fillStyle = liquidColor;
+          ctx.beginPath();
+          ctx.arc(cx, dropY, 5.5 * (1 - dropFrac * 0.25), 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.restore();
+      }
+
+      // ------------------------------------------------------------------------
+      // 6. 右側視窗：400x 微觀顯微鏡視場渲染（Microscopic Field Renderer）
+      // ------------------------------------------------------------------------
+      function renderMicroScope(x, y, w, h) {
+        if (w <= 0 || h <= 0) return;
+        const sim = wells[state.activeWell];
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x, y, w, h);
+        ctx.clip();
+
+        // 顯微鏡暗房背景
+        const cx = x + w / 2;
+        const cy = y + h / 2;
+        const bgGrad = ctx.createRadialGradient(cx, cy, 40, cx, cy, Math.max(w, h) * 0.72);
+        bgGrad.addColorStop(0, '#2a1624');
+        bgGrad.addColorStop(0.6, '#1a101c');
+        bgGrad.addColorStop(1, '#0b0f19');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(x, y, w, h);
+
+        // 計算基礎縮放比例並套用平滑鏡頭過渡
+        const baseScale = Math.min(w, h) / (sim.worldRadius * 2.25);
+        const totalScale = baseScale * state.camera.zoom;
+
+        ctx.save();
+        ctx.translate(cx + state.camera.panX + state.camera.stageShiftX, cy + state.camera.panY);
+        ctx.scale(totalScale, totalScale);
+
+        // 顯微鏡圓形載物液滴光圈
+        const latestReagent = sim.reagents.length > 0 ? sim.reagents[sim.reagents.length - 1] : null;
+        const fieldGrad = ctx.createRadialGradient(0, 0, sim.worldRadius * 0.15, 0, 0, sim.worldRadius);
+        fieldGrad.addColorStop(0, 'rgba(255, 228, 230, 0.14)');
+        fieldGrad.addColorStop(0.82, 'rgba(244, 184, 174, 0.08)');
+        fieldGrad.addColorStop(1, latestReagent === 'A'
+          ? 'rgba(14, 165, 233, 0.22)'
+          : latestReagent === 'B'
+            ? 'rgba(245, 158, 11, 0.22)'
+            : latestReagent === 'H'
+              ? 'rgba(16, 185, 129, 0.22)'
+              : 'rgba(148, 163, 184, 0.18)');
+
+        ctx.beginPath();
+        ctx.arc(0, 0, sim.worldRadius, 0, Math.PI * 2);
+        ctx.fillStyle = fieldGrad;
+        ctx.fill();
+        ctx.lineWidth = 3 / totalScale;
+        ctx.strokeStyle = latestReagent === 'A'
+          ? 'rgba(56, 189, 248, 0.55)'
+          : latestReagent === 'B'
+            ? 'rgba(251, 191, 36, 0.55)'
+            : latestReagent === 'H'
+              ? 'rgba(52, 211, 153, 0.55)'
+              : 'rgba(148, 163, 184, 0.35)';
+        ctx.stroke();
+
+        // 滴液從中央擴散進入的波紋
+        for (const wv of sim.diffusionWaves) {
+          ctx.beginPath();
+          ctx.arc(0, 0, Math.min(wv.radius, sim.worldRadius), 0, Math.PI * 2);
+          ctx.strokeStyle = wv.reagent === 'A'
+            ? `rgba(56, 189, 248, ${wv.alpha})`
+            : wv.reagent === 'B'
+              ? `rgba(251, 191, 36, ${wv.alpha})`
+              : `rgba(52, 211, 153, ${wv.alpha})`;
+          ctx.lineWidth = 3.5 / totalScale;
+          ctx.stroke();
+        }
+
+        // 繪製已形成的交聯分子橋樑連線
+        for (const ab of sim.antibodies) {
+          const boundArms = ab.arms.filter(a => a.boundAntigen !== null);
+          if (boundArms.length >= 2) {
+            ctx.save();
+            ctx.strokeStyle = ab.specificity === 'A'
+              ? 'rgba(56, 189, 248, 0.45)'
+              : ab.specificity === 'B'
+                ? 'rgba(251, 191, 36, 0.45)'
+                : 'rgba(52, 211, 153, 0.48)';
+            ctx.lineWidth = 3.2;
+            ctx.setLineDash([4, 4]);
+            for (let i = 0; i < boundArms.length - 1; i++) {
+              const p1 = sim.getAntigenWorldPos(boundArms[i].boundAntigen.rbc, boundArms[i].boundAntigen.ag);
+              const p2 = sim.getAntigenWorldPos(boundArms[i + 1].boundAntigen.rbc, boundArms[i + 1].boundAntigen.ag);
+              ctx.beginPath();
+              ctx.moveTo(p1.x, p1.y);
+              ctx.lineTo(ab.x, ab.y);
+              ctx.lineTo(p2.x, p2.y);
+              ctx.stroke();
+            }
+            ctx.restore();
+          }
+        }
+
+        // 繪製雙凹圓盤紅血球與表面抗原（A: 紅色三角, B: 藍色半圓, O: 微小H基底點）
+        for (const rbc of sim.rbcs) {
+          drawRBC(rbc);
+        }
+
+        // 繪製抗體分子（具互補 V 型或 C 型 Fab 凹槽）
+        for (const ab of sim.antibodies) {
+          drawAntibody(ab, sim);
+        }
+
+        // 繪製鎖鑰咬合瞬間閃光特效
+        for (const fl of sim.bindingFlashes) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(fl.x, fl.y, fl.radius, 0, Math.PI * 2);
+          ctx.strokeStyle = fl.color;
+          ctx.globalAlpha = Math.max(0, fl.alpha);
+          ctx.lineWidth = 2.5;
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.arc(fl.x, fl.y, fl.radius * 0.45, 0, Math.PI * 2);
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+          ctx.restore();
+        }
+
+        ctx.restore();
+
+        // 左上角：目前顯微鏡觀察目標資訊卡
+        drawMicroInfoBanner(x, y, w, h, totalScale, sim);
+
+        ctx.restore();
+      }
+
+      function drawRBC(rbc) {
+        ctx.save();
+        ctx.translate(rbc.x, rbc.y);
+        ctx.rotate(rbc.angle);
+        const r = rbc.radius;
+
+        // 1. 細胞膜表面抗原突起
+        for (const ag of rbc.antigens) {
+          ctx.save();
+          ctx.rotate(ag.localAngle);
+          ctx.translate(r - 1, 0);
+
+          if (ag.kind === 'A') {
+            // A 抗原：紅色尖角三角形突起
+            ctx.beginPath();
+            ctx.moveTo(0, -5.5);
+            ctx.lineTo(10, 0);
+            ctx.lineTo(0, 5.5);
+            ctx.closePath();
+            ctx.fillStyle = ag.boundBy ? '#fda4af' : '#fb7185';
+            ctx.fill();
+            ctx.lineWidth = 1.2;
+            ctx.strokeStyle = '#ffe4e6';
+            ctx.stroke();
+          } else if (ag.kind === 'B') {
+            // B 抗原：藍色半圓形突起
+            ctx.beginPath();
+            ctx.arc(1, 0, 5.8, -Math.PI / 2, Math.PI / 2);
+            ctx.closePath();
+            ctx.fillStyle = ag.boundBy ? '#7dd3fc' : '#38bdf8';
+            ctx.fill();
+            ctx.lineWidth = 1.2;
+            ctx.strokeStyle = '#e0f2fe';
+            ctx.stroke();
+          } else if (ag.kind === 'H') {
+            // H 抗原：綠色圓珠形前驅突起（O型豐富、A/B型少量、亞孟買極缺乏）
+            ctx.beginPath();
+            ctx.arc(3.5, 0, 4.3, 0, Math.PI * 2);
+            ctx.fillStyle = ag.boundBy ? '#6ee7b7' : '#10b981';
+            ctx.fill();
+            ctx.lineWidth = 1.1;
+            ctx.strokeStyle = '#d1fae5';
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+
+        // 2. 雙凹圓盤紅血球本體漸層與高光陰影
+        const bodyGrad = ctx.createRadialGradient(-r * 0.25, -r * 0.25, r * 0.1, 0, 0, r);
+        bodyGrad.addColorStop(0, '#f43f5e');
+        bodyGrad.addColorStop(0.62, '#e11d48');
+        bodyGrad.addColorStop(1, '#881337');
+
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fillStyle = bodyGrad;
+        ctx.fill();
+        ctx.lineWidth = 1.6;
+        ctx.strokeStyle = '#fecdd3';
+        ctx.stroke();
+
+        // 雙凹圓盤中央淺色凹陷區
+        const centerGrad = ctx.createRadialGradient(0, 0, 1, 0, 0, r * 0.56);
+        centerGrad.addColorStop(0, 'rgba(255, 228, 230, 0.36)');
+        centerGrad.addColorStop(0.75, 'rgba(190, 18, 60, 0.28)');
+        centerGrad.addColorStop(1, 'rgba(136, 19, 55, 0)');
+
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.56, 0, Math.PI * 2);
+        ctx.fillStyle = centerGrad;
+        ctx.fill();
+
+        ctx.restore();
+      }
+
+      function drawAntibody(ab, sim) {
+        const spec = ab.specificity; // 'A' | 'B' | 'H'
+        const mainColor = spec === 'A' ? '#38bdf8' : (spec === 'B' ? '#fbbf24' : '#34d399');
+        const darkColor = spec === 'A' ? '#0284c7' : (spec === 'B' ? '#d97706' : '#059669');
+        const isIgM = state.antibodyForm === 'IgM';
+        const armLen = isIgM ? 18 : 14;
+
+        ctx.save();
+        ctx.translate(ab.x, ab.y);
+
+        const boundCount = ab.arms.filter(a => a.boundAntigen !== null).length;
+        if (boundCount >= 2) {
+          ctx.beginPath();
+          ctx.arc(0, 0, isIgM ? 10 : 7.5, 0, Math.PI * 2);
+          ctx.fillStyle = spec === 'A'
+            ? 'rgba(56, 189, 248, 0.65)'
+            : spec === 'B'
+              ? 'rgba(251, 191, 36, 0.65)'
+              : 'rgba(52, 211, 153, 0.65)';
+          ctx.fill();
+        }
+
+        // 中心連結核
+        ctx.beginPath();
+        ctx.arc(0, 0, isIgM ? 4.5 : 3.2, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = darkColor;
+        ctx.stroke();
+
+        // 若為 IgG 單體，繪製 Fc 尾幹
+        if (!isIgM) {
+          ctx.save();
+          ctx.rotate(ab.angle + Math.PI);
+          ctx.strokeStyle = mainColor;
+          ctx.lineWidth = 3.2;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(13, 0);
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // 繪製各條 Fab 結合臂與末端鎖鑰凹槽
+        for (const arm of ab.arms) {
+          let armAngle;
+          if (arm.boundAntigen) {
+            const pos = sim.getAntigenWorldPos(arm.boundAntigen.rbc, arm.boundAntigen.ag);
+            armAngle = Math.atan2(pos.y - ab.y, pos.x - ab.x);
+          } else {
+            armAngle = isIgM
+              ? ab.angle + (arm.index / ab.arms.length) * Math.PI * 2
+              : ab.angle + (arm.index === 0 ? -0.52 : 0.52);
+          }
+
+          ctx.save();
+          ctx.rotate(armAngle);
+
+          // 結合臂主幹
+          ctx.strokeStyle = mainColor;
+          ctx.lineWidth = isIgM ? 2.6 : 3.0;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(armLen - 2, 0);
+          ctx.stroke();
+
+          // Fab 末端專一性結合凹槽
+          ctx.translate(armLen - 2, 0);
+          ctx.fillStyle = arm.boundAntigen ? '#ffffff' : mainColor;
+          ctx.strokeStyle = darkColor;
+          ctx.lineWidth = 1.3;
+
+          if (spec === 'A') {
+            // 抗A抗體：V 型三角形凹槽（專一咬合三角形 A 抗原）
+            ctx.beginPath();
+            ctx.moveTo(-2, -6);
+            ctx.lineTo(6, -6);
+            ctx.lineTo(1, 0);
+            ctx.lineTo(6, 6);
+            ctx.lineTo(-2, 6);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+          } else if (spec === 'B') {
+            // 抗B抗體：C 型半圓形凹槽（專一咬合半圓形 B 抗原）
+            ctx.beginPath();
+            ctx.arc(5, 0, 6.2, Math.PI * 0.55, Math.PI * 1.45, false);
+            ctx.lineTo(-2, -5.8);
+            ctx.lineTo(-2, 5.8);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+          } else {
+            // 抗H抗體：雙爪圓鉗凹槽（專一咬合綠色圓珠形 H 抗原）
+            ctx.beginPath();
+            ctx.arc(5.2, 0, 5.2, Math.PI * 0.45, Math.PI * 1.55, false);
+            ctx.lineTo(-2, -5.2);
+            ctx.lineTo(-2, 5.2);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+
+        ctx.restore();
+      }
+
+      function drawMicroInfoBanner(x, y, w, h, scale, sim) {
+        // 左上角顯微鏡狀態卡片
+        const boxW = Math.max(0, Math.min(w - 24, 360));
+        if (boxW > 12) {
+          roundRect(ctx, x + 12, y + 12, boxW, 50, 10);
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.86)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          ctx.fillStyle = '#38bdf8';
+          ctx.font = 'bold 12px sans-serif';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'top';
+          ctx.fillText(`🔬 400x 微觀視場｜反應槽 #${state.activeWell + 1}`, x + 22, y + 20);
+
+          let subDesc = '尚未加入血清：觀察紅血球自由布朗運動與表面抗原';
+          ctx.fillStyle = '#cbd5e1';
+          if (sim.reagents.length > 0) {
+            const rLabel = sim.reagents.map(r => `抗${r}`).join(' ＋ ');
+            if (sim.isAgglutinated()) {
+              subDesc = `已依序加入【${rLabel}】→ 鎖鑰互補結合，交聯成團！`;
+              ctx.fillStyle = '#fda4af';
+            } else {
+              subDesc = `已依序加入【${rLabel}】→ 無足夠互補抗原，不凝集`;
+              ctx.fillStyle = '#6ee7b7';
+            }
+          }
+          ctx.font = '11px sans-serif';
+          ctx.fillText(subDesc, x + 22, y + 39);
+        }
+
+        // 右下角比例尺
+        const tenMicronPx = (10 / 3.75) * 26 * scale;
+        const barW = Math.max(44, Math.min(125, tenMicronPx));
+        const unit = tenMicronPx > 125 ? '5 µm' : (tenMicronPx < 44 ? '20 µm' : '10 µm');
+        const sx = x + w - barW - 16;
+        const sy = y + h - 18;
+
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy - 4);
+        ctx.lineTo(sx, sy);
+        ctx.lineTo(sx + barW, sy);
+        ctx.lineTo(sx + barW, sy - 4);
+        ctx.stroke();
+
+        ctx.fillStyle = '#cbd5e1';
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(unit, sx + barW / 2, sy - 11);
+      }
+
+      // ------------------------------------------------------------------------
+      // 7. 主動畫迴圈
+      // ------------------------------------------------------------------------
+      let lastTime = performance.now();
+
+      function loop(now) {
+        const rawDt = Math.min(0.05, (now - lastTime) / 1000);
+        lastTime = now;
+
+        // 平滑縮放與載物台切換過渡（無任何鏡頭突兀跳動）
+        state.camera.zoom += (state.camera.targetZoom - state.camera.zoom) * Math.min(1, 11 * rawDt);
+        state.camera.stageShiftX += (0 - state.camera.stageShiftX) * Math.min(1, 9 * rawDt);
+
+        // 滴管滴液動畫推進（液滴在 progress >= 0.48 接觸液面時觸發抗體從中央擴散）
+        if (state.pipette.active) {
+          state.pipette.progress += rawDt * 1.45;
+          if (state.pipette.progress >= 0.48 && !state.pipette.droppedTriggered) {
+            state.pipette.droppedTriggered = true;
+            wells[state.pipette.wellIndex].injectSerumDroplet(state.pipette.reagent);
+            syncBottomUI();
+          }
+          if (state.pipette.progress >= 1) {
+            state.pipette.active = false;
+          }
+        }
+
+        // 更新兩個反應槽的物理模擬
+        if (!state.paused) {
+          const simDt = rawDt * state.speed;
+          wells[0].step(simDt);
+          wells[1].step(simDt);
+        }
+
+        ctx.clearRect(0, 0, viewW, viewH);
+
+        if (viewW <= 0 || viewH <= 0) {
+          resizeCanvas();
+          requestAnimationFrame(loop);
+          return;
+        }
+
+        // 雙視窗並排 / 手機版上下響應式佈局
+        const isMobilePortrait = viewH > viewW * 1.05;
+        if (isMobilePortrait) {
+          const topH = Math.floor(viewH * 0.40);
+          renderMacroBench(0, 0, viewW, topH);
+          renderMicroScope(0, topH, viewW, viewH - topH);
+          ctx.fillStyle = '#334155';
+          ctx.fillRect(0, topH - 1, viewW, 2);
+        } else {
+          const leftW = Math.floor(viewW * 0.38);
+          renderMacroBench(0, 0, leftW, viewH);
+          renderMicroScope(leftW, 0, viewW - leftW, viewH);
+          ctx.fillStyle = '#334155';
+          ctx.fillRect(leftW - 1, 0, 2, viewH);
+        }
+
+        requestAnimationFrame(loop);
+      }
+
+      // ------------------------------------------------------------------------
+      // 8. UI 狀態同步與「未知血型挑戰模式」作答面板
+      // ------------------------------------------------------------------------
+      function syncBottomUI() {
+        const idx = state.activeWell;
+        const sim = wells[idx];
+        const wellNum = idx + 1;
+
+        // 更新選取反應槽橫幅
+        const banner = document.getElementById('selectedWellBanner');
+        if (sim.reagents.length === 0) {
+          banner.textContent = `反應槽 #${wellNum}（待滴加血清）`;
+          banner.style.color = '#38bdf8';
+        } else {
+          const rText = sim.reagents.map(r => `抗${r}血清`).join('＋');
+          banner.textContent = `反應槽 #${wellNum}（已加：${rText}）`;
+          banner.style.color = sim.reagents.length > 1 ? '#c084fc' : '#fbbf24';
+        }
+
+        // 更新滴管按鈕文字與防呆禁用狀態（同一槽禁止重複滴入相同試劑）
+        // 更新右下角判讀區與獨立未知挑戰浮動面板
+        const resultPanel = document.getElementById('resultPanel');
+        const quizOverlay = document.getElementById('unknownQuizOverlay');
+
+        if (state.sampleMode === 'UNKNOWN') {
+          quizOverlay.classList.remove('hidden');
+
+          const btnsHtml = BLOOD_TYPES.map(bt => {
+            let cls = 'quiz-btn';
+            if (state.unknownGuess === bt) {
+              cls += bt === state.actualBloodType ? ' correct' : ' wrong';
+            }
+            return `<button class="${cls}" data-guess="${bt}">${BLOOD_DATA[bt].shortLabel}</button>`;
+          }).join('');
+
+          let statusHtml = '<div style="font-size:12px;color:#cbd5e1;">請先對兩槽滴加抗A/抗B（必要時補滴抗H），再選出正確血型：</div>';
+          if (state.unknownGuess) {
+            if (state.unknownGuess === state.actualBloodType) {
+              statusHtml = `<div style="font-size:12.5px;color:#34d399;font-weight:800;">✅ 答對了！受檢者確實為【${BLOOD_DATA[state.actualBloodType].name}】！</div>`;
+            } else {
+              statusHtml = `<div style="font-size:12px;color:#fb7185;font-weight:700;">❌ 判斷不符，請再觀察凝集反應（提示：雙陰性時可用抗H區分O型與亞孟買）</div>`;
+            }
+          }
+
+          quizOverlay.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <span style="font-size:13px;font-weight:800;color:#c4b5fd;">🎲 未知血型判讀挑戰（#2026-X）</span>
+              <button id="nextUnknownBtn" class="quiz-btn" style="min-height:30px;padding:0 10px;background:#4c1d95;border-color:#8b5cf6;font-size:11.5px;">換下一題 ↻</button>
+            </div>
+            ${statusHtml}
+            <div class="quiz-options-row">${btnsHtml}</div>
+          `;
+
+          quizOverlay.querySelectorAll('.quiz-btn[data-guess]').forEach(btn => {
+            btn.addEventListener('click', () => {
+              state.unknownGuess = btn.dataset.guess;
+              syncBottomUI();
+            });
+          });
+
+          const nextBtn = document.getElementById('nextUnknownBtn');
+          if (nextBtn) {
+            nextBtn.addEventListener('click', () => selectSampleMode('UNKNOWN'));
+          }
+
+          resultPanel.innerHTML = `
+            <div class="result-info-text">
+              <div><span style="color:#c4b5fd;font-weight:700;">🎲 未知血型挑戰進行中</span></div>
+              <div style="color:#94a3b8;">請於左側作答卡片選擇判讀結果</div>
+            </div>
+          `;
+        } else {
+          quizOverlay.classList.add('hidden');
+          const info = BLOOD_DATA[state.actualBloodType];
+          resultPanel.innerHTML = `
+            <div class="result-info-text">
+              <div><span style="color:#94a3b8;">紅血球表面：</span><strong style="color:#fda4af;">${info.antigenDesc}</strong></div>
+              <div><span style="color:#94a3b8;">血清學特徵：</span><strong style="color:#fde047;">${info.plasmaAbDesc}</strong></div>
+            </div>
+          `;
+        }
+        requestAnimationFrame(resizeCanvas);
+      }
+      // 觸發滴加試劑流程（包含同一槽防呆與接續加藥提示）
+      function triggerDropReagent(reagentType) {
+        const sim = wells[state.activeWell];
+        const wellNum = state.activeWell + 1;
+
+        if (state.pipette.active) {
+          showToast('⏳ 滴管正在滴液中，請稍候該滴完成後再操作！');
+          return;
+        }
+
+        if (sim.hasReagent(reagentType)) {
+          showToast(`⚠️ 實驗規範禁止：反應槽 #${wellNum} 已加入過「抗${reagentType}血清」，請勿重複滴加相同試劑！`);
+          return;
+        }
+
+        if (sim.reagents.length > 0) {
+          const prevStr = sim.reagents.map(r => `抗${r}`).join('＋');
+          showToast(`🧪 接續滴定：在反應槽 #${wellNum}（已有${prevStr}）中疊加「抗${reagentType}血清」...`);
+        }
+
+        state.pipette = {
+          active: true,
+          wellIndex: state.activeWell,
+          reagent: reagentType,
+          progress: 0,
+          droppedTriggered: false
+        };
+      }
+
+      // 選擇受檢者檢體（A / B / AB / O / UNKNOWN）
+      function selectSampleMode(mode) {
+        state.sampleMode = mode;
+        state.unknownGuess = null;
+
+        if (mode === 'UNKNOWN') {
+          const prev = state.actualBloodType;
+          const candidates = BLOOD_TYPES.filter(t => t !== prev);
+          state.actualBloodType = candidates[Math.floor(Math.random() * candidates.length)];
+        } else {
+          state.actualBloodType = mode;
+        }
+
+        document.querySelectorAll('.sample-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.sample === mode);
+        });
+
+        wells[0].resetWell();
+        wells[1].resetWell();
+        state.pipette.active = false;
+        syncBottomUI();
+      }
+
+      // ------------------------------------------------------------------------
+      // 9. 事件綁定（按鈕、滑鼠點擊選槽、滾輪縮放、平板雙指捏合縮放）
+      // ------------------------------------------------------------------------
+      document.querySelectorAll('.sample-btn').forEach(btn => {
+        btn.addEventListener('click', () => selectSampleMode(btn.dataset.sample));
+      });
+
+      document.getElementById('dropAntiABtn').addEventListener('click', () => triggerDropReagent('A'));
+      document.getElementById('dropAntiBBtn').addEventListener('click', () => triggerDropReagent('B'));
+      document.getElementById('dropAntiHBtn').addEventListener('click', () => triggerDropReagent('H'));
+
+      document.getElementById('washCurrentWellBtn').addEventListener('click', () => {
+        wells[state.activeWell].resetWell();
+        state.pipette.active = false;
+        syncBottomUI();
+      });
+
+      document.getElementById('washAllWellsBtn').addEventListener('click', () => {
+        wells[0].resetWell();
+        wells[1].resetWell();
+        state.pipette.active = false;
+        syncBottomUI();
+      });
+
+      // 抗體結構切換（IgM / IgG）
+      document.getElementById('btnIgM').addEventListener('click', () => {
+        state.antibodyForm = 'IgM';
+        document.getElementById('btnIgM').className = 'float-btn active-emerald';
+        document.getElementById('btnIgG').className = 'float-btn';
+        wells[0].switchAntibodyForm();
+        wells[1].switchAntibodyForm();
+      });
+
+      document.getElementById('btnIgG').addEventListener('click', () => {
+        state.antibodyForm = 'IgG';
+        document.getElementById('btnIgG').className = 'float-btn active-emerald';
+        document.getElementById('btnIgM').className = 'float-btn';
+        wells[0].switchAntibodyForm();
+        wells[1].switchAntibodyForm();
+      });
+
+      // 播放暫停與慢動作速度控制
+      document.getElementById('btnPause').addEventListener('click', () => {
+        state.paused = !state.paused;
+        document.getElementById('btnPause').textContent = state.paused ? '▶ 繼續' : '⏸ 暫停';
+      });
+
+      document.querySelectorAll('.speed-opt').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.speed = parseFloat(btn.dataset.speed);
+          document.querySelectorAll('.speed-opt').forEach(b => {
+            b.classList.toggle('active-slate', b === btn);
+          });
+        });
+      });
+
+      // 顯微鏡倍率縮放與重置
+      function updateZoom(z) {
+        state.camera.targetZoom = Math.max(0.7, Math.min(3.0, z));
+        document.getElementById('zoomLabel').textContent = `${Math.round(state.camera.targetZoom * 100)}%`;
+      }
+
+      document.getElementById('btnZoomIn').addEventListener('click', () => updateZoom(state.camera.targetZoom * 1.25));
+      document.getElementById('btnZoomOut').addEventListener('click', () => updateZoom(state.camera.targetZoom / 1.25));
+      document.getElementById('btnResetCam').addEventListener('click', () => {
+        state.camera.panX = 0;
+        state.camera.panY = 0;
+        updateZoom(1.0);
+      });
+
+      // 原理對照表抽屜切換
+      const guideDrawer = document.getElementById('guideDrawer');
+      document.getElementById('toggleGuideBtn').addEventListener('click', () => {
+        guideDrawer.classList.toggle('hidden');
+      });
+      document.getElementById('closeGuideBtn').addEventListener('click', () => {
+        guideDrawer.classList.add('hidden');
+      });
+
+      // ------------------------------------------------------------------------
+      // 10. 畫布手勢與點擊反應槽互動（僅選槽聚焦，不偷加試劑）
+      // ------------------------------------------------------------------------
+      function focusWell(index) {
+        if (state.activeWell === index) return;
+        const dir = index > state.activeWell ? 1 : -1;
+        state.activeWell = index;
+        state.camera.stageShiftX = dir * 95;
+        state.camera.panX = 0;
+        state.camera.panY = 0;
+        syncBottomUI();
+      }
+
+      let dragging = false;
+      let startX = 0, startY = 0;
+      let downX = 0, downY = 0;
+      let pinchStartDist = 0;
+      let pinchStartZoom = 1;
+
+      function handleTapAt(clientX, clientY) {
+        const rect = canvas.getBoundingClientRect();
+        const px = clientX - rect.left;
+        const py = clientY - rect.top;
+
+        for (let i = 0; i < 2; i++) {
+          const hb = state.wellHitBoxes[i];
+          if (hb && Math.hypot(px - hb.x, py - hb.y) <= hb.r) {
+            focusWell(i);
+            return;
+          }
+        }
+      }
+
+      canvas.addEventListener('mousedown', (e) => {
+        dragging = true;
+        downX = e.clientX;
+        downY = e.clientY;
+        startX = e.clientX - state.camera.panX;
+        startY = e.clientY - state.camera.panY;
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!dragging) return;
+        state.camera.panX = e.clientX - startX;
+        state.camera.panY = e.clientY - startY;
+      });
+
+      window.addEventListener('mouseup', (e) => {
+        if (!dragging) return;
+        dragging = false;
+        if (Math.hypot(e.clientX - downX, e.clientY - downY) < 6) {
+          handleTapAt(e.clientX, e.clientY);
+        }
+      });
+
+      canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        updateZoom(state.camera.targetZoom * (e.deltaY < 0 ? 1.12 : 0.89));
+      }, { passive: false });
+
+      canvas.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) {
+          dragging = true;
+          downX = e.touches[0].clientX;
+          downY = e.touches[0].clientY;
+          startX = e.touches[0].clientX - state.camera.panX;
+          startY = e.touches[0].clientY - state.camera.panY;
+        } else if (e.touches.length === 2) {
+          dragging = false;
+          pinchStartDist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+          );
+          pinchStartZoom = state.camera.targetZoom;
+        }
+      }, { passive: true });
+
+      canvas.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 1 && dragging) {
+          state.camera.panX = e.touches[0].clientX - startX;
+          state.camera.panY = e.touches[0].clientY - startY;
+        } else if (e.touches.length === 2 && pinchStartDist > 0) {
+          const curDist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+          );
+          updateZoom(pinchStartZoom * (curDist / pinchStartDist));
+        }
+      }, { passive: true });
+
+      canvas.addEventListener('touchend', (e) => {
+        if (e.changedTouches.length === 1 && dragging) {
+          const t = e.changedTouches[0];
+          if (Math.hypot(t.clientX - downX, t.clientY - downY) < 10) {
+            handleTapAt(t.clientX, t.clientY);
+          }
+        }
+        if (e.touches.length === 0) {
+          dragging = false;
+          pinchStartDist = 0;
+        }
+      });
+
+      // 初始化
+      selectSampleMode('A');
+      requestAnimationFrame(loop);
+    })();
+  </script>
+</body>
+</html>
