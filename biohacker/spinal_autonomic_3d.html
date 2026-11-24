@@ -792,7 +792,11 @@ scene.add(gridHelper);
 
 // 狀態管理
 let currentMode = 'micro';
-let currentSelection = { type: 'all', id: null }; // 記憶 1. 2. 3. 按鈕狀態，切換微觀/巨觀時自動保留
+const selectedState = {
+    mods: new Set(),
+    structs: new Set(),
+    paths: new Set()
+}; // 記憶 1. 2. 3. 複選按鈕狀態，切換微觀/巨觀時自動保留
 let showPulses = true;
 let showLabels = true;
 let ganglionShellOpacity = 0.20;
@@ -1993,7 +1997,7 @@ Object.values(MODALITIES).forEach(m => {
     btn.className = 'mod-btn';
     btn.id = `btn-mod-${m.code}`;
     btn.innerHTML = `<span class="mod-dot" style="background:${m.color}; color:${m.color};"></span><span>${m.name}</span>`;
-    btn.onclick = () => selectModality(m.code);
+    btn.onclick = () => selectModality(m.code, true);
     modBtnContainer.appendChild(btn);
 });
 
@@ -2007,7 +2011,7 @@ STRUCTURES.forEach(st => {
         <span style="font-weight:700; color:#f8fafc;">${st.name}</span>
         <span style="font-size:9.5px; color:${st.color}; font-weight:600;">${st.cat}</span>
     `;
-    div.onclick = () => selectStructure(st.id);
+    div.onclick = () => selectStructure(st.id, true);
     gangliaBtnContainer.appendChild(div);
 });
 
@@ -2024,7 +2028,7 @@ PATHWAYS.forEach(p => {
         </div>
         <div class="p-sub">${p.name.includes('(') ? p.name.split('(')[1].replace(')', '') : ''}</div>
     `;
-    div.onclick = () => selectPathway(p.id);
+    div.onclick = () => selectPathway(p.id, true);
     pathwayListContainer.appendChild(div);
 });
 
@@ -2094,132 +2098,197 @@ window.switchSceneMode = function(mode) {
         targetLookAt.set(0.3, 0.4, 1.0);
     }
 
-    // 保留切換前在 1. 神經元類型 / 2. 神經節與脊髓核 / 3. 完整神經傳導迴路 的選取狀態
-    if (currentSelection.type === 'modality' && currentSelection.id) {
-        selectModality(currentSelection.id);
-    } else if (currentSelection.type === 'structure' && currentSelection.id) {
-        selectStructure(currentSelection.id);
-    } else if (currentSelection.type === 'pathway' && currentSelection.id) {
-        selectPathway(currentSelection.id);
-    } else {
-        resetSelection(false);
-    }
+    // 保留切換前在 1. 神經元類型 / 2. 神經節與脊髓核 / 3. 完整神經傳導迴路 的複選狀態
+    applyCurrentSelection(false);
 };
 
-// A. 選擇「神經元類型 (細胞本體 + 同色軸突 + 突觸終末)」
-window.selectModality = function(modCode) {
-    currentSelection = { type: 'modality', id: modCode };
-    clearActiveUI();
-    const m = MODALITIES[modCode];
-    document.getElementById(`btn-mod-${modCode}`)?.classList.add('active');
+function updateSelectionState(category, id, toggle = false) {
+    if (!toggle) {
+        selectedState.mods.clear();
+        selectedState.structs.clear();
+        selectedState.paths.clear();
+        selectedState[category].add(id);
+    } else {
+        if (selectedState[category].has(id)) selectedState[category].delete(id);
+        else selectedState[category].add(id);
+    }
+}
 
-    const relatedStructs = STRUCTURES.filter(s => s.mods.includes(modCode));
-    relatedStructs.forEach(s => document.getElementById(`btn-struct-${s.id}`)?.classList.add('active'));
+function applyCurrentSelection(updateCamera = true) {
+    const total = selectedState.mods.size + selectedState.structs.size + selectedState.paths.size;
+    if (total === 0) {
+        resetSelection(updateCamera);
+        return;
+    }
+
+    clearActiveUI();
+    selectedState.mods.forEach(m => document.getElementById(`btn-mod-${m}`)?.classList.add('active'));
+    selectedState.structs.forEach(s => document.getElementById(`btn-struct-${s}`)?.classList.add('active'));
+    selectedState.paths.forEach(p => document.getElementById(`btn-path-${p}`)?.classList.add('active'));
+
+    const modRelatedStructIds = new Set();
+    selectedState.mods.forEach(m => {
+        STRUCTURES.filter(s => s.mods.includes(m)).forEach(s => modRelatedStructIds.add(s.id));
+    });
+
+    const pathRelatedStructIds = new Set();
+    selectedState.paths.forEach(pid => {
+        const p = PATHWAYS.find(x => x.id === pid);
+        if (p) p.structs.forEach(sId => pathRelatedStructIds.add(sId));
+    });
 
     applyVisualFilter(
-        t => t.mod === modCode,
-        (sId, entry) => entry.mod === modCode || (entry.isShell && relatedStructs.some(s => s.id === sId)),
-        lbl => lbl.mod === modCode || (lbl.structId && relatedStructs.some(s => s.id === lbl.structId))
+        t => selectedState.mods.has(t.mod) ||
+             (t.structIds && t.structIds.some(id => selectedState.structs.has(id))) ||
+             (t.pathIds && t.pathIds.some(id => selectedState.paths.has(id))),
+        (sId, entry) => (selectedState.mods.has(entry.mod) || (entry.isShell && modRelatedStructIds.has(sId))) ||
+                        selectedState.structs.has(sId) ||
+                        (selectedState.paths.size > 0 && ((entry.pathIds && entry.pathIds.some(pid => selectedState.paths.has(pid))) || (!entry.pathIds?.length && entry.isShell && pathRelatedStructIds.has(sId)))),
+        lbl => selectedState.mods.has(lbl.mod) ||
+               (lbl.structId && modRelatedStructIds.has(lbl.structId)) ||
+               (lbl.structId && selectedState.structs.has(lbl.structId)) ||
+               (lbl.pathId && selectedState.paths.has(lbl.pathId)) ||
+               (!lbl.pathId && lbl.structId && pathRelatedStructIds.has(lbl.structId))
     );
 
-    document.getElementById('info-title').textContent = `${m.name}`;
-    document.getElementById('info-sub').textContent = m.type;
-    document.getElementById('info-badges').innerHTML = `<span class="badge" style="background:${m.color}">${m.code} · 本體與軸突同色相連</span>`;
-    document.getElementById('info-desc').innerHTML = m.desc;
+    if (total === 1) {
+        if (selectedState.mods.size === 1) {
+            const modCode = [...selectedState.mods][0];
+            const m = MODALITIES[modCode];
+            const relatedStructs = STRUCTURES.filter(s => s.mods.includes(modCode));
+            document.getElementById('info-title').textContent = `${m.name}`;
+            document.getElementById('info-sub').textContent = m.type;
+            document.getElementById('info-badges').innerHTML = `<span class="badge" style="background:${m.color}">${m.code} · 本體與軸突同色相連</span>`;
+            document.getElementById('info-desc').innerHTML = m.desc;
+            document.getElementById('info-synapse').innerHTML = '';
+            document.getElementById('info-relations').innerHTML = `
+                <strong>包含此神經元本體或突觸的結構：</strong>
+                <div class="related-chips">
+                    ${relatedStructs.map(s => `<span class="chip" style="border-left:3px solid ${s.color}" onclick="selectStructure('${s.id}')">${s.name}</span>`).join('')}
+                </div>
+            `;
+        } else if (selectedState.structs.size === 1) {
+            const structId = [...selectedState.structs][0];
+            const st = STRUCTURES.find(s => s.id === structId);
+            if (!st) return;
+            if (updateCamera) {
+                const focusPos = currentMode === 'micro' ? st.microPos : st.macroPos;
+                if (focusPos) targetLookAt.set(focusPos[0] * 0.45, focusPos[1] * 0.55, focusPos[2] * 0.45);
+            }
+            const relatedPaths = PATHWAYS.filter(p => p.structs.includes(structId));
+            document.getElementById('info-title').textContent = st.name;
+            document.getElementById('info-sub').textContent = `${st.cat} ｜ ${st.en}`;
+            document.getElementById('info-badges').innerHTML = st.mods.map(m =>
+                `<span class="badge" style="background:${MODALITIES[m].color}">${MODALITIES[m].name}</span>`
+            ).join('');
+            document.getElementById('info-desc').innerHTML = st.desc;
+            document.getElementById('info-synapse').innerHTML = `
+                <div class="synapse-box">
+                    <strong>細胞本體與突觸關係：</strong>${st.synapse}<br>
+                    <strong>神經傳遞物與受體：</strong><span style="color:#38bdf8;">${st.nt}</span>
+                </div>
+            `;
+            document.getElementById('info-relations').innerHTML = `
+                <strong>點擊檢視單一完整傳導迴路：</strong>
+                <div class="related-chips">
+                    ${relatedPaths.map(p => `<span class="chip" style="border-left:3px solid ${p.color}" onclick="selectPathway('${p.id}')">${p.name.split(' (')[0]}</span>`).join('')}
+                </div>
+            `;
+        } else if (selectedState.paths.size === 1) {
+            const pathId = [...selectedState.paths][0];
+            const p = PATHWAYS.find(x => x.id === pathId);
+            if (!p) return;
+            document.getElementById('info-title').textContent = p.name;
+            document.getElementById('info-sub').textContent = `傳導性質：${MODALITIES[p.mod].type}`;
+            document.getElementById('info-badges').innerHTML = `<span class="badge" style="background:${p.color}">${MODALITIES[p.mod].name}</span>`;
+            document.getElementById('info-desc').innerHTML = `<strong>傳導路徑順序：</strong><br>${p.summary}`;
+            document.getElementById('info-synapse').innerHTML = `
+                <div class="synapse-box">
+                    <strong>細胞本體與突觸換元解析：</strong><br>${p.synapseInfo}
+                </div>
+            `;
+            document.getElementById('info-relations').innerHTML = `
+                <strong>沿途關鍵神經節與結構：</strong>
+                <div class="related-chips">
+                    ${p.structs.map(sId => {
+                        const st = STRUCTURES.find(s => s.id === sId);
+                        return `<span class="chip" style="border-left:3px solid ${st.color}" onclick="selectStructure('${sId}')">${st.name}</span>`;
+                    }).join('')}
+                </div>
+            `;
+        }
+        return;
+    }
+
+    // 複選模式資訊卡
+    const summaryParts = [];
+    if (selectedState.mods.size) summaryParts.push(`神經元類型 ×${selectedState.mods.size}`);
+    if (selectedState.structs.size) summaryParts.push(`神經節與核區 ×${selectedState.structs.size}`);
+    if (selectedState.paths.size) summaryParts.push(`傳導迴路 ×${selectedState.paths.size}`);
+
+    const badges = [];
+    const descLines = [];
+    selectedState.mods.forEach(code => {
+        const m = MODALITIES[code];
+        badges.push(`<span class="badge" style="background:${m.color}; cursor:pointer;" title="點擊取消選取" onclick="selectModality('${code}', true)">${m.code} ×</span>`);
+        descLines.push(`• <strong style="color:${m.color}">${m.name}</strong>：${m.type}`);
+    });
+    selectedState.structs.forEach(sId => {
+        const st = STRUCTURES.find(s => s.id === sId);
+        if (!st) return;
+        badges.push(`<span class="badge" style="background:${st.color}; cursor:pointer;" title="點擊取消選取" onclick="selectStructure('${sId}', true)">${st.name} ×</span>`);
+        descLines.push(`• <strong style="color:${st.color}">${st.name}</strong> (${st.cat})：${st.synapse}`);
+    });
+    selectedState.paths.forEach(pId => {
+        const p = PATHWAYS.find(x => x.id === pId);
+        if (!p) return;
+        badges.push(`<span class="badge" style="background:${p.color}; cursor:pointer;" title="點擊取消選取" onclick="selectPathway('${pId}', true)">${p.name.split(' (')[0]} ×</span>`);
+        descLines.push(`• <strong style="color:${p.color}">${p.name}</strong>：${p.summary}`);
+    });
+
+    document.getElementById('info-title').textContent = `已複選 ${total} 個項目`;
+    document.getElementById('info-sub').textContent = summaryParts.join(' ｜ ') + '（再次點擊左側按鈕或上方標籤可取消）';
+    document.getElementById('info-badges').innerHTML = badges.join('');
+    document.getElementById('info-desc').innerHTML = descLines.join('<br>');
     document.getElementById('info-synapse').innerHTML = '';
     document.getElementById('info-relations').innerHTML = `
-        <strong>包含此神經元本體或突觸的結構：</strong>
         <div class="related-chips">
-            ${relatedStructs.map(s => `<span class="chip" style="border-left:3px solid ${s.color}" onclick="selectStructure('${s.id}')">${s.name}</span>`).join('')}
+            <span class="chip" onclick="resetSelection()">↺ 清除全部選取 (顯示全部)</span>
         </div>
     `;
+}
+
+// A. 選擇「神經元類型 (細胞本體 + 同色軸突 + 突觸終末)」
+window.selectModality = function(modCode, toggle = false) {
+    if (!MODALITIES[modCode]) return;
+    updateSelectionState('mods', modCode, toggle);
+    applyCurrentSelection(true);
 };
 
 // B. 選擇「特定神經節、白/灰交通支或脊髓灰質核」
-window.selectStructure = function(structId) {
-    currentSelection = { type: 'structure', id: structId };
-    clearActiveUI();
+window.selectStructure = function(structId, toggle = false) {
     const st = STRUCTURES.find(s => s.id === structId);
     if (!st) return;
-
-    document.getElementById(`btn-struct-${structId}`)?.classList.add('active');
-    st.mods.forEach(m => document.getElementById(`btn-mod-${m}`)?.classList.add('active'));
-
-    applyVisualFilter(
-        t => t.structIds && t.structIds.includes(structId),
-        (sId) => sId === structId,
-        lbl => lbl.structId === structId
-    );
-
-    const focusPos = currentMode === 'micro' ? st.microPos : st.macroPos;
-    if (focusPos) targetLookAt.set(focusPos[0] * 0.45, focusPos[1] * 0.55, focusPos[2] * 0.45);
-
-    const relatedPaths = PATHWAYS.filter(p => p.structs.includes(structId));
-    document.getElementById('info-title').textContent = st.name;
-    document.getElementById('info-sub').textContent = `${st.cat} ｜ ${st.en}`;
-    document.getElementById('info-badges').innerHTML = st.mods.map(m =>
-        `<span class="badge" style="background:${MODALITIES[m].color}">${MODALITIES[m].name}</span>`
-    ).join('');
-    document.getElementById('info-desc').innerHTML = st.desc;
-    document.getElementById('info-synapse').innerHTML = `
-        <div class="synapse-box">
-            <strong>細胞本體與突觸關係：</strong>${st.synapse}<br>
-            <strong>神經傳遞物與受體：</strong><span style="color:#38bdf8;">${st.nt}</span>
-        </div>
-    `;
-    document.getElementById('info-relations').innerHTML = `
-        <strong>點擊檢視單一完整傳導迴路：</strong>
-        <div class="related-chips">
-            ${relatedPaths.map(p => `<span class="chip" style="border-left:3px solid ${p.color}" onclick="selectPathway('${p.id}')">${p.name.split(' (')[0]}</span>`).join('')}
-        </div>
-    `;
+    updateSelectionState('structs', structId, toggle);
+    applyCurrentSelection(true);
 };
 
 // C. 選擇「完整傳導迴路 (1對1 精準呈現該迴路之單一連續神經元與換元點)」
-window.selectPathway = function(pathId) {
-    currentSelection = { type: 'pathway', id: pathId };
-    clearActiveUI();
+window.selectPathway = function(pathId, toggle = false) {
     const p = PATHWAYS.find(x => x.id === pathId);
     if (!p) return;
-
-    document.getElementById(`btn-path-${pathId}`)?.classList.add('active');
-    document.getElementById(`btn-path-${pathId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    document.getElementById(`btn-mod-${p.mod}`)?.classList.add('active');
-    p.structs.forEach(sId => document.getElementById(`btn-struct-${sId}`)?.classList.add('active'));
-
-    const sSet = new Set(p.structs);
-    applyVisualFilter(
-        t => t.pathIds && t.pathIds.includes(pathId),
-        (sId, entry) => {
-            if (entry.pathIds && entry.pathIds.length > 0) return entry.pathIds.includes(pathId);
-            return entry.isShell && sSet.has(sId);
-        },
-        lbl => lbl.pathId === pathId || (!lbl.pathId && lbl.structId && sSet.has(lbl.structId))
-    );
-
-    document.getElementById('info-title').textContent = p.name;
-    document.getElementById('info-sub').textContent = `傳導性質：${MODALITIES[p.mod].type}`;
-    document.getElementById('info-badges').innerHTML = `<span class="badge" style="background:${p.color}">${MODALITIES[p.mod].name}</span>`;
-    document.getElementById('info-desc').innerHTML = `<strong>傳導路徑順序：</strong><br>${p.summary}`;
-    document.getElementById('info-synapse').innerHTML = `
-        <div class="synapse-box">
-            <strong>細胞本體與突觸換元解析：</strong><br>${p.synapseInfo}
-        </div>
-    `;
-    document.getElementById('info-relations').innerHTML = `
-        <strong>沿途關鍵神經節與結構：</strong>
-        <div class="related-chips">
-            ${p.structs.map(sId => {
-                const st = STRUCTURES.find(s => s.id === sId);
-                return `<span class="chip" style="border-left:3px solid ${st.color}" onclick="selectStructure('${sId}')">${st.name}</span>`;
-            }).join('')}
-        </div>
-    `;
+    updateSelectionState('paths', pathId, toggle);
+    if (toggle && selectedState.paths.has(pathId)) {
+        document.getElementById(`btn-path-${pathId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    applyCurrentSelection(true);
 };
 
 // D. 重設全部顯示
 window.resetSelection = function(resetCam = true) {
-    currentSelection = { type: 'all', id: null };
+    selectedState.mods.clear();
+    selectedState.structs.clear();
+    selectedState.paths.clear();
     clearActiveUI();
     applyVisualFilter(null);
     if (resetCam) {

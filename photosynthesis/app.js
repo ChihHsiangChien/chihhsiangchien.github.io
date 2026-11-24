@@ -29,6 +29,16 @@
     stomaOpen: true,
     stomaAperture: 1.0, // 0.0 ~ 1.0 平滑插值
 
+    // 日照光合時程 (持續日照光合 vs 晝夜循環)
+    continuousSunlight: true, // 預設只要日照就無限一直進行光合作用，亦可切回原晝夜循環
+
+    // 分子來源與流向聚焦 ('all' | 'co2' | 'o2' | 'glucose' | 'h2o')
+    highlightMolecule: 'all',
+
+    // 畫布器官點選互動狀態
+    hoveredOrgan: null,
+    organClickRipple: null,
+
     // 累積生長/儲存量
     leafStarchCount: 0, // 葉綠體暫時性澱粉儲存量 (日間合成暫存，夜間水解轉運)
     autoLoopTargetStarch: 3, // 自動循環模式下日間累積暫存澱粉目標 (累積至 3 顆後轉入夜間轉運)
@@ -97,6 +107,17 @@
   const subtitleOffBtn = document.getElementById('subtitleOffBtn');
   const insetOnBtn = document.getElementById('insetOnBtn');
   const insetOffBtn = document.getElementById('insetOffBtn');
+  const cycleInfiniteBtn = document.getElementById('cycleInfiniteBtn');
+  const cycleDayNightBtn = document.getElementById('cycleDayNightBtn');
+
+  const molAllBtn = document.getElementById('molAllBtn');
+  const molCO2Btn = document.getElementById('molCO2Btn');
+  const molO2Btn = document.getElementById('molO2Btn');
+  const molGlucoseBtn = document.getElementById('molGlucoseBtn');
+  const molH2OBtn = document.getElementById('molH2OBtn');
+  const activeMoleculeBadge = document.getElementById('activeMoleculeBadge');
+  const moleculeInfoBox = document.getElementById('moleculeInfoBox');
+
   const stepBtn = document.getElementById('stepBtn');
   const transpirationBtn = document.getElementById('transpirationBtn');
   const transpirationInfoBox = document.getElementById('transpirationInfoBox');
@@ -249,8 +270,40 @@
     if (eqStarch) eqStarch.className = 'eq-item';
   }
 
+  // 依當前分子聚焦模式套用方程式高亮
+  function applyEquationHighlights() {
+    if (state.highlightMolecule === 'all') {
+      if (state.runMode === 'parallel' && state.isDay) {
+        highlightAllDaytimeEquations();
+      } else if (!state.isDay) {
+        resetEquationHighlights();
+      }
+      return;
+    }
+
+    resetEquationHighlights();
+    const mol = state.highlightMolecule;
+    if (mol === 'co2') {
+      if (eqCO2) eqCO2.classList.add('active-co2');
+    } else if (mol === 'o2') {
+      if (eqO2) eqO2.classList.add('active-o2');
+    } else if (mol === 'glucose') {
+      if (eqGlucose) eqGlucose.classList.add('active-glucose');
+      if (eqPolyArrow) eqPolyArrow.classList.add('active-poly');
+      if (eqStarch) eqStarch.classList.add('active-starch');
+    } else if (mol === 'h2o') {
+      if (eqH2O) eqH2O.classList.add('active-h2o');
+      if (eqLightArrow) eqLightArrow.classList.add('active-poly');
+      if (eqH2Oproduct) eqH2Oproduct.classList.add('active-h2o');
+    }
+  }
+
   // 真實生理模式：日間所有參與光合作用之反應物與產物同時高亮發光
   function highlightAllDaytimeEquations() {
+    if (state.highlightMolecule !== 'all') {
+      applyEquationHighlights();
+      return;
+    }
     resetEquationHighlights();
     if (eqCO2) eqCO2.classList.add('active-co2');
     if (eqH2O) eqH2O.classList.add('active-h2o');
@@ -260,6 +313,126 @@
     if (eqH2Oproduct) eqH2Oproduct.classList.add('active-h2o');
     if (eqPolyArrow) eqPolyArrow.classList.add('active-poly');
     if (eqStarch) eqStarch.classList.add('active-starch');
+  }
+
+  // 分子來源與流向聚焦資料庫
+  const MOLECULE_INFOS = {
+    all: {
+      name: '全部分子共同參與',
+      formula: '6 CO₂ + 12 H₂O ➔ C₆H₁₂O₆ + 6 O₂ + 6 H₂O',
+      badgeClass: 'all',
+      badgeText: '全部顯示',
+      lines: [
+        { tag: 'all-scope', label: '生理綜效', desc: '二氧化碳、水、光能、氧氣、葡萄糖與蔗糖同步運作，維持全株生命能量。' }
+      ]
+    },
+    co2: {
+      name: '二氧化碳',
+      formula: 'CO₂ (光合作用碳源)',
+      badgeClass: 'co2',
+      badgeText: 'CO₂ 聚焦',
+      lines: [
+        { tag: 'source', label: '來源', desc: '大氣環境中的 CO₂ 氣體。' },
+        { tag: 'flow', label: '流向', desc: '由氣孔 (保衛細胞) 擴散進入葉片氣室 ➔ 進入葉肉細胞葉綠體基質 ➔ 參與碳反應 (暗反應 / 卡爾文循環) 被固定為葡萄糖與三碳醣。' }
+      ]
+    },
+    o2: {
+      name: '氧氣',
+      formula: 'O₂ (光反應產物)',
+      badgeClass: 'o2',
+      badgeText: 'O₂ 聚焦',
+      lines: [
+        { tag: 'source', label: '來源', desc: '葉綠體類囊體膜上的光反應 (吸收光能水光解：2 H₂O ➔ 4 H⁺ + 4 e⁻ + O₂↑)。' },
+        { tag: 'flow', label: '流向', desc: '自葉綠體基質釋出 ➔ 經細胞間隙擴散 ➔ 自葉表氣孔逸散釋放至大氣中，供應地球生物呼吸作用。' }
+      ]
+    },
+    glucose: {
+      name: '葡萄糖與醣類',
+      formula: 'C₆H₁₂O₆ ➔ 蔗糖 / 澱粉',
+      badgeClass: 'glucose',
+      badgeText: '醣類聚焦',
+      lines: [
+        { tag: 'source', label: '來源', desc: '葉綠體碳反應固定 CO₂ 後所合成之三碳醣與葡萄糖。' },
+        { tag: 'flow', label: '流向', desc: '①葉綠體內脫水縮合為暫時性澱粉蓄洪；②細胞質轉化為蔗糖，經韌皮部裝載長途運往庫器官 (塊根儲藏澱粉、根系生長分裂、花蜜、果糖積累或頂芽伸長)。夜間暫存澱粉亦水解為蔗糖接續轉運。' }
+      ]
+    },
+    h2o: {
+      name: '水分子與水氣',
+      formula: 'H₂O (根部吸水與蒸散流)',
+      badgeClass: 'h2o',
+      badgeText: 'H₂O 聚焦',
+      lines: [
+        { tag: 'source', label: '來源', desc: '地下土壤中水分，由根毛吸水區滲透吸收。' },
+        { tag: 'flow', label: '流向', desc: '①經由木質部導管 (Xylem) 逆重力向上輸導至葉脈 (蒸散流)；②約 99% 的水分由葉表氣孔蒸散逸散至大氣，產生牽引全株水分的蒸散拉力；③約 1% 水分進入葉綠體參與水光解產氧；④葡萄糖縮合為澱粉時脫水釋放。' }
+      ]
+    }
+  };
+
+  function updateMoleculeHighlightUI() {
+    const mol = state.highlightMolecule;
+    const info = MOLECULE_INFOS[mol] || MOLECULE_INFOS.all;
+
+    if (molAllBtn) molAllBtn.classList.toggle('active', mol === 'all');
+    if (molCO2Btn) molCO2Btn.classList.toggle('active', mol === 'co2');
+    if (molO2Btn) molO2Btn.classList.toggle('active', mol === 'o2');
+    if (molGlucoseBtn) molGlucoseBtn.classList.toggle('active', mol === 'glucose');
+    if (molH2OBtn) molH2OBtn.classList.toggle('active', mol === 'h2o');
+
+    if (activeMoleculeBadge) {
+      activeMoleculeBadge.className = `molecule-badge ${info.badgeClass}`;
+      activeMoleculeBadge.textContent = info.badgeText;
+    }
+
+    if (moleculeInfoBox) {
+      const linesHtml = info.lines.map(l => `
+        <div class="mol-info-line">
+          <span class="mol-tag ${l.tag}">${l.label}</span>
+          <span class="mol-desc">${l.desc}</span>
+        </div>
+      `).join('');
+
+      moleculeInfoBox.innerHTML = `
+        <div class="mol-info-title-row">
+          <span class="mol-info-title">${info.name}</span>
+          <span class="mol-info-formula">${info.formula}</span>
+        </div>
+        ${linesHtml}
+      `;
+    }
+
+    applyEquationHighlights();
+  }
+
+  function setMoleculeHighlight(mol) {
+    state.highlightMolecule = mol;
+    if (mol !== 'glucose') {
+      state.glucoseParticles = [];
+    }
+    updateMoleculeHighlightUI();
+
+    const molNames = {
+      all: '全部顯示',
+      co2: '二氧化碳 (CO₂)',
+      o2: '氧氣 (O₂)',
+      glucose: '葡萄糖與醣類 (C₆H₁₂O₆)',
+      h2o: '水分 (H₂O)'
+    };
+    updateLoopStatusUI(`【分子聚焦】專注觀察：${molNames[mol]} 的來源與生理流向`);
+  }
+
+  function updateCycleButtons() {
+    if (cycleInfiniteBtn) cycleInfiniteBtn.classList.toggle('active', state.continuousSunlight);
+    if (cycleDayNightBtn) cycleDayNightBtn.classList.toggle('active', !state.continuousSunlight);
+  }
+
+  function setCycleMode(continuous) {
+    state.continuousSunlight = continuous;
+    updateCycleButtons();
+    if (continuous) {
+      updateLoopStatusUI('【持續光合模式】只要日間日照充足，光合作用與養分輸導無限持續進行！');
+    } else {
+      updateLoopStatusUI('【晝夜循環模式】日間暫存澱粉蓄積達標後，將自動進入夜間接續轉運');
+    }
   }
 
   // 顯微特寫視窗模式 (固定保留氣孔保衛細胞)
@@ -719,7 +892,9 @@
         const willReachAutoTarget = currentCountDisplay >= state.autoLoopTargetStarch;
 
         if (state.isAutoMode) {
-          if (willReachAutoTarget) {
+          if (state.continuousSunlight) {
+            updateLoopStatusUI(`【持續光合模式】多餘碳在葉綠體聚合為暫存澱粉（已蓄積 ${currentCountDisplay} 顆），只要日照充足將無限循環進行日間光合固碳！`);
+          } else if (willReachAutoTarget) {
             updateLoopStatusUI(`【暫存澱粉蓄洪充足 (${currentCountDisplay}/${state.autoLoopTargetStarch} 顆)】日間過量碳已充分蓄存，即將進入夜間將養分水解接續供應庫器官！`);
           } else {
             updateLoopStatusUI(`【光合產量超出即時運輸負荷】多餘碳在葉綠體聚合為【暫時性澱粉】蓄洪（已累積：${currentCountDisplay}/${state.autoLoopTargetStarch} 顆，繼續日間光合固碳）`);
@@ -735,7 +910,11 @@
         if (fromAutoLoop && state.isAutoMode) {
           state.loopNextTimerId = scheduleTimer(() => {
             if (state.isAutoMode) {
-              if (state.leafStarchCount < state.autoLoopTargetStarch) {
+              if (state.continuousSunlight) {
+                // 持續光合：只要日照充足，循環回步驟 2 進行下一輪固碳合成！
+                state.currentStep = 2;
+                executeStep(2, true);
+              } else if (state.leafStarchCount < state.autoLoopTargetStarch) {
                 // 還沒達到 3 顆目標：日間持續光照，氣孔維持開放，循環回步驟 2 進行下一輪固碳合成！
                 state.currentStep = 2;
                 executeStep(2, true);
@@ -880,7 +1059,7 @@
   function triggerOrganConversion(kind, amount = 1, isDaytime = false) {
     const qtyStr = amount > 1 ? ` (+${amount})` : '';
     const prefix = isDaytime ? '日間即時蔗糖' : (kind.startsWith('root_to') ? '根部水解蔗糖' : '夜間水解蔗糖');
-    let text = `${prefix} ➔ 澱粉儲藏${qtyStr} ✨`;
+    let text = `${prefix} ➔ 澱粉儲藏${qtyStr}`;
     let x = geo.rootTuberX;
     let y = geo.rootTuberY - 24;
     let color = '#fef08a';
@@ -903,7 +1082,7 @@
       color = '#a3e635';
       state.shootGrowthPulse = 1.0; // 觸發頂芽活躍生長光環
     } else if (kind === 'root_growth' || kind === 'root_to_root_growth') {
-      text = `${prefix} ➔ 根系生長與細胞伸長${qtyStr} 🌱`;
+      text = `${prefix} ➔ 根系生長與細胞伸長${qtyStr}`;
       x = geo.stemCenterX;
       const mainApexY = state.rootGrowthCount === 0
         ? (geo.soilY + 95)
@@ -1574,13 +1753,53 @@
           dispatchDaytimeTranslocation(1, true);
         }
 
-        // 5. 超過外運負荷的多餘碳，在葉綠體脫水縮合為暫時性澱粉蓄洪 (每隔約 4.5 秒蓄存一顆，目標 3 顆)
+        // 若聚焦葡萄糖，於葉綠體基質動態展現固碳生成葡萄糖，並隨後轉化聚合為澱粉或外運為蔗糖 (不滯留累積)
+        if (state.highlightMolecule === 'glucose' && state.isDay) {
+          if (state.glucoseParticles.length === 0 && !state.isPolymerizing) {
+            const offsets = [
+              { dx: 14, dy: -12 },
+              { dx: 32, dy: -20 },
+              { dx: 46, dy: -6 },
+              { dx: 24, dy: 18 }
+            ];
+            offsets.forEach((off, idx) => {
+              state.glucoseParticles.push({
+                id: idx,
+                x: geo.chloroplastX + off.dx,
+                y: geo.chloroplastY + off.dy,
+                targetX: geo.chloroplastX + off.dx,
+                targetY: geo.chloroplastY + off.dy,
+                size: 7,
+                scale: 1,
+                angle: idx * 0.5,
+                alpha: 1
+              });
+            });
+          }
+        } else if (state.highlightMolecule !== 'glucose' && !state.isPolymerizing) {
+          // 非聚焦葡萄糖模式時，清除游離葡萄糖分子，避免在畫面上堆積滯留
+          if (state.glucoseParticles.length > 0) {
+            state.glucoseParticles = [];
+          }
+        }
+
+        // 5. 超過外運負荷的多餘碳，在葉綠體脫水縮合為暫時性澱粉蓄洪 (持續日照下持續累積無上限)
         if (now - state.lastParallelStarchSpawn > 4500) {
           state.lastParallelStarchSpawn = now;
-          if (state.leafStarchCount < state.autoLoopTargetStarch) {
+          if (state.continuousSunlight || state.leafStarchCount < state.autoLoopTargetStarch) {
             state.leafStarchCount++;
             state.synthesisFlash = 0.8;
             state.chloroplastPulse = 0.8;
+
+            // 聚合縮合時將葉綠體內的葡萄糖分子轉化合成為澱粉 (消除葡萄糖累積)
+            if (state.glucoseParticles.length > 0) {
+              state.isPolymerizing = true;
+              scheduleTimer(() => {
+                state.isPolymerizing = false;
+                state.glucoseParticles = [];
+              }, 600);
+            }
+
             // 脫水縮合釋放水滴
             for (let d = 0; d < 3; d++) {
               state.dehydrationParticles.push({
@@ -1592,15 +1811,24 @@
                 size: 5 + Math.random() * 3
               });
             }
+          }
 
-            if (state.leafStarchCount >= state.autoLoopTargetStarch) {
-              updateLoopStatusUI(`【同步進行中】日間暫存澱粉已蓄積達 ${state.leafStarchCount} 顆！即將進入夜間黑暗接續轉運...`);
-              scheduleTimer(() => {
-                if (state.runMode === 'parallel' && state.isDay) {
-                  setDayNightMode(false, true);
-                }
-              }, 2500);
-            }
+          if (!state.continuousSunlight && state.leafStarchCount >= state.autoLoopTargetStarch) {
+            updateLoopStatusUI(`【同步進行中】日間暫存澱粉已蓄積達 ${state.leafStarchCount} 顆！即將進入夜間黑暗接續轉運...`);
+            scheduleTimer(() => {
+              if (state.runMode === 'parallel' && state.isDay && !state.continuousSunlight) {
+                setDayNightMode(false, true);
+              }
+            }, 2500);
+          } else if (state.continuousSunlight) {
+            const destName = {
+              root: '地下塊根',
+              root_growth: '根系',
+              flower: '花朵',
+              fruit: '果實',
+              shoot: '頂芽'
+            }[state.fate] || '庫器官';
+            updateLoopStatusUI(`【持續日照光合】葉綠體持續固碳蓄積暫存澱粉（已累積 x${state.leafStarchCount}）；蔗糖持續沿韌皮部外運至${destName}`);
           }
         }
       }
@@ -1636,6 +1864,9 @@
 
     // 7. 光合作用源：葉片、葉脈、葉綠體與氣孔
     drawLeafAndStoma(now);
+
+    // 7.5. 庫器官互動點選光環與當前運輸目標標記
+    drawOrganInteractiveTargets(now);
 
     // 8. 保衛細胞與葉綠體澱粉合成顯微特寫視窗 (雙模式可切換)
     if (state.showMicroscopicInset) {
@@ -2852,10 +3083,34 @@
         { dx: 22, dy: 34, rx: 14, ry: 10, rot: -0.1 },
         { dx: 42, dy: 34, rx: 14, ry: 10, rot: 0.15 }
       ];
-      const grainCount = Math.min(state.leafStarchCount, starchGrains.length);
+      // 不畫出超過上限數量的澱粉粒 (上限 5 顆，避免葉綠體過度擁擠)
+      const maxVisualGrains = starchGrains.length;
+      const grainCount = Math.min(state.leafStarchCount, maxVisualGrains);
       for (let i = 0; i < grainCount; i++) {
         const g = starchGrains[i];
         drawStarchGrain(geo.chloroplastX + g.dx, geo.chloroplastY + g.dy, g.rx, g.ry, g.rot);
+      }
+
+      // 當實際累積量超過畫面顆數上限時，於澱粉粒旁以高對比標籤呈現真實累積數量 (例如 x6, x10)
+      if (state.leafStarchCount > maxVisualGrains) {
+        ctx.save();
+        ctx.font = 'bold 13px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const countText = `x${state.leafStarchCount}`;
+        const tx = geo.chloroplastX + 54;
+        const ty = geo.chloroplastY + 44;
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+        ctx.beginPath();
+        ctx.roundRect(tx - 18, ty - 10, 36, 20, 6);
+        ctx.fill();
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.fillStyle = '#fef08a';
+        ctx.fillText(countText, tx, ty);
+        ctx.restore();
       }
     }
 
@@ -3194,7 +3449,11 @@
     } else if (state.isParallelMode) {
       if (state.isDay) {
         curStepNum = 'parallel_day';
-        title = `日間同步進行：氣孔進碳、光解產氧、蒸散流、即時蔗糖外運與澱粉蓄洪 (${state.leafStarchCount}/${state.autoLoopTargetStarch})`;
+        if (state.continuousSunlight) {
+          title = `日間持續光合：氣孔進碳、水光解產氧、蒸散流、即時蔗糖外運與澱粉持續累積 (已累積 x${state.leafStarchCount})`;
+        } else {
+          title = `日間同步進行：氣孔進碳、光解產氧、蒸散流、即時蔗糖外運與澱粉蓄洪 (${state.leafStarchCount}/${state.autoLoopTargetStarch})`;
+        }
         targetName = '葉綠體與全株庫器官';
         organX = geo.chloroplastX;
         organY = geo.chloroplastY;
@@ -3391,34 +3650,279 @@
     ctx.restore();
   }
 
-  // 繪製所有粒子 (分子徽章與文字全面大幅加大、清晰可辨)
+  // 取得指定畫布世界座標下對應的庫器官 (支援花朵、果實、頂芽、塊根、根系)
+  function getTargetOrganAt(wx, wy) {
+    // 1. 花朵 (Flower)
+    const flowerDist = Math.hypot(wx - geo.flowerX, wy - geo.flowerY);
+    if (flowerDist < 60) {
+      return { key: 'flower', name: '花朵 (花蜜能量)', x: geo.flowerX, y: geo.flowerY, color: '#f472b6' };
+    }
+
+    // 2. 果實 (Fruit)
+    const fruitDist = Math.hypot(wx - geo.fruitBranchX, wy - geo.fruitBranchY);
+    if (fruitDist < 55) {
+      return { key: 'fruit', name: '果實 (果糖積累)', x: geo.fruitBranchX, y: geo.fruitBranchY, color: '#f87171' };
+    }
+
+    // 3. 頂芽 (Shoot)
+    const shootApexY = state.shootEnergyCount === 0 
+      ? (geo.stemTopY + 16) 
+      : (geo.shootY - Math.min(state.shootEnergyCount * 9, 45));
+    const shootDist = Math.hypot(wx - geo.shootX, wy - shootApexY);
+    if (shootDist < 50 || (wx >= geo.shootX - 45 && wx <= geo.shootX + 45 && wy >= shootApexY - 30 && wy <= geo.stemTopY + 30)) {
+      return { key: 'shoot', name: '頂芽 (生長能量)', x: geo.shootX, y: shootApexY, color: '#a3e635' };
+    }
+
+    // 4. 地下塊根 (Root Tuber)
+    const rootTuberDist = Math.hypot(wx - geo.rootTuberX, wy - geo.rootTuberY);
+    if (rootTuberDist < 65) {
+      return { key: 'root', name: '塊根 (澱粉儲藏)', x: geo.rootTuberX, y: geo.rootTuberY, color: '#fbbf24' };
+    }
+
+    // 5. 根系生長點 (Root Growth / Tip)
+    const mainApexY = state.rootGrowthCount === 0 
+      ? (geo.soilY + 95) 
+      : (geo.soilY + 95 + Math.min(state.rootGrowthCount * 28, 145));
+    const rootTipDist = Math.hypot(wx - geo.stemCenterX, wy - mainApexY);
+    if (rootTipDist < 55 || (wx >= geo.stemCenterX - 45 && wx <= geo.stemCenterX + 45 && wy >= geo.soilY + 45 && wy <= mainApexY + 45)) {
+      return { key: 'root_growth', name: '根系 (生長分裂)', x: geo.stemCenterX, y: mainApexY, color: '#34d399' };
+    }
+
+    return null;
+  }
+
+  // 設定當前韌皮部輸送目標庫器官 (由側邊欄按鈕或畫布點擊觸發)
+  function setTargetFate(newFate, fromCanvas = false) {
+    state.fate = newFate;
+    updateFateButtons();
+
+    const organNames = {
+      root: '地下塊根 (澱粉儲藏)',
+      root_growth: '根系 (生長分裂)',
+      flower: '花朵 (花蜜能量)',
+      fruit: '果實 (果糖積累)',
+      shoot: '頂芽 (生長能量)'
+    };
+    const organColors = {
+      root: '#fbbf24',
+      root_growth: '#34d399',
+      flower: '#f472b6',
+      fruit: '#f87171',
+      shoot: '#a3e635'
+    };
+    const shootApexY = state.shootEnergyCount === 0 
+      ? (geo.stemTopY + 16) 
+      : (geo.shootY - Math.min(state.shootEnergyCount * 9, 45));
+    const mainApexY = state.rootGrowthCount === 0 
+      ? (geo.soilY + 95) 
+      : (geo.soilY + 95 + Math.min(state.rootGrowthCount * 28, 145));
+    const organCoords = {
+      root: { x: geo.rootTuberX, y: geo.rootTuberY },
+      root_growth: { x: geo.stemCenterX, y: mainApexY },
+      flower: { x: geo.flowerX, y: geo.flowerY },
+      fruit: { x: geo.fruitBranchX, y: geo.fruitBranchY },
+      shoot: { x: geo.shootX, y: shootApexY }
+    };
+    const c = organCoords[newFate] || { x: geo.rootTuberX, y: geo.rootTuberY };
+
+    state.organClickRipple = {
+      x: c.x,
+      y: c.y,
+      r: 14,
+      maxR: 70,
+      alpha: 1.0,
+      color: organColors[newFate] || '#fbbf24'
+    };
+
+    if (fromCanvas) {
+      state.conversions.push({
+        x: c.x,
+        y: c.y - 24,
+        vy: -0.6,
+        alpha: 1.0,
+        text: `目標切換：${organNames[newFate]}`,
+        color: organColors[newFate] || '#fbbf24'
+      });
+      updateLoopStatusUI(`【畫布點擊切換】韌皮部養分運輸目標已切換為：${organNames[newFate]}！`);
+    }
+  }
+
+  // 繪製庫器官目標選取光環與提示
+  function drawOrganInteractiveTargets(now) {
+    ctx.save();
+
+    const shootApexY = state.shootEnergyCount === 0 
+      ? (geo.stemTopY + 16) 
+      : (geo.shootY - Math.min(state.shootEnergyCount * 9, 45));
+    const mainApexY = state.rootGrowthCount === 0 
+      ? (geo.soilY + 95) 
+      : (geo.soilY + 95 + Math.min(state.rootGrowthCount * 28, 145));
+
+    const organs = [
+      { key: 'flower', name: '花朵', x: geo.flowerX, y: geo.flowerY, r: 44, color: '#f472b6' },
+      { key: 'fruit', name: '果實', x: geo.fruitBranchX, y: geo.fruitBranchY, r: 42, color: '#f87171' },
+      { key: 'shoot', name: '頂芽', x: geo.shootX, y: shootApexY, r: 36, color: '#a3e635' },
+      { key: 'root', name: '塊根', x: geo.rootTuberX, y: geo.rootTuberY, r: 48, color: '#fbbf24' },
+      { key: 'root_growth', name: '根系', x: geo.stemCenterX, y: mainApexY, r: 38, color: '#34d399' }
+    ];
+
+    const pulse = 0.5 + 0.5 * Math.sin(now * 0.005);
+
+    organs.forEach(org => {
+      const isTarget = (state.fate === org.key);
+      const isHovered = (state.hoveredOrgan === org.key);
+
+      if (isTarget) {
+        // 當前運輸目標：繪製科技感目標瞄準光環
+        ctx.save();
+        ctx.strokeStyle = org.color;
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = org.color;
+        ctx.shadowBlur = 12;
+        ctx.setLineDash([5, 4]);
+        ctx.lineDashOffset = -(now * 0.03) % 9;
+        ctx.beginPath();
+        ctx.arc(org.x, org.y, org.r + 6 + pulse * 4, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // 瞄準十字線短標記
+        ctx.setLineDash([]);
+        ctx.lineWidth = 2;
+        const markR = org.r + 14 + pulse * 2;
+        ctx.beginPath();
+        ctx.moveTo(org.x - markR, org.y); ctx.lineTo(org.x - markR + 6, org.y);
+        ctx.moveTo(org.x + markR, org.y); ctx.lineTo(org.x + markR - 6, org.y);
+        ctx.moveTo(org.x, org.y - markR); ctx.lineTo(org.x, org.y - markR + 6);
+        ctx.moveTo(org.x, org.y + markR); ctx.lineTo(org.x, org.y + markR - 6);
+        ctx.stroke();
+
+        // 目標器官膠囊徽章
+        ctx.font = 'bold 13px "Noto Sans TC", sans-serif';
+        const tagText = `當前運輸目標`;
+        const tw = ctx.measureText(tagText).width;
+        const tagX = org.x;
+        const tagY = org.key === 'root' || org.key === 'root_growth' ? org.y + org.r + 20 : org.y - org.r - 18;
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+        ctx.strokeStyle = org.color;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.roundRect(tagX - tw / 2 - 10, tagY - 12, tw + 20, 24, 12);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = org.color;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(tagText, tagX, tagY);
+        ctx.restore();
+      } else if (isHovered) {
+        // 滑鼠懸停於可點擊器官上：繪製點擊提示光環
+        ctx.save();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = '#ffffff';
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.arc(org.x, org.y, org.r + 6, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // 懸停提示膠囊
+        ctx.font = 'bold 13px "Noto Sans TC", sans-serif';
+        const hintText = `點擊切換為目標`;
+        const tw = ctx.measureText(hintText).width;
+        const tagX = org.x;
+        const tagY = org.key === 'root' || org.key === 'root_growth' ? org.y + org.r + 20 : org.y - org.r - 18;
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.roundRect(tagX - tw / 2 - 10, tagY - 12, tw + 20, 24, 12);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#f0f9ff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(hintText, tagX, tagY);
+        ctx.restore();
+      }
+    });
+
+    // 點擊漣漪特效
+    if (state.organClickRipple) {
+      const rip = state.organClickRipple;
+      ctx.save();
+      ctx.strokeStyle = rip.color;
+      ctx.lineWidth = 3;
+      ctx.globalAlpha = Math.max(0, rip.alpha);
+      ctx.shadowColor = rip.color;
+      ctx.shadowBlur = 16;
+      ctx.beginPath();
+      ctx.arc(rip.x, rip.y, rip.r, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(rip.x, rip.y, Math.max(0, rip.r - 14), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+
+      rip.r += 2.4;
+      rip.alpha -= 0.038;
+      if (rip.alpha <= 0) {
+        state.organClickRipple = null;
+      }
+    }
+
+    ctx.restore();
+  }
+
+  // 繪製所有粒子 (分子徽章與文字全面大幅加大、清晰可辨，支援分子聚焦高亮與淡化)
   function drawAllParticles() {
     ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
+    const isMolFocusing = state.highlightMolecule !== 'all';
+
     // A. CO2 分子 (大尺寸 36px 徽章，大字體 bold 15px)
+    const isCo2Focus = (state.highlightMolecule === 'co2');
+    ctx.save();
+    ctx.globalAlpha = isMolFocusing ? (isCo2Focus ? 1.0 : 0.08) : 1.0;
+    if (isCo2Focus) {
+      ctx.shadowColor = '#cbd5e1';
+      ctx.shadowBlur = 12;
+    }
     state.co2Particles.forEach(p => {
       p.progress += p.speed;
       const cx = p.x + (p.targetX - p.x) * p.progress;
       const cy = p.y + (p.targetY - p.y) * p.progress;
-      const r = 18;
+      const r = isCo2Focus ? 21 : 18;
 
       ctx.fillStyle = p.blocked ? '#fca5a5' : '#f8fafc';
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = p.blocked ? '#dc2626' : '#64748b';
-      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = p.blocked ? '#dc2626' : (isCo2Focus ? '#f1f5f9' : '#64748b');
+      ctx.lineWidth = isCo2Focus ? 3.5 : 2.5;
       ctx.stroke();
 
       ctx.fillStyle = '#0f172a';
       ctx.font = 'bold 15px "JetBrains Mono", monospace';
       ctx.fillText('CO₂', cx, cy + 1);
     });
+    ctx.restore();
     state.co2Particles = state.co2Particles.filter(p => p.progress < 1);
 
     // B. 水分子 H2O (大尺寸 36px 徽章，大字體 bold 15px)
+    const isH2oFocus = (state.highlightMolecule === 'h2o');
+    ctx.save();
+    ctx.globalAlpha = isMolFocusing ? (isH2oFocus ? 1.0 : 0.08) : 1.0;
+    if (isH2oFocus) {
+      ctx.shadowColor = '#38bdf8';
+      ctx.shadowBlur = 12;
+    }
     state.h2oParticles.forEach(p => {
       p.segProgress += p.speed;
       if (p.segProgress >= 1) {
@@ -3454,14 +3958,14 @@
         const p2 = p.waypoints[p.segment + 1];
         const cx = p1.x + (p2.x - p1.x) * p.segProgress;
         const cy = p1.y + (p2.y - p1.y) * p.segProgress;
-        const r = 18;
+        const r = isH2oFocus ? 21 : 18;
 
         ctx.fillStyle = '#38bdf8';
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = '#0284c7';
-        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = isH2oFocus ? '#7dd3fc' : '#0284c7';
+        ctx.lineWidth = isH2oFocus ? 3.5 : 2.5;
         ctx.stroke();
 
         ctx.fillStyle = '#032b43';
@@ -3469,12 +3973,19 @@
         ctx.fillText('H₂O', cx, cy + 1);
       }
     });
+    ctx.restore();
     state.h2oParticles = state.h2oParticles.filter(p => p.segment < p.waypoints.length - 1);
 
     // C. 蒸散水氣逸散粒子 (自氣孔散失之 H2O 氣體，夜間氣孔閉合時立刻完全停止並清空)
     if (!state.isDay) {
       state.vaporParticles = [];
     } else {
+      ctx.save();
+      ctx.globalAlpha = isMolFocusing ? (isH2oFocus ? 1.0 : 0.08) : 1.0;
+      if (isH2oFocus) {
+        ctx.shadowColor = '#38bdf8';
+        ctx.shadowBlur = 10;
+      }
       state.vaporParticles.forEach(vp => {
         vp.x += vp.vx;
         vp.y += vp.vy;
@@ -3483,7 +3994,7 @@
 
         if (vp.alpha > 0) {
           ctx.save();
-          ctx.globalAlpha = Math.max(0, vp.alpha);
+          ctx.globalAlpha = Math.max(0, vp.alpha) * (isMolFocusing && !isH2oFocus ? 0.08 : 1.0);
           ctx.fillStyle = 'rgba(56, 189, 248, 0.28)';
           ctx.beginPath();
           ctx.arc(vp.x, vp.y, vp.size, 0, Math.PI * 2);
@@ -3498,38 +4009,49 @@
           ctx.restore();
         }
       });
+      ctx.restore();
       state.vaporParticles = state.vaporParticles.filter(vp => vp.alpha > 0);
     }
 
     // D. 氧氣氣泡 O2 (大尺寸 40px 氣泡，大字體 bold 15px)
+    const isO2Focus = (state.highlightMolecule === 'o2');
+    ctx.save();
+    ctx.globalAlpha = isMolFocusing ? (isO2Focus ? 1.0 : 0.08) : 1.0;
+    if (isO2Focus) {
+      ctx.shadowColor = '#22d3ee';
+      ctx.shadowBlur = 14;
+    }
     state.o2Bubbles.forEach(b => {
       b.x += b.vx;
       b.y += b.vy;
       b.alpha -= 0.009;
-      const r = 20;
+      const r = isO2Focus ? 23 : 20;
 
       ctx.fillStyle = `rgba(103, 232, 249, ${Math.max(b.alpha, 0)})`;
       ctx.beginPath();
       ctx.arc(b.x, b.y, r, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = `rgba(8, 145, 178, ${Math.max(b.alpha, 0)})`;
-      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = isO2Focus ? '#cffafe' : `rgba(8, 145, 178, ${Math.max(b.alpha, 0)})`;
+      ctx.lineWidth = isO2Focus ? 3.5 : 2.5;
       ctx.stroke();
 
       ctx.fillStyle = `rgba(8, 51, 68, ${Math.max(b.alpha, 0)})`;
       ctx.font = 'bold 15px "JetBrains Mono", monospace';
       ctx.fillText('O₂', b.x, b.y + 1);
     });
+    ctx.restore();
     state.o2Bubbles = state.o2Bubbles.filter(b => b.alpha > 0);
 
     // E. 脫水縮合水分子 (葡萄糖聚合為澱粉時脫水釋出的 H2O 水滴)
+    ctx.save();
+    ctx.globalAlpha = isMolFocusing ? (isH2oFocus ? 1.0 : 0.08) : 1.0;
     state.dehydrationParticles.forEach(dp => {
       dp.x += dp.vx;
       dp.y += dp.vy;
       dp.alpha -= 0.016;
 
       ctx.save();
-      ctx.globalAlpha = Math.max(0, dp.alpha);
+      ctx.globalAlpha = Math.max(0, dp.alpha) * (isMolFocusing && !isH2oFocus ? 0.08 : 1.0);
       ctx.fillStyle = '#38bdf8';
       ctx.beginPath();
       ctx.arc(dp.x, dp.y, dp.size, 0, Math.PI * 2);
@@ -3543,9 +4065,17 @@
       ctx.fillText('H₂O', dp.x, dp.y + 1);
       ctx.restore();
     });
+    ctx.restore();
     state.dehydrationParticles = state.dehydrationParticles.filter(dp => dp.alpha > 0);
 
     // F. 蔗糖養分分配粒子 (所有運送中的養分一律為「蔗糖」，抵達目標器官才進行生化轉化)
+    const isGlucoseFocus = (state.highlightMolecule === 'glucose');
+    ctx.save();
+    ctx.globalAlpha = isMolFocusing ? (isGlucoseFocus ? 1.0 : 0.08) : 1.0;
+    if (isGlucoseFocus) {
+      ctx.shadowColor = '#fbbf24';
+      ctx.shadowBlur = 14;
+    }
     state.transports.forEach(t => {
       t.segProgress += t.speed;
       if (t.segProgress >= 1) {
@@ -3564,11 +4094,11 @@
         const p2 = t.waypoints[t.segment + 1];
         const cx = p1.x + (p2.x - p1.x) * t.segProgress;
         const cy = p1.y + (p2.y - p1.y) * t.segProgress;
-        const r = 20;
+        const r = isGlucoseFocus ? 23 : 20;
 
         // 韌皮部運輸專屬紫色「蔗糖」大徽章 (40px 直徑，高對比大字 bold 14px)
         const ballColor = '#c084fc';
-        const strokeColor = '#9333ea';
+        const strokeColor = isGlucoseFocus ? '#fde047' : '#9333ea';
         const label = '蔗糖';
 
         ctx.fillStyle = ballColor;
@@ -3576,7 +4106,7 @@
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = strokeColor;
-        ctx.lineWidth = 2.5;
+        ctx.lineWidth = isGlucoseFocus ? 3.5 : 2.5;
         ctx.stroke();
 
         ctx.fillStyle = '#ffffff';
@@ -3584,16 +4114,19 @@
         ctx.fillText(label, cx, cy + 1);
       }
     });
+    ctx.restore();
     state.transports = state.transports.filter(t => t.segment < t.waypoints.length - 1);
 
     // G. 器官生化轉化浮動徽章 (抵達目標器官時展示：蔗糖 ➔ 澱粉 / 花蜜 / 果糖 / 頂芽纖維素)
+    ctx.save();
+    ctx.globalAlpha = isMolFocusing ? (isGlucoseFocus ? 1.0 : 0.08) : 1.0;
     state.conversions.forEach(c => {
       c.y += c.vy;
       c.alpha -= 0.014;
 
       if (c.alpha > 0) {
         ctx.save();
-        ctx.globalAlpha = Math.max(c.alpha, 0);
+        ctx.globalAlpha = Math.max(c.alpha, 0) * (isMolFocusing && !isGlucoseFocus ? 0.08 : 1.0);
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.font = 'bold 16px "Noto Sans TC", sans-serif';
@@ -3619,6 +4152,7 @@
         ctx.restore();
       }
     });
+    ctx.restore();
     state.conversions = state.conversions.filter(c => c.alpha > 0);
 
     ctx.restore();
@@ -3863,10 +4397,40 @@
       }
     });
 
-    // 點擊畫布字幕條區域亦可切換字幕顯示狀態 (平移拖曳時不觸發)
+    // 滑鼠於畫布懸停偵測目標器官 (提供手指游標提示)
+    canvas.addEventListener('mousemove', (e) => {
+      if (camera.isDragging) return;
+      const coords = getCanvasCoords(e);
+      const wx = (coords.cx - camera.x) / camera.zoom;
+      const wy = (coords.cy - camera.y) / camera.zoom;
+      const organ = getTargetOrganAt(wx, wy);
+      if (organ) {
+        canvas.style.cursor = 'pointer';
+        state.hoveredOrgan = organ.key;
+      } else {
+        canvas.style.cursor = 'grab';
+        state.hoveredOrgan = null;
+      }
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      state.hoveredOrgan = null;
+      if (!camera.isDragging) canvas.style.cursor = 'grab';
+    });
+
+    // 點擊畫布目標器官直接切換輸送去向；亦可點擊畫布字幕條區域切換字幕顯示狀態
     canvas.addEventListener('click', (e) => {
       if (camera.hasMoved) return;
       const coords = getCanvasCoords(e);
+      const wx = (coords.cx - camera.x) / camera.zoom;
+      const wy = (coords.cy - camera.y) / camera.zoom;
+
+      // 檢查是否點擊畫布上的目標器官
+      const organ = getTargetOrganAt(wx, wy);
+      if (organ) {
+        setTargetFate(organ.key, true);
+        return;
+      }
 
       if (state.showSubtitles) {
         const barX = geo.subtitleX;
@@ -3887,33 +4451,41 @@
     }
     resetBtn.onclick = resetDemo;
 
-    // 葡萄糖去向切換 (塊根 / 根系 / 花 / 果 / 頂芽)
-    fateRootBtn.onclick = () => {
-      state.fate = 'root';
-      updateFateButtons();
-    };
-
-    if (fateRootGrowthBtn) {
-      fateRootGrowthBtn.onclick = () => {
-        state.fate = 'root_growth';
-        updateFateButtons();
-      };
+    // 日照光合時程切換 (無限持續光合 vs 晝夜循環)
+    if (cycleInfiniteBtn) {
+      cycleInfiniteBtn.onclick = () => setCycleMode(true);
+    }
+    if (cycleDayNightBtn) {
+      cycleDayNightBtn.onclick = () => setCycleMode(false);
     }
 
-    fateFlowerBtn.onclick = () => {
-      state.fate = 'flower';
-      updateFateButtons();
-    };
+    // 分子來源與流向聚焦按鈕群
+    if (molAllBtn) {
+      molAllBtn.onclick = () => setMoleculeHighlight('all');
+    }
+    if (molCO2Btn) {
+      molCO2Btn.onclick = () => setMoleculeHighlight('co2');
+    }
+    if (molO2Btn) {
+      molO2Btn.onclick = () => setMoleculeHighlight('o2');
+    }
+    if (molGlucoseBtn) {
+      molGlucoseBtn.onclick = () => setMoleculeHighlight('glucose');
+    }
+    if (molH2OBtn) {
+      molH2OBtn.onclick = () => setMoleculeHighlight('h2o');
+    }
 
-    fateFruitBtn.onclick = () => {
-      state.fate = 'fruit';
-      updateFateButtons();
-    };
+    // 葡萄糖去向切換 (塊根 / 根系 / 花 / 果 / 頂芽)
+    fateRootBtn.onclick = () => setTargetFate('root', false);
 
-    fateShootBtn.onclick = () => {
-      state.fate = 'shoot';
-      updateFateButtons();
-    };
+    if (fateRootGrowthBtn) {
+      fateRootGrowthBtn.onclick = () => setTargetFate('root_growth', false);
+    }
+
+    fateFlowerBtn.onclick = () => setTargetFate('flower', false);
+    fateFruitBtn.onclick = () => setTargetFate('fruit', false);
+    fateShootBtn.onclick = () => setTargetFate('shoot', false);
 
     // 根部養分再動員轉運至根系、花朵、果實或頂芽
     if (rootToRootGrowthBtn) {
@@ -3978,6 +4550,8 @@
     updateSubtitleButtons();
     updateRemobilizeButtonStates();
     updateFateButtons();
+    updateCycleButtons();
+    updateMoleculeHighlightUI();
 
     // 預設啟動「真實生理」模式 (日間光照下所有步驟動畫同時進行)
     setRunMode('parallel');

@@ -1,0 +1,3487 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>人體的平衡覺：前庭系統互動教學動畫</title>
+    <!-- 引入 Three.js 與 OrbitControls 用於 3D 立體擬真拓樸展示 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        :root {
+            --bg-dark: #0b1120;
+            --panel-bg: #162033;
+            --panel-border: #283753;
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;
+            --accent-hover: #0284c7;
+            --depol: #fb7185;   /* 去極化/興奮色 */
+            --hyper: #60a5fa;   /* 超極化/抑制色 */
+            --otolith: #fbbf24; /* 耳石器色 */
+            --canal: #34d399;   /* 半規管色 */
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", Roboto, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* 主容器：採用 Flexbox 確保動畫區與面板不重疊遮擋 */
+        #app {
+            display: flex;
+            flex-direction: row;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* 動畫主視窗（佔據所有主要剩餘空間） */
+        #viewport {
+            flex: 1;
+            position: relative;
+            min-width: 0;
+            min-height: 0;
+            background: radial-gradient(circle at center, #131d33 0%, #090e1a 100%);
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        #canvas2d, #container3d {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        #container3d {
+            display: none;
+        }
+
+        /* 畫布左上角：目前檢視位置導覽列與狀態控制（不遮擋中央畫面） */
+        #hud-bar {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            right: 145px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            z-index: 12;
+            pointer-events: none;
+        }
+
+        #hud-bar > * {
+            pointer-events: auto;
+        }
+
+        .hud-badge {
+            background: rgba(15, 23, 42, 0.88);
+            border: 1px solid var(--panel-border);
+            backdrop-filter: blur(8px);
+            padding: 6px 13px;
+            border-radius: 20px;
+            font-size: 13px;
+            color: var(--accent);
+            font-weight: 600;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .location-breadcrumb {
+            background: rgba(15, 23, 42, 0.92);
+            border: 1.5px solid rgba(251, 191, 36, 0.7);
+            backdrop-filter: blur(8px);
+            padding: 6px 13px;
+            border-radius: 20px;
+            font-size: 13px;
+            color: #fef3c7;
+            font-weight: 600;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.45);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .hud-btn {
+            background: rgba(22, 32, 51, 0.9);
+            border: 1px solid var(--panel-border);
+            color: var(--text-main);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+
+        .hud-btn:hover, .hud-btn:active {
+            background: var(--accent-hover);
+            border-color: var(--accent);
+            color: #fff;
+        }
+
+        .hud-btn.back-3d-btn {
+            background: rgba(2, 132, 199, 0.88);
+            border-color: #38bdf8;
+            color: #fff;
+        }
+
+        .hud-btn.back-3d-btn:hover {
+            background: #0369a1;
+        }
+
+        /* 3D 聚焦部位浮動說明與跳轉卡片 */
+        #focus-card-3d {
+            position: absolute;
+            bottom: 16px;
+            left: 16px;
+            width: 390px;
+            max-width: calc(100% - 32px);
+            background: rgba(15, 23, 42, 0.94);
+            border: 1.5px solid var(--accent);
+            backdrop-filter: blur(10px);
+            border-radius: 14px;
+            padding: 14px 16px;
+            z-index: 14;
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.6);
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+            animation: fadeInUp 0.22s ease-out;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .fc-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .fc-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #fde047;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .fc-close {
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: #cbd5e1;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .fc-desc {
+            font-size: 13.2px;
+            line-height: 1.55;
+            color: #e2e8f0;
+        }
+
+        .fc-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 2px;
+        }
+
+        .fc-btn {
+            flex: 1;
+            background: var(--accent-hover);
+            border: 1px solid var(--accent);
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.15s;
+        }
+
+        .fc-btn:hover {
+            background: #0369a1;
+        }
+
+        .fc-btn.secondary {
+            background: #1e293b;
+            border-color: #475569;
+            color: #e2e8f0;
+        }
+
+        .fc-btn.secondary:hover {
+            background: #334155;
+        }
+
+        /* 3D 底部操作提示條 */
+        #hint-3d-bar {
+            position: absolute;
+            bottom: 14px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid rgba(56, 189, 248, 0.45);
+            backdrop-filter: blur(6px);
+            padding: 7px 16px;
+            border-radius: 20px;
+            font-size: 12.5px;
+            color: #e2e8f0;
+            pointer-events: none;
+            z-index: 11;
+            white-space: nowrap;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }
+
+        /* 當面板隱藏時，右上角/右下角出現的展開按鈕 */
+        #open-panel-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            z-index: 15;
+            background: var(--accent-hover);
+            color: #fff;
+            border: none;
+            padding: 9px 15px;
+            border-radius: 24px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+            display: none;
+            align-items: center;
+            gap: 6px;
+        }
+
+        #app.panel-hidden #open-panel-btn {
+            display: flex;
+        }
+
+        /* 3D 專屬 HTML 浮動標籤層（支援點擊放大跳轉） */
+        #labels-3d {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+            z-index: 10;
+        }
+
+        .label-3d-tag {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            background: rgba(15, 23, 42, 0.88);
+            border: 1.2px solid rgba(56, 189, 248, 0.55);
+            color: #f8fafc;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 12.2px;
+            white-space: nowrap;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.55);
+            transition: transform 0.15s, border-color 0.15s, background 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .label-3d-tag.clickable {
+            pointer-events: auto;
+            cursor: pointer;
+        }
+
+        .label-3d-tag.clickable:hover {
+            background: rgba(2, 132, 199, 0.95);
+            border-color: #fde047;
+            transform: translate(-50%, -50%) scale(1.06);
+            z-index: 30;
+        }
+
+        .label-3d-tag.active-focus {
+            background: rgba(180, 83, 9, 0.95);
+            border-color: #fde047;
+            box-shadow: 0 0 14px rgba(251, 191, 36, 0.65);
+            z-index: 25;
+        }
+
+        .tag-zoom-icon {
+            display: inline-block;
+            background: rgba(251, 191, 36, 0.22);
+            color: #fde047;
+            border-radius: 4px;
+            padding: 1px 5px;
+            font-size: 10.5px;
+            font-weight: 700;
+        }
+
+        /* 說明與控制整合面板 */
+        #control-panel {
+            width: 400px;
+            flex-shrink: 0;
+            background-color: var(--panel-bg);
+            border-left: 1px solid var(--panel-border);
+            display: flex;
+            flex-direction: column;
+            z-index: 20;
+            transition: width 0.25s ease, height 0.25s ease;
+        }
+
+        #app.panel-hidden #control-panel {
+            display: none;
+        }
+
+        /* 面板標頭 */
+        .panel-header {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--panel-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(11, 17, 32, 0.45);
+        }
+
+        .panel-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .collapse-btn {
+            background: rgba(255,255,255,0.08);
+            border: 1px solid var(--panel-border);
+            color: var(--text-main);
+            padding: 6px 11px;
+            border-radius: 8px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .collapse-btn:hover {
+            background: rgba(255,255,255,0.16);
+        }
+
+        /* 步驟導覽列 */
+        .step-nav {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--panel-border);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .step-dots {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 6px;
+        }
+
+        .step-dot {
+            background: rgba(255,255,255,0.07);
+            border: 1px solid var(--panel-border);
+            color: var(--text-muted);
+            padding: 7px 0;
+            border-radius: 6px;
+            font-size: 12.5px;
+            font-weight: 600;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .step-dot.active {
+            background: var(--accent-hover);
+            border-color: var(--accent);
+            color: #fff;
+        }
+
+        .step-arrows {
+            display: flex;
+            gap: 8px;
+        }
+
+        .nav-btn {
+            flex: 1;
+            background: #1e293b;
+            border: 1px solid var(--panel-border);
+            color: var(--text-main);
+            padding: 9px;
+            border-radius: 8px;
+            font-size: 13.5px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .nav-btn:hover:not(:disabled) {
+            background: #334155;
+        }
+
+        .nav-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .nav-btn.primary {
+            background: var(--accent-hover);
+            border-color: var(--accent);
+        }
+
+        /* 工具開關列（標籤顯示隱藏 + 播放暫停） */
+        .utility-bar {
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--panel-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            background: rgba(15, 23, 42, 0.35);
+        }
+
+        .toggle-switch {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-size: 13.5px;
+            font-weight: 500;
+        }
+
+        .toggle-switch input {
+            display: none;
+        }
+
+        .slider-pill {
+            width: 40px;
+            height: 22px;
+            background: #334155;
+            border-radius: 22px;
+            position: relative;
+            transition: 0.25s;
+        }
+
+        .slider-pill::after {
+            content: "";
+            width: 16px;
+            height: 16px;
+            background: #fff;
+            border-radius: 50%;
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            transition: 0.25s;
+        }
+
+        .toggle-switch input:checked + .slider-pill {
+            background: var(--accent-hover);
+        }
+
+        .toggle-switch input:checked + .slider-pill::after {
+            transform: translateX(18px);
+        }
+
+        /* 面板內容區（互動控制 + 生理文字說明） */
+        .panel-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* 專屬互動控制器區塊 */
+        .interactive-box {
+            background: rgba(11, 17, 32, 0.6);
+            border: 1px solid var(--panel-border);
+            border-radius: 10px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .ctrl-label {
+            font-size: 13px;
+            color: var(--accent);
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 26px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+
+        .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .sim-btn {
+            flex: 1;
+            min-width: 82px;
+            background: #1e293b;
+            border: 1px solid var(--panel-border);
+            color: var(--text-main);
+            padding: 8px 10px;
+            border-radius: 7px;
+            font-size: 12.8px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .sim-btn:hover {
+            border-color: #475569;
+            background: #26354d;
+        }
+
+        .sim-btn.active {
+            background: var(--accent-hover);
+            border-color: var(--accent);
+            color: #fff;
+            font-weight: 600;
+        }
+
+        /* 說明文字排版 */
+        .desc-content h3 {
+            font-size: 16px;
+            color: #fff;
+            margin-bottom: 8px;
+            border-left: 3px solid var(--accent);
+            padding-left: 8px;
+        }
+
+        .desc-content p {
+            font-size: 13.8px;
+            line-height: 1.65;
+            color: #cbd5e1;
+            margin-bottom: 10px;
+            user-select: text;
+        }
+
+        .desc-content ul {
+            padding-left: 18px;
+            margin-bottom: 10px;
+        }
+
+        .desc-content li {
+            font-size: 13.3px;
+            line-height: 1.6;
+            color: #cbd5e1;
+            margin-bottom: 6px;
+            user-select: text;
+        }
+
+        .hl-depol { color: var(--depol); font-weight: 600; }
+        .hl-hyper { color: var(--hyper); font-weight: 600; }
+        .hl-oto { color: var(--otolith); font-weight: 600; }
+        .hl-canal { color: var(--canal); font-weight: 600; }
+
+        /* 比較表格樣式 */
+        .comp-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12.5px;
+            margin-top: 6px;
+        }
+
+        .comp-table th, .comp-table td {
+            border: 1px solid var(--panel-border);
+            padding: 7px 8px;
+            text-align: left;
+            line-height: 1.45;
+        }
+
+        .comp-table th {
+            background: rgba(56, 189, 248, 0.12);
+            color: var(--accent);
+        }
+
+        /* 響應式：平板與手機改為上下分割 */
+        @media (max-width: 860px) {
+            #app {
+                flex-direction: column;
+            }
+
+            #control-panel {
+                width: 100%;
+                height: 43dvh;
+                border-left: none;
+                border-top: 1px solid var(--panel-border);
+            }
+
+            .panel-header {
+                padding: 10px 14px;
+            }
+
+            .step-nav {
+                padding: 8px 14px;
+            }
+
+            #open-panel-btn {
+                top: auto;
+                bottom: 16px;
+                right: 16px;
+            }
+
+            #focus-card-3d {
+                width: calc(100% - 24px);
+                left: 12px;
+                bottom: 12px;
+                padding: 11px 13px;
+            }
+
+            #hint-3d-bar {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <!-- 左側/上方：主動畫區 -->
+    <main id="viewport">
+        <canvas id="canvas2d"></canvas>
+        <div id="container3d"></div>
+        <div id="labels-3d"></div>
+
+        <!-- 左上角：狀態徽章、目前檢視解剖位置導覽列、返回 3D 按鈕與重置視角 -->
+        <div id="hud-bar">
+            <div class="hud-badge" id="hud-step-badge">Step 1 / 6 · 3D 膜迷路立體結構</div>
+            <div class="location-breadcrumb" id="hud-location-bar">📍 目前檢視位置：左內耳膜迷路 3D 全景（點擊構造可 Zoom-in 放大細部與毛細胞）</div>
+            <button class="hud-btn back-3d-btn" id="back-to-3d-btn" style="display:none;" title="返回 3D 立體模型">🌏 返回 3D 模型</button>
+            <button class="hud-btn" id="view-3d-closeup-btn" style="display:none;" title="在 3D 模型中微距觀察此部位">🧊 3D 微距位置</button>
+            <button class="hud-btn" id="reset-view-btn" title="重置縮放與平移">⟲ 重置視角</button>
+        </div>
+
+        <!-- 3D 點擊聚焦時的解剖說明與跳轉細部浮動卡 -->
+        <div id="focus-card-3d">
+            <div class="fc-header">
+                <div class="fc-title" id="fc-title">📍 橢圓囊（Utricle）與水平囊斑</div>
+                <button class="fc-close" id="fc-close-btn" title="關閉並返回全景">✕</button>
+            </div>
+            <div class="fc-desc" id="fc-desc"></div>
+            <div class="fc-actions" id="fc-actions"></div>
+        </div>
+
+        <!-- 3D 底部互動提示 -->
+        <div id="hint-3d-bar">💡 點擊 3D 模型上的「橢圓囊囊斑」、「球囊囊斑」或「半規管壺腹（壺腹嵴與頂帽）」即可 Zoom-in 並跳轉至細部與毛細胞機制</div>
+
+        <!-- 當面板收合時顯示的展開按鈕 -->
+        <button id="open-panel-btn">☰ 說明與控制</button>
+    </main>
+
+    <!-- 右側/下方：單一整合的說明與控制面板 -->
+    <aside id="control-panel">
+        <div class="panel-header">
+            <div class="panel-title">🧠 前庭平衡覺互動系統</div>
+            <button class="collapse-btn" id="close-panel-btn" title="隱藏面板以放大動畫">隱藏面板 ✕</button>
+        </div>
+
+        <!-- Step-by-Step 流程切換 -->
+        <div class="step-nav">
+            <div class="step-dots" id="step-dots">
+                <button class="step-dot active" data-step="0">1.3D迷路</button>
+                <button class="step-dot" data-step="1">2.毛細胞</button>
+                <button class="step-dot" data-step="2">3.耳石器</button>
+                <button class="step-dot" data-step="3">4.半規管</button>
+                <button class="step-dot" data-step="4">5.比較</button>
+                <button class="step-dot" data-step="5">6.中樞</button>
+            </div>
+            <div class="step-arrows">
+                <button class="nav-btn" id="prev-step-btn">◀ 上一步</button>
+                <button class="nav-btn primary" id="next-step-btn">下一步 ▶</button>
+            </div>
+        </div>
+
+        <!-- 全域控制：文字標籤 Toggle & 動畫播放 -->
+        <div class="utility-bar">
+            <label class="toggle-switch">
+                <input type="checkbox" id="toggle-labels" checked>
+                <span class="slider-pill"></span>
+                <span>顯示文字標籤</span>
+            </label>
+            <button class="hud-btn" id="play-pause-btn">⏸ 暫停動畫</button>
+        </div>
+
+        <!-- 步驟專屬互動區 + 詳細生理文字說明 -->
+        <div class="panel-body">
+            <div class="interactive-box" id="step-controls"></div>
+            <div class="desc-content" id="step-description"></div>
+        </div>
+    </aside>
+</div>
+
+<script>
+(() => {
+    // ==================== 全域狀態管理 ====================
+    const state = {
+        step: 0,
+        showLabels: true,
+        isPlaying: true,
+        time: 0,
+
+        // 目前使用者檢視的解剖位置追蹤 (確保任何視圖皆清楚知道目前看的是哪個部位)
+        activeLocationId: 'overview', // 'overview' | 'utricle' | 'saccule' | 'ampulla_horiz' | 'ampulla_ant' | 'ampulla_post' | 'cochlea'
+        hairCellOriginId: 'utricle',  // 記錄從哪個器官點擊放大進入 Step 2 毛細胞 ('utricle' | 'saccule' | 'ampulla_horiz' | 'ampulla_ant' | 'ampulla_post')
+        click3DAutoJump: true,        // 點擊 3D 關鍵構造時，平滑 Zoom-in 後直接跳轉至細部橫切面
+
+        // 2D Canvas Zoom & Pan 狀態 (邏輯座標系 1000 x 650)
+        logicalW: 1000,
+        logicalH: 650,
+        zoom: 1,
+        panX: 0,
+        panY: 0,
+
+        // 2D Canvas 可點擊熱區陣列 (例如點擊囊斑或壺腹嵴上的毛細胞直接 Zoom 到毛細胞細部)
+        hitRegions2D: [],
+        hoveredHit2D: null,
+
+        // 各步驟模擬參數
+        step0Highlight: 'all',     // 'all' | 'otolith' | 'canals'
+        hairDeflection: 0.65,      // -1 (背離/超極化) ~ +1 (朝向動纖毛/去極化)
+
+        otolithOrgan: 'utricle',   // 'utricle' (橢圓囊水平囊斑) | 'saccule' (球囊垂直囊斑)
+        otolithStimulus: 0.55,     // -1 ~ +1
+
+        selectedCanal: 'horiz',    // 'horiz' (水平半規管) | 'ant' (前半規管) | 'post' (後半規管)
+        canalMode: 'accel_left',   // 'rest' | 'accel_left' | 'const_left' | 'stop_left' | 'accel_right'
+        canalAnimTimer: 0,
+        cupulaDeflect: 0,
+        headAngleVel: 0,
+        headAngle: 0,
+
+        compareSyncForce: 0.6,     // Step 5 同步刺激強度
+
+        vorHeadSpeed: 0.7,         // Step 6 轉頭頻率/幅度
+        activePathway: 'all'       // 'all' | 'vor' | 'vsr' | 'cortex'
+    };
+
+    // ==================== 解剖位置資料庫 (用於 3D 點擊 Zoom、頂部定位導覽與小地圖) ====================
+    const ANATOMY_LOCATIONS = {
+        overview: {
+            name: '左內耳膜迷路 3D 全景',
+            breadcrumb: '📍 目前位置：左內耳膜迷路 3D 全景（點擊橢圓囊、球囊或壺腹可 Zoom-in 進入細部與毛細胞）',
+            camPos: [5.4, 3.3, 6.8],
+            camTarget: [0.0, 0.35, 0.0],
+            color: '#38bdf8'
+        },
+        utricle: {
+            name: '橢圓囊（Utricle）與水平囊斑（Macula）',
+            shortName: '橢圓囊（水平囊斑）',
+            breadcrumb: '📍 目前檢視位置：內耳前庭 ▸ 橢圓囊 (Utricle) ▸ 水平排列囊斑 (Horizontal Macula) 與耳石膜',
+            desc: '<strong>橢圓囊（Utricle）</strong>：位於前庭後上部，其內部的<strong>囊斑（macula）大致呈水平排列</strong>（貼於橢圓囊底部水平面），毛細胞纖毛伸入含碳酸鈣耳石結晶的耳石膜中，主要感測<strong>水平直線加速度（如搭車起步、煞車）</strong>與<strong>頭部側傾／前後傾</strong>。',
+            camPos: [1.55, 1.35, 2.35],
+            camTarget: [0.02, 0.15, 0.05],
+            targetStep: 2,
+            otolithOrgan: 'utricle',
+            color: '#fbbf24'
+        },
+        saccule: {
+            name: '球囊（Saccule）與垂直囊斑（Macula）',
+            shortName: '球囊（垂直囊斑）',
+            breadcrumb: '📍 目前檢視位置：內耳前庭 ▸ 球囊 (Saccule) ▸ 垂直排列囊斑 (Vertical Macula) 與耳石膜',
+            desc: '<strong>球囊（Saccule）</strong>：位於橢圓囊前下方並以橢圓球囊管相連，其內部的<strong>囊斑（macula）大致呈垂直排列</strong>（貼於球囊內側垂直壁），主要感測<strong>垂直直線加速度（如搭電梯上升、下降）</strong>與<strong>重力軸變化</strong>。',
+            camPos: [2.25, -0.45, 2.25],
+            camTarget: [0.78, -0.78, 0.0],
+            targetStep: 2,
+            otolithOrgan: 'saccule',
+            color: '#f59e0b'
+        },
+        ampulla_horiz: {
+            name: '水平半規管壺腹（Ampulla）：壺腹嵴與頂帽',
+            shortName: '水平半規管壺腹（壺腹嵴+頂帽）',
+            breadcrumb: '📍 目前檢視位置：水平(外)半規管 ▸ 壺腹 (Ampulla) ▸ 壺腹嵴 (Crista ampullaris) 與膠狀頂帽 (Cupula)',
+            desc: '<strong>水平半規管壺腹與頂帽</strong>：半規管兩端銜接於橢圓囊，前外端膨大為<strong>壺腹（ampulla）</strong>，內有鞍狀的<strong>壺腹嵴（crista ampullaris）</strong>，毛細胞的纖毛伸入無耳石的膠狀<strong>頂帽（cupula）</strong>中，主要感測<strong>水平面旋轉角加速度（如左右搖頭「不」）</strong>。',
+            camPos: [1.45, 0.95, 2.35],
+            camTarget: [0.38, 0.28, 0.62],
+            targetStep: 3,
+            canalType: 'horiz',
+            color: '#38bdf8'
+        },
+        ampulla_ant: {
+            name: '前半規管壺腹（Ampulla）：壺腹嵴與頂帽',
+            shortName: '前半規管壺腹（壺腹嵴+頂帽）',
+            breadcrumb: '📍 目前檢視位置：前(上)半規管 ▸ 壺腹 (Ampulla) ▸ 壺腹嵴 (Crista ampullaris) 與膠狀頂帽 (Cupula)',
+            desc: '<strong>前（上）半規管壺腹與頂帽</strong>：前端膨大為<strong>前壺腹（anterior ampulla）</strong>連入橢圓囊前上部，另一端與後半規管匯合為<strong>總腳（common crus）</strong>連回橢圓囊。壺腹內有<strong>壺腹嵴（crista ampullaris）</strong>與膠狀<strong>頂帽（cupula）</strong>，主要感測<strong>前後垂直面角加速度（如點頭「是」）</strong>。',
+            camPos: [1.65, 1.55, 2.05],
+            camTarget: [0.46, 0.72, 0.25],
+            targetStep: 3,
+            canalType: 'ant',
+            color: '#34d399'
+        },
+        ampulla_post: {
+            name: '後半規管壺腹（Ampulla）：壺腹嵴與頂帽',
+            shortName: '後半規管壺腹（壺腹嵴+頂帽）',
+            breadcrumb: '📍 目前檢視位置：後半規管 ▸ 壺腹 (Ampulla) ▸ 壺腹嵴 (Crista ampullaris) 與膠狀頂帽 (Cupula)',
+            desc: '<strong>後半規管壺腹與頂帽</strong>：與前半規管垂直正交，下端膨大為<strong>後壺腹（posterior ampulla）</strong>連入橢圓囊後下部，上端匯入<strong>總腳（common crus）</strong>。壺腹內有<strong>壺腹嵴（crista ampullaris）</strong>，毛細胞纖毛伸入膠狀<strong>頂帽（cupula）</strong>中，感測<strong>冠狀面側傾旋轉角加速度（頭向肩膀側傾）</strong>。',
+            camPos: [-1.85, 0.35, 1.85],
+            camTarget: [-0.62, -0.15, -0.22],
+            targetStep: 3,
+            canalType: 'post',
+            color: '#2dd4bf'
+        }
+    };
+
+    // ==================== 6 個教學步驟的說明與控制定義 ====================
+    const stepsData = [
+        {
+            badge: 'Step 1 / 6 · 3D 膜迷路立體結構 (Three.js)',
+            title: '內耳前庭系統 3D 擬真拓樸與內部受器構造',
+            html: `
+                <p>內耳膜迷路（membranous labyrinth）充滿高鉀<strong>內淋巴（endolymph）</strong>，各腔室彼此連通。您可以旋轉縮放，並<strong>直接點擊 3D 模型上的受器位置</strong>放大進入細部與毛細胞機制：</p>
+                <ul>
+                    <li><span class="hl-oto">橢圓囊（Utricle）</span>：囊壁半透明可見底部<strong>囊斑（macula）大致呈水平排列</strong>，主要感測<strong>水平直線加速度（如搭車起步、煞車）</strong>與<strong>頭部側傾／前後傾</strong>。</li>
+                    <li><span class="hl-oto">球囊（Saccule）</span>：位於前下方，內部<strong>囊斑大致呈垂直排列</strong>，主要感測<strong>垂直直線加速度（如搭電梯上升、下降）</strong>與<strong>重力軸變化</strong>。</li>
+                    <li><span class="hl-canal">三半規管與橢圓囊完整銜接（5 個開口）</span>：前、後、水平半規管互相垂直；前與後半規管非壺腹端匯合成<strong>總腳（common crus）</strong>連入橢圓囊。</li>
+                    <li><span class="hl-depol">壺腹嵴與頂帽（Cupula）</span>：每條半規管一端膨大為<strong>壺腹（ampulla）</strong>，透明壺腹壁內可見鞍狀<strong>壺腹嵴（crista ampullaris）</strong>，毛細胞纖毛伸入膠狀<strong>頂帽（cupula）</strong>中。</li>
+                </ul>
+            `,
+            renderControls: (box) => {
+                box.innerHTML = `
+                    <div class="ctrl-label">
+                        <span>🎯 點擊 3D 部位快速 Zoom-in 定位</span>
+                    </div>
+                    <div class="btn-group">
+                        <button class="sim-btn ${state.activeLocationId==='utricle'?'active':''}" data-loc="utricle">🔍 橢圓囊 (水平囊斑)</button>
+                        <button class="sim-btn ${state.activeLocationId==='saccule'?'active':''}" data-loc="saccule">🔍 球囊 (垂直囊斑)</button>
+                    </div>
+                    <div class="btn-group">
+                        <button class="sim-btn ${state.activeLocationId==='ampulla_horiz'?'active':''}" data-loc="ampulla_horiz">🔍 水平管壺腹嵴+頂帽</button>
+                        <button class="sim-btn ${state.activeLocationId==='ampulla_ant'?'active':''}" data-loc="ampulla_ant">🔍 前管壺腹</button>
+                        <button class="sim-btn ${state.activeLocationId==='ampulla_post'?'active':''}" data-loc="ampulla_post">🔍 後管壺腹</button>
+                    </div>
+                    <div class="ctrl-label" style="margin-top:4px;">
+                        <span>點擊 3D 受器時的動作模式</span>
+                    </div>
+                    <div class="btn-group">
+                        <button class="sim-btn ${state.click3DAutoJump?'active':''}" id="mode-auto-jump">⚡ Zoom-in 並跳轉細部</button>
+                        <button class="sim-btn ${!state.click3DAutoJump?'active':''}" id="mode-stay-3d">🧊 先停留在 3D 微距觀察</button>
+                    </div>
+                    <div class="ctrl-label" style="margin-top:4px;"><span>立體構造重點凸顯</span></div>
+                    <div class="btn-group">
+                        <button class="sim-btn ${state.step0Highlight==='all'?'active':''}" data-hl="all">全部顯示</button>
+                        <button class="sim-btn ${state.step0Highlight==='otolith'?'active':''}" data-hl="otolith">耳石器 (靜)</button>
+                        <button class="sim-btn ${state.step0Highlight==='canals'?'active':''}" data-hl="canals">三半規管 (動)</button>
+                    </div>
+                `;
+                box.querySelectorAll('[data-loc]').forEach(btn => {
+                    btn.onclick = () => {
+                        focus3DLocation(btn.dataset.loc, state.click3DAutoJump);
+                    };
+                });
+                box.querySelector('#mode-auto-jump').onclick = () => {
+                    state.click3DAutoJump = true;
+                    updateStepUI(false);
+                };
+                box.querySelector('#mode-stay-3d').onclick = () => {
+                    state.click3DAutoJump = false;
+                    updateStepUI(false);
+                };
+                box.querySelectorAll('[data-hl]').forEach(btn => {
+                    btn.onclick = () => {
+                        state.step0Highlight = btn.dataset.hl;
+                        updateStepUI(false);
+                        update3DHighlight();
+                    };
+                });
+            }
+        },
+        {
+            badge: 'Step 2 / 6 · 2D 毛細胞機械電傳導 (微觀放大)',
+            title: '前庭毛細胞極性與機械電傳導機制',
+            html: `
+                <p>此為從<strong>囊斑（耳石器）</strong>或<strong>壺腹嵴（半規管）</strong>進一步放大後的單一前庭毛細胞。頂端具有階梯狀排列的<strong>靜纖毛（stereocilia）</strong>與單根最長的<strong>動纖毛（kinocilium）</strong>：</p>
+                <ul>
+                    <li><span class="hl-depol">去極化（Depolarization）</span>：當靜纖毛<strong>朝向動纖毛</strong>彎曲時，頂端連線（tip links）拉開機械敏感 K⁺ 通道，高鉀內淋巴液的 K⁺ 流入使細胞去極化，開啟電壓敏感 Ca²⁺ 通道，促進神經傳導物質（麩胺酸）釋放，<strong>傳入神經放電頻率大幅上升</strong>。</li>
+                    <li><span class="hl-hyper">超極化（Hyperpolarization）</span>：當靜纖毛<strong>背離動纖毛</strong>彎曲時，K⁺ 通道關閉，細胞超極化，神經放電頻率低於基礎值（抑制）。</li>
+                    <li><strong>基礎放電（Tonic firing）</strong>：靜止時毛細胞維持穩定基礎放電率，使雙向運動皆能被精確編碼。</li>
+                </ul>
+            `,
+            renderControls: (box) => {
+                const originInfo = ANATOMY_LOCATIONS[state.hairCellOriginId] || ANATOMY_LOCATIONS.utricle;
+                box.innerHTML = `
+                    <div class="ctrl-label">
+                        <span>📍 毛細胞所在器官位置</span>
+                        <span style="color:#fde047;">${originInfo.shortName}</span>
+                    </div>
+                    <div class="btn-group">
+                        <button class="sim-btn ${state.hairCellOriginId==='utricle'?'active':''}" data-org="utricle">橢圓囊囊斑</button>
+                        <button class="sim-btn ${state.hairCellOriginId==='saccule'?'active':''}" data-org="saccule">球囊囊斑</button>
+                        <button class="sim-btn ${state.hairCellOriginId.startsWith('ampulla')?'active':''}" data-org="ampulla_horiz">半規管壺腹嵴</button>
+                    </div>
+                    <div class="ctrl-label" style="margin-top:4px;">
+                        <span>纖毛偏折方向與程度</span>
+                        <span id="hair-val-txt"></span>
+                    </div>
+                    <input type="range" id="hair-slider" min="-100" max="100" value="${Math.round(state.hairDeflection*100)}">
+                    <div class="btn-group">
+                        <button class="sim-btn" id="btn-hyper">◀ 背離 (超極化)</button>
+                        <button class="sim-btn" id="btn-rest">● 靜止基準</button>
+                        <button class="sim-btn" id="btn-depol">朝向動纖毛 ▶</button>
+                    </div>
+                    <div class="btn-group" style="margin-top:4px;">
+                        <button class="sim-btn" id="btn-back-organ" style="background:#0f172a;border-color:#38bdf8;color:#38bdf8;">↩ 返回「${originInfo.shortName}」細部切面</button>
+                    </div>
+                `;
+                box.querySelectorAll('[data-org]').forEach(btn => {
+                    btn.onclick = () => {
+                        state.hairCellOriginId = btn.dataset.org;
+                        state.activeLocationId = btn.dataset.org;
+                        updateStepUI(false);
+                    };
+                });
+                const slider = box.querySelector('#hair-slider');
+                const txt = box.querySelector('#hair-val-txt');
+                const updateTxt = () => {
+                    if (state.hairDeflection > 0.15) txt.textContent = '朝向動纖毛 (興奮)';
+                    else if (state.hairDeflection < -0.15) txt.textContent = '背離動纖毛 (抑制)';
+                    else txt.textContent = '靜止 (基礎放電)';
+                };
+                updateTxt();
+                slider.oninput = (e) => {
+                    state.hairDeflection = parseInt(e.target.value, 10) / 100;
+                    updateTxt();
+                };
+                box.querySelector('#btn-hyper').onclick = () => { state.hairDeflection = -0.85; slider.value = -85; updateTxt(); };
+                box.querySelector('#btn-rest').onclick = () => { state.hairDeflection = 0; slider.value = 0; updateTxt(); };
+                box.querySelector('#btn-depol').onclick = () => { state.hairDeflection = 0.85; slider.value = 85; updateTxt(); };
+                box.querySelector('#btn-back-organ').onclick = () => {
+                    jumpToLocationDetail(state.hairCellOriginId);
+                };
+            }
+        },
+        {
+            badge: 'Step 3 / 6 · 2D 靜的平衡覺（橢圓囊與球囊細部）',
+            title: '靜的平衡覺：橢圓囊（水平囊斑）與球囊（垂直囊斑）',
+            html: `
+                <p>靜態頭部傾斜、重力方向與直線加速度由兩個<strong>耳石器（otolith organs）</strong>的<strong>囊斑（macula）</strong>負責偵測（<strong>點擊畫面中的毛細胞</strong>可進一步 Zoom-in 至單一毛細胞）：</p>
+                <ul>
+                    <li><span class="hl-oto">橢圓囊（Utricle）</span>：<strong>囊斑（macula）大致呈水平排列</strong>，主要感測<strong>水平直線加速度（如搭車起步、煞車）</strong>與<strong>頭部側傾／前後傾</strong>。</li>
+                    <li><span class="hl-oto">球囊（Saccule）</span>：<strong>囊斑大致呈垂直排列</strong>，主要感測<strong>垂直直線加速度（如搭電梯上升、下降）</strong>與<strong>重力軸變化</strong>。</li>
+                    <li><strong>耳石膜與微紋（Striola）</strong>：毛細胞纖毛伸入含高密度<strong>碳酸鈣耳石結晶（otoconia）</strong>的耳石膜。當受重力分量或直線加速慣性牽引時，微紋兩側極性相反的毛細胞呈現「一區興奮、一區抑制」的精確向量編碼。</li>
+                </ul>
+            `,
+            renderControls: (box) => {
+                const isUtricle = state.otolithOrgan === 'utricle';
+                box.innerHTML = `
+                    <div class="ctrl-label"><span>切換檢視耳石器位置（同步更新右上角定位圖）</span></div>
+                    <div class="btn-group">
+                        <button class="sim-btn ${isUtricle?'active':''}" id="btn-utricle">橢圓囊 (水平排列囊斑)</button>
+                        <button class="sim-btn ${!isUtricle?'active':''}" id="btn-saccule">球囊 (垂直排列囊斑)</button>
+                    </div>
+                    <div class="ctrl-label" style="margin-top:4px;">
+                        <span>${isUtricle ? '水平直線加速度 (起步/煞車) 或 前後傾' : '垂直直線加速度 (電梯上升/下降) 或 重力變化'}</span>
+                    </div>
+                    <input type="range" id="oto-slider" min="-100" max="100" value="${Math.round(state.otolithStimulus*100)}">
+                    <div class="btn-group">
+                        <button class="sim-btn" id="oto-neg">${isUtricle ? '◀ 搭車煞車 / 頭前傾' : '▼ 搭電梯下降'}</button>
+                        <button class="sim-btn" id="oto-zero">● 靜止平衡</button>
+                        <button class="sim-btn" id="oto-pos">${isUtricle ? '搭車起步 / 頭後仰 ▶' : '▲ 搭電梯上升'}</button>
+                    </div>
+                `;
+                box.querySelector('#btn-utricle').onclick = () => {
+                    state.otolithOrgan = 'utricle';
+                    state.activeLocationId = 'utricle';
+                    state.hairCellOriginId = 'utricle';
+                    updateStepUI(false);
+                };
+                box.querySelector('#btn-saccule').onclick = () => {
+                    state.otolithOrgan = 'saccule';
+                    state.activeLocationId = 'saccule';
+                    state.hairCellOriginId = 'saccule';
+                    updateStepUI(false);
+                };
+                const sl = box.querySelector('#oto-slider');
+                sl.oninput = (e) => { state.otolithStimulus = parseInt(e.target.value, 10) / 100; };
+                box.querySelector('#oto-neg').onclick = () => { state.otolithStimulus = -0.8; sl.value = -80; };
+                box.querySelector('#oto-zero').onclick = () => { state.otolithStimulus = 0; sl.value = 0; };
+                box.querySelector('#oto-pos').onclick = () => { state.otolithStimulus = 0.8; sl.value = 80; };
+            }
+        },
+        {
+            badge: 'Step 4 / 6 · 2D 動的平衡覺（半規管壺腹嵴與頂帽）',
+            title: '動的平衡覺：單側半規管迴路、壺腹嵴與頂帽',
+            html: `
+                <p>單側內耳具有<strong>三條互相垂直的半規管</strong>（水平、前、後半規管各一條），兩端皆銜接於<strong>橢圓囊（utricle）</strong>形成閉合流體迴路（<strong>點擊壺腹嵴上的毛細胞</strong>可 Zoom-in 至單一毛細胞）：</p>
+                <ul>
+                    <li><strong>壺腹嵴與頂帽（Cupula）</strong>：每條半規管一端膨大為<strong>壺腹（ampulla）</strong>，內有鞍狀<strong>壺腹嵴（crista ampullaris）</strong>，毛細胞的纖毛伸入無耳石的膠狀<strong>頂帽（cupula）</strong>中，且同一壺腹嵴內的動纖毛朝向完全一致（水平半規管皆朝向橢圓囊側）。</li>
+                    <li><strong>內淋巴慣性與推拉效應</strong>：以左耳單一水平半規管為例，開始向左轉頭（角加速）時，管壁隨頭轉動，管內<strong>內淋巴液因慣性滯後</strong>產生朝向橢圓囊（向壺腹）的相對流動，推彎頂帽使毛細胞<span class="hl-depol">全部去極化興奮</span>；向右轉頭則背離動纖毛而<span class="hl-hyper">超極化抑制</span>。</li>
+                    <li><strong>等速旋轉適應</strong>：若維持等速旋轉，內淋巴與管壁同速而無相對流動，<strong>頂帽藉彈性回彈直立</strong>，放電回到基準值；驟停時內淋巴因慣性繼續前衝，造成反向彎曲與眩暈感。</li>
+                </ul>
+            `,
+            renderControls: (box) => {
+                box.innerHTML = `
+                    <div class="ctrl-label"><span>檢視哪一條半規管的壺腹（Ampulla）</span></div>
+                    <div class="btn-group">
+                        <button class="sim-btn ${state.selectedCanal==='horiz'?'active':''}" data-cn="horiz">水平半規管 (搖頭)</button>
+                        <button class="sim-btn ${state.selectedCanal==='ant'?'active':''}" data-cn="ant">前半規管 (點頭)</button>
+                        <button class="sim-btn ${state.selectedCanal==='post'?'active':''}" data-cn="post">後半規管 (側傾)</button>
+                    </div>
+                    <div class="ctrl-label" style="margin-top:4px;"><span>旋轉角加速度階段（觀察內淋巴慣性與頂帽回彈）</span></div>
+                    <div class="btn-group">
+                        <button class="sim-btn ${state.canalMode==='accel_left'?'active':''}" data-cm="accel_left">↺ 開始同側旋轉 (角加速·興奮)</button>
+                        <button class="sim-btn ${state.canalMode==='const_left'?'active':''}" data-cm="const_left">↻ 維持等速旋轉 (頂帽回彈)</button>
+                        <button class="sim-btn ${state.canalMode==='stop_left'?'active':''}" data-cm="stop_left">⏹ 旋轉驟停 (角減速·抑制)</button>
+                        <button class="sim-btn ${state.canalMode==='accel_right'?'active':''}" data-cm="accel_right">↻ 開始反側旋轉 (角加速·抑制)</button>
+                        <button class="sim-btn ${state.canalMode==='rest'?'active':''}" data-cm="rest">● 完全靜止</button>
+                    </div>
+                `;
+                box.querySelectorAll('[data-cn]').forEach(btn => {
+                    btn.onclick = () => {
+                        state.selectedCanal = btn.dataset.cn;
+                        state.activeLocationId = 'ampulla_' + btn.dataset.cn;
+                        state.hairCellOriginId = state.activeLocationId;
+                        updateStepUI(false);
+                    };
+                });
+                box.querySelectorAll('[data-cm]').forEach(btn => {
+                    btn.onclick = () => {
+                        state.canalMode = btn.dataset.cm;
+                        state.canalAnimTimer = 0;
+                        updateStepUI(false);
+                    };
+                });
+            }
+        },
+        {
+            badge: 'Step 5 / 6 · 2D 靜與動平衡覺受器對照',
+            title: '靜的平衡覺（囊斑）vs. 動的平衡覺（壺腹嵴）比較',
+            html: `
+                <p>透過上方同步橫切面可直觀比較兩種前庭受器的構造與力學差異：</p>
+                <table class="comp-table">
+                    <thead>
+                        <tr>
+                            <th>比較項目</th>
+                            <th>靜的平衡覺（耳石器）</th>
+                            <th>動的平衡覺（半規管）</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>感測器官</strong></td>
+                            <td>橢圓囊（水平囊斑）、球囊（垂直囊斑）</td>
+                            <td>前、後、水平半規管之壺腹（壺腹嵴）</td>
+                        </tr>
+                        <tr>
+                            <td><strong>力學刺激</strong></td>
+                            <td>重力方向、頭部傾斜、水平/垂直直線加速度</td>
+                            <td>三維旋轉角加速度（搖頭、點頭、側傾）</td>
+                        </tr>
+                        <tr>
+                            <td><strong>膠質覆蓋物</strong></td>
+                            <td><span class="hl-oto">耳石膜</span>（含高密度碳酸鈣耳石結晶）</td>
+                            <td><span class="hl-canal">頂帽（Cupula）</span>（無耳石，橫跨壺腹管腔）</td>
+                        </tr>
+                        <tr>
+                            <td><strong>纖毛極性排列</strong></td>
+                            <td>跨微紋（striola）兩側極性相反，呈多方向梯度</td>
+                            <td>同一壺腹嵴內所有毛細胞動纖毛朝向完全一致</td>
+                        </tr>
+                    </tbody>
+                </table>
+            `,
+            renderControls: (box) => {
+                box.innerHTML = `
+                    <div class="ctrl-label"><span>同步施加機械偏移刺激（點擊毛細胞可放大）</span></div>
+                    <input type="range" id="comp-slider" min="-100" max="100" value="${Math.round(state.compareSyncForce*100)}">
+                    <div class="btn-group">
+                        <button class="sim-btn" id="comp-l">◀ 左向偏移刺激</button>
+                        <button class="sim-btn" id="comp-0">● 歸零復位</button>
+                        <button class="sim-btn" id="comp-r">右向偏移刺激 ▶</button>
+                    </div>
+                `;
+                const sl = box.querySelector('#comp-slider');
+                sl.oninput = (e) => { state.compareSyncForce = parseInt(e.target.value, 10) / 100; };
+                box.querySelector('#comp-l').onclick = () => { state.compareSyncForce = -0.8; sl.value = -80; };
+                box.querySelector('#comp-0').onclick = () => { state.compareSyncForce = 0; sl.value = 0; };
+                box.querySelector('#comp-r').onclick = () => { state.compareSyncForce = 0.8; sl.value = 80; };
+            }
+        },
+        {
+            badge: 'Step 6 / 6 · 2D 神經傳導路徑與 VOR 反射',
+            title: '神經傳導路徑、VOR 眼動反射與中樞整合',
+            html: `
+                <p>前庭毛細胞為次級感覺受器，訊號經以下路徑傳遞並與<strong>視覺、本體感覺</strong>會合：</p>
+                <ul>
+                    <li><strong>初級傳入神經元</strong>：雙極神經元胞體位於<strong>前庭神經節（Scarpa 神經節）</strong>，匯入<strong>前庭耳蝸神經（CN VIII）</strong>進入腦幹<strong>前庭神經核群</strong>（上、內、外、下核）。</li>
+                    <li><span class="hl-depol">前庭眼動反射（VOR）</span>：經<strong>內側縱束（MLF）</strong>連結動眼（CN III）、滑車（CN IV）與外展神經（CN VI）核團，使轉頭時<strong>眼球作等速反向移動</strong>，穩定視網膜影像。</li>
+                    <li><span class="hl-canal">前庭脊髓反射</span>：經前庭脊髓徑調節軀幹與下肢伸肌／屈肌張力，維持直立姿勢與步態平衡。</li>
+                    <li><span class="hl-oto">小腦與大腦皮質</span>：投射至小腦<strong>絨球小結葉</strong>校準運動誤差，並經<strong>丘腦</strong>傳至大腦皮質前庭區，產生自覺空間方位知覺。</li>
+                </ul>
+            `,
+            renderControls: (box) => {
+                box.innerHTML = `
+                    <div class="ctrl-label"><span>凸顯神經傳導分支</span></div>
+                    <div class="btn-group">
+                        <button class="sim-btn ${state.activePathway==='all'?'active':''}" data-pw="all">全部路徑</button>
+                        <button class="sim-btn ${state.activePathway==='vor'?'active':''}" data-pw="vor">VOR 眼動反射</button>
+                        <button class="sim-btn ${state.activePathway==='vsr'?'active':''}" data-pw="vsr">前庭脊髓姿態</button>
+                        <button class="sim-btn ${state.activePathway==='cortex'?'active':''}" data-pw="cortex">小腦與大腦皮質</button>
+                    </div>
+                    <div class="ctrl-label" style="margin-top:4px;"><span>VOR 轉頭測試速度</span></div>
+                    <input type="range" id="vor-slider" min="0" max="100" value="${Math.round(state.vorHeadSpeed*100)}">
+                `;
+                box.querySelectorAll('.sim-btn').forEach(btn => {
+                    btn.onclick = () => {
+                        state.activePathway = btn.dataset.pw;
+                        updateStepUI(false);
+                    };
+                });
+                box.querySelector('#vor-slider').oninput = (e) => {
+                    state.vorHeadSpeed = parseInt(e.target.value, 10) / 100;
+                };
+            }
+        }
+    ];
+
+    // ==================== DOM 元素綁定 ====================
+    const appEl = document.getElementById('app');
+    const viewportEl = document.getElementById('viewport');
+    const canvas2d = document.getElementById('canvas2d');
+    const ctx = canvas2d.getContext('2d');
+    const container3d = document.getElementById('container3d');
+    const labels3dContainer = document.getElementById('labels-3d');
+
+    const hudBadge = document.getElementById('hud-step-badge');
+    const hudLocationBar = document.getElementById('hud-location-bar');
+    const backTo3dBtn = document.getElementById('back-to-3d-btn');
+    const view3dCloseupBtn = document.getElementById('view-3d-closeup-btn');
+    const resetViewBtn = document.getElementById('reset-view-btn');
+    const openPanelBtn = document.getElementById('open-panel-btn');
+    const closePanelBtn = document.getElementById('close-panel-btn');
+
+    const focusCard3d = document.getElementById('focus-card-3d');
+    const fcTitle = document.getElementById('fc-title');
+    const fcDesc = document.getElementById('fc-desc');
+    const fcActions = document.getElementById('fc-actions');
+    const fcCloseBtn = document.getElementById('fc-close-btn');
+    const hint3dBar = document.getElementById('hint-3d-bar');
+
+    const stepDots = document.querySelectorAll('.step-dot');
+    const prevStepBtn = document.getElementById('prev-step-btn');
+    const nextStepBtn = document.getElementById('next-step-btn');
+    const toggleLabelsChk = document.getElementById('toggle-labels');
+    const playPauseBtn = document.getElementById('play-pause-btn');
+
+    const stepControlsBox = document.getElementById('step-controls');
+    const stepDescBox = document.getElementById('step-description');
+
+    // ==================== Three.js 3D 擬真膜迷路拓樸建構 (Step 1) ====================
+    let scene3d, camera3d, renderer3d, controls3d, labyrinthGroup;
+    const markers3d = [];
+    const meshesByGroup = { otolith: [], canals: [], other: [] };
+    const interactiveMeshes3D = []; // 支援 Raycaster 點擊的 3D 結構
+    let raycaster3d, mouse3d;
+    let hoveredLoc3D = null;
+
+    // 3D 相機平滑 Zoom 動畫狀態
+    let camAnim = {
+        active: false,
+        startTime: 0,
+        duration: 520,
+        startPos: new THREE.Vector3(),
+        endPos: new THREE.Vector3(),
+        startTarget: new THREE.Vector3(),
+        endTarget: new THREE.Vector3(),
+        onComplete: null
+    };
+
+    function registerInteractiveMesh(mesh, locationId, groupName) {
+        mesh.userData.locationId = locationId;
+        mesh.userData.baseOpacity = mesh.material.opacity;
+        interactiveMeshes3D.push(mesh);
+        if (groupName && meshesByGroup[groupName]) {
+            meshesByGroup[groupName].push(mesh);
+        }
+    }
+
+    function initThreeJS() {
+        scene3d = new THREE.Scene();
+        camera3d = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+        camera3d.position.set(5.4, 3.3, 6.8);
+
+        // 兼顧高畫質與渲染效能 (限制 DPR <= 2, PowerPreference high-performance)
+        renderer3d = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+        renderer3d.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer3d.sortObjects = true;
+        container3d.appendChild(renderer3d.domElement);
+
+        controls3d = new THREE.OrbitControls(camera3d, renderer3d.domElement);
+        controls3d.enableDamping = true;
+        controls3d.dampingFactor = 0.08;
+        controls3d.minDistance = 1.4;
+        controls3d.maxDistance = 16;
+        controls3d.target.set(0, 0.35, 0);
+
+        raycaster3d = new THREE.Raycaster();
+        mouse3d = new THREE.Vector2();
+
+        // 燈光配置
+        const ambLight = new THREE.AmbientLight(0xffffff, 0.72);
+        scene3d.add(ambLight);
+        const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.9);
+        dirLight1.position.set(6, 10, 8);
+        scene3d.add(dirLight1);
+        const dirLight2 = new THREE.DirectionalLight(0x38bdf8, 0.45);
+        dirLight2.position.set(-7, -4, -6);
+        scene3d.add(dirLight2);
+
+        // 空間參考座標網格
+        const grid = new THREE.GridHelper(9, 9, 0x283753, 0x172236);
+        grid.position.y = -2.25;
+        scene3d.add(grid);
+
+        labyrinthGroup = new THREE.Group();
+        scene3d.add(labyrinthGroup);
+
+        // ==================== 1. 橢圓囊 (Utricle) 與內部水平排列囊斑 (Horizontal Macula) ====================
+        // 外層半透明膜質囊壁 (讓使用者直接看穿內部水平排列的囊斑!)
+        const matUtricleShell = new THREE.MeshPhongMaterial({
+            color: 0xf59e0b,
+            emissive: 0x451a03,
+            specular: 0xffffff,
+            shininess: 85,
+            transparent: true,
+            opacity: 0.36,
+            depthWrite: false,
+            side: THREE.DoubleSide
+        });
+        const utricleGeo = new THREE.SphereGeometry(0.72, 28, 20);
+        utricleGeo.scale(1.42, 0.78, 0.96);
+        const utricleShell = new THREE.Mesh(utricleGeo, matUtricleShell);
+        utricleShell.position.set(0, 0.25, 0.05);
+        utricleShell.renderOrder = 4;
+        labyrinthGroup.add(utricleShell);
+        registerInteractiveMesh(utricleShell, 'utricle', 'otolith');
+
+        // 橢圓囊內部：水平排列囊斑 (Macula of Utricle - 水平面 XZ plane)
+        const utricleMaculaGroup = new THREE.Group();
+        utricleMaculaGroup.position.set(0.02, 0.06, 0.05);
+        labyrinthGroup.add(utricleMaculaGroup);
+
+        // (a) 囊斑感覺上皮水平基板
+        const matMaculaBase = new THREE.MeshPhongMaterial({
+            color: 0xd97706,
+            emissive: 0x78350f,
+            shininess: 60,
+            transparent: true,
+            opacity: 0.96
+        });
+        const uBaseGeo = new THREE.CylinderGeometry(0.56, 0.58, 0.07, 24);
+        uBaseGeo.scale(1.22, 1, 0.85);
+        const uBaseMesh = new THREE.Mesh(uBaseGeo, matMaculaBase);
+        utricleMaculaGroup.add(uBaseMesh);
+        registerInteractiveMesh(uBaseMesh, 'utricle', 'otolith');
+
+        // (b) 水平耳石膜 (Otolithic membrane)
+        const matOtoMembrane = new THREE.MeshPhongMaterial({
+            color: 0xfde047,
+            emissive: 0x713f12,
+            transparent: true,
+            opacity: 0.75
+        });
+        const uMemGeo = new THREE.CylinderGeometry(0.53, 0.55, 0.06, 24);
+        uMemGeo.scale(1.2, 1, 0.82);
+        const uMemMesh = new THREE.Mesh(uMemGeo, matOtoMembrane);
+        uMemMesh.position.y = 0.07;
+        utricleMaculaGroup.add(uMemMesh);
+        registerInteractiveMesh(uMemMesh, 'utricle', 'otolith');
+
+        // (c) 頂層碳酸鈣耳石結晶顆粒 (Otoconia) 與微紋 (Striola) 及毛細胞纖毛柱
+        const matOtoconia = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x9ca3af });
+        const crystalGeo = new THREE.OctahedronGeometry(0.038, 0);
+        const ciliaGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.07, 6);
+        const matCilia3D = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+
+        for (let i = 0; i < 16; i++) {
+            const angle = (i / 16) * Math.PI * 2;
+            const rad = (i % 2 === 0) ? 0.36 : 0.18;
+            const cx = Math.cos(angle) * rad * 1.15;
+            const cz = Math.sin(angle) * rad * 0.78;
+            const crystal = new THREE.Mesh(crystalGeo, matOtoconia);
+            crystal.position.set(cx, 0.115, cz);
+            crystal.rotation.set(i * 0.5, i * 0.8, 0);
+            utricleMaculaGroup.add(crystal);
+            meshesByGroup.otolith.push(crystal);
+
+            if (i % 2 === 0) {
+                const cil = new THREE.Mesh(ciliaGeo, matCilia3D);
+                cil.position.set(cx, 0.04, cz);
+                utricleMaculaGroup.add(cil);
+                meshesByGroup.otolith.push(cil);
+            }
+        }
+
+        // (d) 水平囊斑微紋弧線 (Striola) 與水平基準框 (讓使用者一眼看出水平排列!)
+        const uStriolaPts = [];
+        for (let i = -6; i <= 6; i++) {
+            const t = i / 6;
+            uStriolaPts.push(new THREE.Vector3(t * 0.46, 0.11, Math.cos(t * 1.3) * 0.18 - 0.05));
+        }
+        const uStriolaGeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(uStriolaPts), 16, 0.018, 6, false);
+        const matStriola3D = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+        const uStriolaMesh = new THREE.Mesh(uStriolaGeo, matStriola3D);
+        utricleMaculaGroup.add(uStriolaMesh);
+
+        // 水平方向指示環 (Horizontal reference plane ring)
+        const horizPlaneRing = new THREE.Mesh(
+            new THREE.RingGeometry(0.68, 0.73, 32),
+            new THREE.MeshBasicMaterial({ color: 0xfbbf24, side: THREE.DoubleSide, transparent: true, opacity: 0.7 })
+        );
+        horizPlaneRing.rotation.x = Math.PI / 2;
+        horizPlaneRing.position.y = 0.04;
+        utricleMaculaGroup.add(horizPlaneRing);
+        meshesByGroup.otolith.push(horizPlaneRing);
+
+        // ==================== 2. 球囊 (Saccule) 與內部垂直排列囊斑 (Vertical Macula) ====================
+        const matSacculeShell = new THREE.MeshPhongMaterial({
+            color: 0xfbbf24,
+            emissive: 0x451a03,
+            specular: 0xffffff,
+            shininess: 85,
+            transparent: true,
+            opacity: 0.36,
+            depthWrite: false,
+            side: THREE.DoubleSide
+        });
+        const sacculeGeo = new THREE.SphereGeometry(0.56, 26, 20);
+        sacculeGeo.scale(0.84, 1.32, 0.82);
+        const sacculeShell = new THREE.Mesh(sacculeGeo, matSacculeShell);
+        sacculeShell.position.set(0.78, -0.78, 0.0);
+        sacculeShell.renderOrder = 4;
+        labyrinthGroup.add(sacculeShell);
+        registerInteractiveMesh(sacculeShell, 'saccule', 'otolith');
+
+        // 球囊內部：垂直排列囊斑 (Macula of Saccule - 垂直面 XY plane)
+        const sacculeMaculaGroup = new THREE.Group();
+        sacculeMaculaGroup.position.set(0.78, -0.78, -0.02);
+        // 旋轉使囊斑立於垂直平面 (法向量朝向外側/前外側)
+        sacculeMaculaGroup.rotation.x = Math.PI / 2;
+        sacculeMaculaGroup.rotation.z = -0.15;
+        labyrinthGroup.add(sacculeMaculaGroup);
+
+        const sBaseGeo = new THREE.CylinderGeometry(0.45, 0.47, 0.065, 24);
+        sBaseGeo.scale(0.78, 1, 1.28);
+        const sBaseMesh = new THREE.Mesh(sBaseGeo, matMaculaBase.clone());
+        sacculeMaculaGroup.add(sBaseMesh);
+        registerInteractiveMesh(sBaseMesh, 'saccule', 'otolith');
+
+        const sMemGeo = new THREE.CylinderGeometry(0.43, 0.45, 0.055, 24);
+        sMemGeo.scale(0.76, 1, 1.25);
+        const sMemMesh = new THREE.Mesh(sMemGeo, matOtoMembrane.clone());
+        sMemMesh.position.y = 0.065;
+        sacculeMaculaGroup.add(sMemMesh);
+        registerInteractiveMesh(sMemMesh, 'saccule', 'otolith');
+
+        for (let i = 0; i < 14; i++) {
+            const angle = (i / 14) * Math.PI * 2;
+            const rad = (i % 2 === 0) ? 0.28 : 0.14;
+            const cx = Math.cos(angle) * rad * 0.72;
+            const cz = Math.sin(angle) * rad * 1.2;
+            const crystal = new THREE.Mesh(crystalGeo, matOtoconia);
+            crystal.position.set(cx, 0.105, cz);
+            sacculeMaculaGroup.add(crystal);
+            meshesByGroup.otolith.push(crystal);
+
+            if (i % 2 === 0) {
+                const cil = new THREE.Mesh(ciliaGeo, matCilia3D);
+                cil.position.set(cx, 0.035, cz);
+                sacculeMaculaGroup.add(cil);
+                meshesByGroup.otolith.push(cil);
+            }
+        }
+
+        // 垂直囊斑微紋弧線 (Striola) 與垂直基準環 (一眼看出垂直排列!)
+        const sStriolaPts = [];
+        for (let i = -5; i <= 5; i++) {
+            const t = i / 5;
+            sStriolaPts.push(new THREE.Vector3(Math.sin(t * 1.4) * 0.12, 0.10, t * 0.44));
+        }
+        const sStriolaMesh = new THREE.Mesh(
+            new THREE.TubeGeometry(new THREE.CatmullRomCurve3(sStriolaPts), 14, 0.018, 6, false),
+            matStriola3D
+        );
+        sacculeMaculaGroup.add(sStriolaMesh);
+
+        const vertPlaneRing = new THREE.Mesh(
+            new THREE.RingGeometry(0.56, 0.61, 32),
+            new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide, transparent: true, opacity: 0.72 })
+        );
+        vertPlaneRing.rotation.x = Math.PI / 2;
+        vertPlaneRing.position.y = 0.035;
+        sacculeMaculaGroup.add(vertPlaneRing);
+        meshesByGroup.otolith.push(vertPlaneRing);
+
+        // ==================== 3. 橢圓球囊管 (Utriculosaccular duct) 與 內淋巴管 (Endolymphatic duct) ====================
+        const matDuctConnect = new THREE.MeshPhongMaterial({
+            color: 0xfbbf24,
+            shininess: 65,
+            transparent: true,
+            opacity: 0.85
+        });
+        // 銜接橢圓囊底部與球囊頂部
+        const utriculoSaccularCurve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(0.18, -0.05, -0.15),
+            new THREE.Vector3(0.42, -0.25, -0.22),
+            new THREE.Vector3(0.68, -0.35, -0.10)
+        ]);
+        const usDuctMesh = new THREE.Mesh(new THREE.TubeGeometry(utriculoSaccularCurve, 16, 0.075, 10, false), matDuctConnect);
+        labyrinthGroup.add(usDuctMesh);
+        meshesByGroup.otolith.push(usDuctMesh);
+
+        // 內淋巴管分支 (Endolymphatic duct)
+        const endoDuctCurve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(0.42, -0.25, -0.22),
+            new THREE.Vector3(0.05, -0.42, -0.68),
+            new THREE.Vector3(-0.35, -0.62, -1.15)
+        ]);
+        const endoDuctMesh = new THREE.Mesh(new THREE.TubeGeometry(endoDuctCurve, 16, 0.055, 8, false), matDuctConnect);
+        labyrinthGroup.add(endoDuctMesh);
+        meshesByGroup.otolith.push(endoDuctMesh);
+
+        // ==================== 4. 三條半規管與總腳 (Common Crus) 完全無縫銜接橢圓囊 (5 個開口) ====================
+        const matCanalAnt = new THREE.MeshPhongMaterial({ color: 0x34d399, shininess: 80, transparent: true, opacity: 0.88 });
+        const matCanalPost = new THREE.MeshPhongMaterial({ color: 0x2dd4bf, shininess: 80, transparent: true, opacity: 0.88 });
+        const matCanalHoriz = new THREE.MeshPhongMaterial({ color: 0x38bdf8, shininess: 80, transparent: true, opacity: 0.88 });
+        const matCommonCrus = new THREE.MeshPhongMaterial({ color: 0x10b981, shininess: 80, transparent: true, opacity: 0.90 });
+
+        // (A) 總腳 (Common Crus / Crus Commune)：前、後半規管非壺腹端匯合處，連入橢圓囊後上內側 (第 1 個開口)
+        const commonCrusJoinPt = new THREE.Vector3(-0.82, 1.48, -0.62);
+        const commonCrusCurve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(-0.35, 0.42, -0.18), // 直接嵌入橢圓囊後上壁
+            new THREE.Vector3(-0.58, 0.92, -0.40),
+            commonCrusJoinPt
+        ]);
+        const commonCrusMesh = new THREE.Mesh(new THREE.TubeGeometry(commonCrusCurve, 20, 0.165, 14, false), matCommonCrus);
+        labyrinthGroup.add(commonCrusMesh);
+        meshesByGroup.canals.push(commonCrusMesh);
+
+        // (B) 前半規管 (Anterior / Superior Semicircular Canal)
+        // 從橢圓囊前上外側 (第 2 個開口) 經前壺腹 (0.46, 0.72, 0.25) 拱起並連至總腳匯合點 (-0.82, 1.48, -0.62)
+        const antCanalCurve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(0.22, 0.42, 0.14),   // 嵌入橢圓囊前上部
+            new THREE.Vector3(0.46, 0.72, 0.25),   // 前壺腹中心
+            new THREE.Vector3(0.68, 1.48, 0.46),
+            new THREE.Vector3(0.42, 2.38, 0.36),
+            new THREE.Vector3(-0.18, 2.62, -0.05),
+            new THREE.Vector3(-0.68, 2.15, -0.45),
+            commonCrusJoinPt                       // 匯入總腳
+        ]);
+        const antCanalMesh = new THREE.Mesh(new THREE.TubeGeometry(antCanalCurve, 44, 0.13, 14, false), matCanalAnt);
+        labyrinthGroup.add(antCanalMesh);
+        registerInteractiveMesh(antCanalMesh, 'ampulla_ant', 'canals');
+
+        // (C) 後半規管 (Posterior Semicircular Canal - 與前半規管呈 90 度垂直正交)
+        // 從橢圓囊後下部 (第 3 個開口) 經後壺腹 (-0.62, -0.15, -0.22) 向後外上方繞回總腳匯合點 (-0.82, 1.48, -0.62)
+        const postCanalCurve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(-0.28, 0.05, -0.08), // 嵌入橢圓囊後下部
+            new THREE.Vector3(-0.62, -0.15, -0.22),// 後壺腹中心
+            new THREE.Vector3(-1.28, -0.22, -0.75),
+            new THREE.Vector3(-1.88, 0.25, -1.25),
+            new THREE.Vector3(-1.92, 1.12, -1.32),
+            new THREE.Vector3(-1.42, 1.65, -0.98),
+            commonCrusJoinPt                       // 匯入總腳
+        ]);
+        const postCanalMesh = new THREE.Mesh(new THREE.TubeGeometry(postCanalCurve, 44, 0.13, 14, false), matCanalPost);
+        labyrinthGroup.add(postCanalMesh);
+        registerInteractiveMesh(postCanalMesh, 'ampulla_post', 'canals');
+
+        // (D) 水平半規管 / 外半規管 (Horizontal / Lateral Semicircular Canal)
+        // 從橢圓囊前外側 (第 4 個開口) 經水平壺腹 (0.38, 0.28, 0.62) 向外水平繞一圈，後端單腳連回橢圓囊後外側 (第 5 個開口)
+        const horizCanalCurve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(0.18, 0.26, 0.25),   // 嵌入橢圓囊前外側
+            new THREE.Vector3(0.38, 0.28, 0.62),   // 水平壺腹中心
+            new THREE.Vector3(0.22, 0.25, 1.38),
+            new THREE.Vector3(-0.55, 0.20, 1.85),
+            new THREE.Vector3(-1.38, 0.16, 1.48),
+            new THREE.Vector3(-1.48, 0.17, 0.72),
+            new THREE.Vector3(-0.92, 0.20, 0.22),
+            new THREE.Vector3(-0.35, 0.22, 0.05)   // 單腳 (Simple limb) 嵌入橢圓囊後外側
+        ]);
+        const horizCanalMesh = new THREE.Mesh(new THREE.TubeGeometry(horizCanalCurve, 44, 0.13, 14, false), matCanalHoriz);
+        labyrinthGroup.add(horizCanalMesh);
+        registerInteractiveMesh(horizCanalMesh, 'ampulla_horiz', 'canals');
+
+        // ==================== 5. 三個半透明壺腹 (Ampullae) 及其內部的壺腹嵴 (Crista) 與膠狀頂帽 (Cupula) ====================
+        function createDetailedAmpulla(pos, rotEuler, locationId) {
+            const ampGroup = new THREE.Group();
+            ampGroup.position.copy(pos);
+            ampGroup.rotation.copy(rotEuler);
+            labyrinthGroup.add(ampGroup);
+
+            // (a) 半透明壺腹膨大外殼 (讓內部的壺腹嵴與頂帽清楚可見!)
+            const matAmpShell = new THREE.MeshPhongMaterial({
+                color: 0xfb7185,
+                emissive: 0x4c0519,
+                specular: 0xffffff,
+                shininess: 90,
+                transparent: true,
+                opacity: 0.38,
+                depthWrite: false,
+                side: THREE.DoubleSide
+            });
+            const shellGeo = new THREE.SphereGeometry(0.34, 22, 18);
+            shellGeo.scale(1.25, 1.05, 1.05);
+            const shellMesh = new THREE.Mesh(shellGeo, matAmpShell);
+            shellMesh.renderOrder = 5;
+            ampGroup.add(shellMesh);
+            registerInteractiveMesh(shellMesh, locationId, 'canals');
+
+            // (b) 壺腹嵴 (Crista ampullaris)：橫跨壺腹底壁的鞍狀隆起感覺上皮
+            const matCrista = new THREE.MeshPhongMaterial({
+                color: 0xf43f5e,
+                emissive: 0x881337,
+                shininess: 60,
+                transparent: true,
+                opacity: 0.96
+            });
+            const cristaGeo = new THREE.CylinderGeometry(0.11, 0.16, 0.42, 14);
+            cristaGeo.rotateX(Math.PI / 2);
+            const cristaMesh = new THREE.Mesh(cristaGeo, matCrista);
+            cristaMesh.position.set(0, -0.17, 0);
+            ampGroup.add(cristaMesh);
+            registerInteractiveMesh(cristaMesh, locationId, 'canals');
+
+            // (c) 毛細胞纖毛束 (伸入膠狀頂帽中)
+            const ampCiliaGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.16, 6);
+            for (let k = -2; k <= 2; k++) {
+                const cMesh = new THREE.Mesh(ampCiliaGeo, matCilia3D);
+                cMesh.position.set(0, -0.04, k * 0.065);
+                ampGroup.add(cMesh);
+                meshesByGroup.canals.push(cMesh);
+            }
+
+            // (d) 膠狀頂帽 (Cupula)：覆蓋於壺腹嵴上方並延伸至壺腹頂壁的半透明膠質帽
+            const matCupula = new THREE.MeshPhongMaterial({
+                color: 0x34d399,
+                emissive: 0x065f46,
+                specular: 0xa7f3d0,
+                shininess: 95,
+                transparent: true,
+                opacity: 0.82
+            });
+            const cupulaGeo = new THREE.SphereGeometry(0.22, 16, 14);
+            cupulaGeo.scale(0.62, 1.15, 0.92);
+            const cupulaMesh = new THREE.Mesh(cupulaGeo, matCupula);
+            cupulaMesh.position.set(0, 0.06, 0);
+            cupulaMesh.renderOrder = 3;
+            ampGroup.add(cupulaMesh);
+            registerInteractiveMesh(cupulaMesh, locationId, 'canals');
+        }
+
+        // 建立三個半規管的壺腹（內含壺腹嵴、毛細胞纖毛與頂帽）
+        createDetailedAmpulla(
+            new THREE.Vector3(0.46, 0.72, 0.25),
+            new THREE.Euler(0.2, 0.3, -0.45),
+            'ampulla_ant'
+        );
+        createDetailedAmpulla(
+            new THREE.Vector3(0.38, 0.28, 0.62),
+            new THREE.Euler(0.0, -0.35, 0.1),
+            'ampulla_horiz'
+        );
+        createDetailedAmpulla(
+            new THREE.Vector3(-0.62, -0.15, -0.22),
+            new THREE.Euler(-0.3, -0.5, 0.4),
+            'ampulla_post'
+        );
+
+        // ==================== 6. 連合管 (Ductus reuniens)、耳蝸 (Cochlea) 與前庭耳蝸神經 (CN VIII) ====================
+        const matCochlea = new THREE.MeshPhongMaterial({ color: 0xa78bfa, shininess: 65, transparent: true, opacity: 0.85 });
+        const cochleaPoints = [
+            new THREE.Vector3(0.88, -1.18, 0.12), // 自球囊下端經連合管 (Ductus reuniens) 銜接
+            new THREE.Vector3(1.25, -1.32, 0.48)
+        ];
+        const turns = 2.65;
+        for (let i = 0; i <= 85; i++) {
+            const t = i / 85;
+            const angle = t * Math.PI * 2 * turns;
+            const r = 1.12 * (1 - t * 0.78);
+            const x = 1.95 + Math.cos(angle) * r * 0.72;
+            const y = -1.15 + Math.sin(angle) * r * 0.72;
+            const z = 0.85 + t * 0.95;
+            cochleaPoints.push(new THREE.Vector3(x, y, z));
+        }
+        const cochleaCurve = new THREE.CatmullRomCurve3(cochleaPoints);
+        const cochleaGeo = new THREE.TubeGeometry(cochleaCurve, 80, 0.19, 14, false);
+        const cochleaMesh = new THREE.Mesh(cochleaGeo, matCochlea);
+        labyrinthGroup.add(cochleaMesh);
+        meshesByGroup.other.push(cochleaMesh);
+
+        // 前庭耳蝸神經束 (CN VIII) 與連向各壺腹嵴/囊斑的分支
+        const matNerve = new THREE.MeshPhongMaterial({ color: 0xfef08a, shininess: 40, transparent: true, opacity: 0.88 });
+        const mainNerveCurve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(0.35, -0.15, -0.25),
+            new THREE.Vector3(1.05, -0.45, -1.15),
+            new THREE.Vector3(2.15, -0.65, -2.2)
+        ]);
+        const nerveMesh = new THREE.Mesh(new THREE.TubeGeometry(mainNerveCurve, 20, 0.21, 12, false), matNerve);
+        labyrinthGroup.add(nerveMesh);
+        meshesByGroup.other.push(nerveMesh);
+
+        // 前庭神經細分支連至壺腹與囊斑
+        const branchTargets = [
+            new THREE.Vector3(0.46, 0.60, 0.18),  // 往前半規管壺腹嵴
+            new THREE.Vector3(0.35, 0.18, 0.52),  // 往水平半規管壺腹嵴
+            new THREE.Vector3(-0.55, -0.22, -0.22), // 往後半規管壺腹嵴
+            new THREE.Vector3(0.05, 0.02, 0.02),  // 往橢圓囊水平囊斑
+            new THREE.Vector3(0.75, -0.75, -0.05) // 往球囊垂直囊斑
+        ];
+        branchTargets.forEach(bt => {
+            const bCurve = new THREE.CatmullRomCurve3([
+                bt,
+                new THREE.Vector3((bt.x + 0.65) * 0.5, (bt.y - 0.35) * 0.5, -0.55),
+                new THREE.Vector3(0.85, -0.38, -0.92)
+            ]);
+            const bMesh = new THREE.Mesh(new THREE.TubeGeometry(bCurve, 10, 0.042, 6, false), matNerve);
+            labyrinthGroup.add(bMesh);
+            meshesByGroup.other.push(bMesh);
+        });
+
+        // ==================== 建立 3D 空間互動錨點標籤 (點擊直接 Zoom-in 與跳轉) ====================
+        add3DLabel('橢圓囊 Utricle（水平囊斑）', new THREE.Vector3(0.02, 0.32, 0.52), 'utricle');
+        add3DLabel('球囊 Saccule（垂直囊斑）', new THREE.Vector3(0.82, -1.05, 0.45), 'saccule');
+        add3DLabel('水平管壺腹（壺腹嵴+頂帽）', new THREE.Vector3(0.55, 0.32, 0.92), 'ampulla_horiz');
+        add3DLabel('前管壺腹（壺腹嵴+頂帽）', new THREE.Vector3(0.75, 0.95, 0.38), 'ampulla_ant');
+        add3DLabel('後管壺腹（壺腹嵴+頂帽）', new THREE.Vector3(-0.82, -0.38, -0.28), 'ampulla_post');
+        add3DLabel('總腳 (Common Crus · 前後管匯合)', new THREE.Vector3(-0.78, 1.32, -0.58), null);
+        add3DLabel('前半規管 (上半規管)', new THREE.Vector3(-0.15, 2.75, -0.05), 'ampulla_ant');
+        add3DLabel('後半規管 (垂直正交)', new THREE.Vector3(-1.95, 1.15, -1.35), 'ampulla_post');
+        add3DLabel('水平半規管 (外半規管)', new THREE.Vector3(-1.45, 0.22, 1.48), 'ampulla_horiz');
+        add3DLabel('耳蝸 (聽覺部)', new THREE.Vector3(2.25, -1.35, 1.65), null);
+        add3DLabel('前庭耳蝸神經 (CN VIII)', new THREE.Vector3(2.15, -0.65, -2.2), null);
+
+        // ==================== 3D 畫布滑鼠/觸控點擊 Raycaster 事件 ====================
+        let pointerDownPos = { x: 0, y: 0 };
+        renderer3d.domElement.addEventListener('pointerdown', (e) => {
+            pointerDownPos = { x: e.clientX, y: e.clientY };
+        });
+
+        renderer3d.domElement.addEventListener('pointermove', (e) => {
+            if (state.step !== 0) return;
+            const rect = renderer3d.domElement.getBoundingClientRect();
+            mouse3d.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse3d.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+            raycaster3d.setFromCamera(mouse3d, camera3d);
+            const hits = raycaster3d.intersectObjects(interactiveMeshes3D, false);
+            if (hits.length > 0 && hits[0].object.userData.locationId) {
+                hoveredLoc3D = hits[0].object.userData.locationId;
+                renderer3d.domElement.style.cursor = 'pointer';
+            } else {
+                hoveredLoc3D = null;
+                renderer3d.domElement.style.cursor = 'grab';
+            }
+        });
+
+        renderer3d.domElement.addEventListener('pointerup', (e) => {
+            if (state.step !== 0) return;
+            const moveDist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+            if (moveDist > 6) return; // 拖曳旋轉不觸發點擊
+
+            const rect = renderer3d.domElement.getBoundingClientRect();
+            mouse3d.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse3d.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+            raycaster3d.setFromCamera(mouse3d, camera3d);
+            const hits = raycaster3d.intersectObjects(interactiveMeshes3D, false);
+            if (hits.length > 0 && hits[0].object.userData.locationId) {
+                const locId = hits[0].object.userData.locationId;
+                focus3DLocation(locId, state.click3DAutoJump);
+            }
+        });
+    }
+
+    function add3DLabel(text, pos3d, locationId = null) {
+        const el = document.createElement('div');
+        el.className = 'label-3d-tag' + (locationId ? ' clickable' : '');
+        if (locationId) {
+            el.dataset.loc = locationId;
+            el.innerHTML = `<span>${text}</span><span class="tag-zoom-icon">🔍細部</span>`;
+            el.addEventListener('click', (e) => {
+                e.stopPropagation();
+                focus3DLocation(locationId, state.click3DAutoJump);
+            });
+        } else {
+            el.textContent = text;
+        }
+        labels3dContainer.appendChild(el);
+        markers3d.push({ el, pos3d, locationId });
+    }
+
+    // ==================== 3D 點擊平滑 Zoom-in 與跳轉至細部/毛細胞邏輯 ====================
+    function start3DCameraTween(targetPosArr, targetLookArr, duration = 520, onComplete = null) {
+        // 先將群組旋轉歸零以確保局部座標精準對齊
+        labyrinthGroup.rotation.y = 0;
+        camAnim.active = true;
+        camAnim.startTime = performance.now();
+        camAnim.duration = duration;
+        camAnim.startPos.copy(camera3d.position);
+        camAnim.endPos.set(targetPosArr[0], targetPosArr[1], targetPosArr[2]);
+        camAnim.startTarget.copy(controls3d.target);
+        camAnim.endTarget.set(targetLookArr[0], targetLookArr[1], targetLookArr[2]);
+        camAnim.onComplete = onComplete;
+    }
+
+    function focus3DLocation(locationId, autoJumpTo2D = false) {
+        const info = ANATOMY_LOCATIONS[locationId];
+        if (!info) return;
+
+        state.activeLocationId = locationId;
+        state.hairCellOriginId = locationId;
+
+        if (info.otolithOrgan) state.otolithOrgan = info.otolithOrgan;
+        if (info.canalType) state.selectedCanal = info.canalType;
+
+        // 更新 3D 標籤高亮狀態
+        markers3d.forEach(m => {
+            m.el.classList.toggle('active-focus', m.locationId === locationId);
+        });
+
+        updateLocationHUD();
+        updateStepUI(false);
+
+        if (state.step !== 0) {
+            state.step = 0;
+            updateStepUI(false);
+        }
+
+        // 顯示 3D 聚焦部位卡片
+        show3DFocusCard(locationId);
+
+        // 啟動 3D 相機平滑飛入該構造 (讓使用者清楚看到在 3D 哪個部位放大)
+        start3DCameraTween(info.camPos, info.camTarget, autoJumpTo2D ? 480 : 550, () => {
+            if (autoJumpTo2D) {
+                jumpToLocationDetail(locationId);
+            }
+        });
+    }
+
+    function show3DFocusCard(locationId) {
+        const info = ANATOMY_LOCATIONS[locationId];
+        if (!info || locationId === 'overview') {
+            focusCard3d.style.display = 'none';
+            hint3dBar.style.display = 'block';
+            return;
+        }
+        hint3dBar.style.display = 'none';
+        focusCard3d.style.display = 'flex';
+        fcTitle.innerHTML = `📍 ${info.name}`;
+        fcDesc.innerHTML = info.desc;
+        fcActions.innerHTML = `
+            <button class="fc-btn" id="fc-jump-detail">🔬 進入此部位細部橫切面 ▶</button>
+            <button class="fc-btn secondary" id="fc-jump-hair">⚡ 直接放大至毛細胞機制 ▶</button>
+        `;
+        fcActions.querySelector('#fc-jump-detail').onclick = () => {
+            jumpToLocationDetail(locationId);
+        };
+        fcActions.querySelector('#fc-jump-hair').onclick = () => {
+            state.hairCellOriginId = locationId;
+            state.activeLocationId = locationId;
+            state.step = 1; // Step 2: 毛細胞微觀放大
+            updateStepUI(true);
+        };
+    }
+
+    function jumpToLocationDetail(locationId) {
+        const info = ANATOMY_LOCATIONS[locationId];
+        if (!info) return;
+        state.activeLocationId = locationId;
+        state.hairCellOriginId = locationId;
+        if (info.otolithOrgan) state.otolithOrgan = info.otolithOrgan;
+        if (info.canalType) state.selectedCanal = info.canalType;
+        if (info.targetStep !== undefined) {
+            state.step = info.targetStep;
+            updateStepUI(true);
+        }
+    }
+
+    fcCloseBtn.addEventListener('click', () => {
+        resetCameraAndPan();
+    });
+
+    backTo3dBtn.addEventListener('click', () => {
+        state.step = 0;
+        state.activeLocationId = 'overview';
+        updateStepUI(false);
+        resetCameraAndPan();
+    });
+
+    view3dCloseupBtn.addEventListener('click', () => {
+        const targetLoc = (state.activeLocationId && state.activeLocationId !== 'overview')
+            ? state.activeLocationId
+            : state.hairCellOriginId;
+        state.step = 0;
+        updateStepUI(false);
+        focus3DLocation(targetLoc, false);
+    });
+
+    function update3DHighlight() {
+        const mode = state.step0Highlight;
+        meshesByGroup.otolith.forEach(m => {
+            const base = m.userData.baseOpacity !== undefined ? m.userData.baseOpacity : 0.9;
+            m.material.opacity = (mode === 'all' || mode === 'otolith') ? base : 0.12;
+        });
+        meshesByGroup.canals.forEach(m => {
+            const base = m.userData.baseOpacity !== undefined ? m.userData.baseOpacity : 0.9;
+            m.material.opacity = (mode === 'all' || mode === 'canals') ? base : 0.12;
+        });
+        meshesByGroup.other.forEach(m => {
+            m.material.opacity = (mode === 'all') ? 0.85 : 0.12;
+        });
+    }
+
+    function render3DScene(now) {
+        if (!renderer3d) return;
+
+        // 處理 3D 相機平滑 Zoom 動畫
+        if (camAnim.active) {
+            const elapsed = now - camAnim.startTime;
+            const t = Math.min(1, elapsed / camAnim.duration);
+            // Cubic ease-out
+            const ease = 1 - Math.pow(1 - t, 3);
+            camera3d.position.lerpVectors(camAnim.startPos, camAnim.endPos, ease);
+            controls3d.target.lerpVectors(camAnim.startTarget, camAnim.endTarget, ease);
+            if (t >= 1) {
+                camAnim.active = false;
+                if (camAnim.onComplete) {
+                    const cb = camAnim.onComplete;
+                    camAnim.onComplete = null;
+                    cb();
+                }
+            }
+        } else if (state.isPlaying && state.activeLocationId === 'overview') {
+            labyrinthGroup.rotation.y += 0.0022;
+        }
+
+        controls3d.update();
+        renderer3d.render(scene3d, camera3d);
+
+        // 同步更新 3D HTML 標籤投影座標與顯示隱藏
+        const rect = viewportEl.getBoundingClientRect();
+        markers3d.forEach(m => {
+            if (!state.showLabels || state.step !== 0) {
+                m.el.style.display = 'none';
+                return;
+            }
+            const worldPos = m.pos3d.clone().applyMatrix4(labyrinthGroup.matrixWorld);
+            worldPos.project(camera3d);
+            if (worldPos.z > 1) {
+                m.el.style.display = 'none';
+                return;
+            }
+            const x = (worldPos.x * 0.5 + 0.5) * rect.width;
+            const y = (-worldPos.y * 0.5 + 0.5) * rect.height;
+            m.el.style.display = 'flex';
+            m.el.style.left = `${x}px`;
+            m.el.style.top = `${y}px`;
+        });
+    }
+
+    // ==================== 視窗縮放與不重疊佈局自動適應 ====================
+    function resizeViewport() {
+        const rect = viewportEl.getBoundingClientRect();
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+        canvas2d.width = Math.max(1, Math.floor(rect.width * dpr));
+        canvas2d.height = Math.max(1, Math.floor(rect.height * dpr));
+
+        if (renderer3d && camera3d) {
+            camera3d.aspect = Math.max(0.1, rect.width / Math.max(1, rect.height));
+            camera3d.updateProjectionMatrix();
+            renderer3d.setSize(rect.width, rect.height);
+        }
+    }
+
+    const resizeObserver = new ResizeObserver(() => resizeViewport());
+    resizeObserver.observe(viewportEl);
+
+    // ==================== 2D Canvas 觸控友善 Zoom & Pan 與熱區點擊系統 ====================
+    const activePointers = new Map();
+    let lastPinchDist = 0;
+    let lastPinchMid = null;
+    let canvas2dDownPos = { x: 0, y: 0 };
+
+    // 將滑鼠螢幕座標轉換為 2D 邏輯座標 (1000 x 650)
+    function clientToLogical2D(clientX, clientY) {
+        const rect = canvas2d.getBoundingClientRect();
+        const cssW = rect.width;
+        const cssH = rect.height;
+        const fitScale = Math.min(cssW / state.logicalW, cssH / state.logicalH) * 0.96;
+        const totalScale = fitScale * state.zoom;
+
+        const cx = clientX - rect.left;
+        const cy = clientY - rect.top;
+
+        const lx = (cx - (cssW / 2 + state.panX)) / totalScale + state.logicalW / 2;
+        const ly = (cy - (cssH / 2 + state.panY)) / totalScale + state.logicalH / 2;
+        return { x: lx, y: ly };
+    }
+
+    canvas2d.addEventListener('pointerdown', (e) => {
+        canvas2d.setPointerCapture(e.pointerId);
+        canvas2dDownPos = { x: e.clientX, y: e.clientY };
+        activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (activePointers.size === 2) {
+            const pts = Array.from(activePointers.values());
+            lastPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+            lastPinchMid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+        }
+    });
+
+    canvas2d.addEventListener('pointermove', (e) => {
+        if (!activePointers.has(e.pointerId)) {
+            // 僅懸停檢測 2D 可點擊熱區 (如毛細胞或右上角解剖定位小地圖)
+            const pt = clientToLogical2D(e.clientX, e.clientY);
+            let found = null;
+            for (const hr of state.hitRegions2D) {
+                if (pt.x >= hr.x && pt.x <= hr.x + hr.w && pt.y >= hr.y && pt.y <= hr.y + hr.h) {
+                    found = hr;
+                    break;
+                }
+            }
+            state.hoveredHit2D = found;
+            canvas2d.style.cursor = found ? 'pointer' : 'grab';
+            return;
+        }
+
+        const prev = activePointers.get(e.pointerId);
+        const curr = { x: e.clientX, y: e.clientY };
+        activePointers.set(e.pointerId, curr);
+
+        const rect = canvas2d.getBoundingClientRect();
+
+        if (activePointers.size === 1) {
+            state.panX += (curr.x - prev.x);
+            state.panY += (curr.y - prev.y);
+        } else if (activePointers.size === 2) {
+            const pts = Array.from(activePointers.values());
+            const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+            const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+
+            if (lastPinchDist > 10) {
+                const factor = dist / lastPinchDist;
+                applyZoomAtPoint(factor, mid.x - rect.left, mid.y - rect.top);
+            }
+            if (lastPinchMid) {
+                state.panX += (mid.x - lastPinchMid.x);
+                state.panY += (mid.y - lastPinchMid.y);
+            }
+            lastPinchDist = dist;
+            lastPinchMid = mid;
+        }
+    });
+
+    function clearPointer(e) {
+        if (activePointers.size === 1) {
+            const dist = Math.hypot(e.clientX - canvas2dDownPos.x, e.clientY - canvas2dDownPos.y);
+            if (dist < 6) {
+                // 檢查是否點擊了 2D 畫面上的毛細胞或定位小地圖熱區
+                const pt = clientToLogical2D(e.clientX, e.clientY);
+                for (const hr of state.hitRegions2D) {
+                    if (pt.x >= hr.x && pt.x <= hr.x + hr.w && pt.y >= hr.y && pt.y <= hr.y + hr.h) {
+                        if (hr.onClick) hr.onClick();
+                        break;
+                    }
+                }
+            }
+        }
+        activePointers.delete(e.pointerId);
+        if (activePointers.size < 2) {
+            lastPinchDist = 0;
+            lastPinchMid = null;
+        }
+    }
+    canvas2d.addEventListener('pointerup', clearPointer);
+    canvas2d.addEventListener('pointercancel', clearPointer);
+
+    canvas2d.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const rect = canvas2d.getBoundingClientRect();
+        const factor = e.deltaY < 0 ? 1.12 : 0.89;
+        applyZoomAtPoint(factor, e.clientX - rect.left, e.clientY - rect.top);
+    }, { passive: false });
+
+    function applyZoomAtPoint(factor, cx, cy) {
+        const rect = canvas2d.getBoundingClientRect();
+        const centerX = rect.width / 2 + state.panX;
+        const centerY = rect.height / 2 + state.panY;
+
+        const newZoom = Math.min(4.0, Math.max(0.55, state.zoom * factor));
+        const actualFactor = newZoom / state.zoom;
+
+        state.panX -= (cx - centerX) * (actualFactor - 1);
+        state.panY -= (cy - centerY) * (actualFactor - 1);
+        state.zoom = newZoom;
+    }
+
+    function resetCameraAndPan() {
+        state.zoom = 1;
+        state.panX = 0;
+        state.panY = 0;
+        if (state.step === 0) {
+            state.activeLocationId = 'overview';
+            focusCard3d.style.display = 'none';
+            hint3dBar.style.display = 'block';
+            markers3d.forEach(m => m.el.classList.remove('active-focus'));
+            updateLocationHUD();
+            updateStepUI(false);
+            if (camera3d && controls3d) {
+                start3DCameraTween(ANATOMY_LOCATIONS.overview.camPos, ANATOMY_LOCATIONS.overview.camTarget, 450);
+            }
+        }
+    }
+
+    // ==================== 2D 繪圖共用工具與「迷路解剖定位小地圖」 ====================
+    function drawLabel(text, x, y, opts = {}) {
+        if (!state.showLabels) return;
+        const {
+            align = 'center',
+            color = '#f8fafc',
+            bg = 'rgba(15, 23, 42, 0.88)',
+            border = '#38bdf8',
+            fontSize = 13.5,
+            leaderTo = null
+        } = opts;
+
+        ctx.save();
+        if (leaderTo) {
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(leaderTo[0], leaderTo[1]);
+            ctx.strokeStyle = border;
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 3]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            ctx.beginPath();
+            ctx.arc(leaderTo[0], leaderTo[1], 3.5, 0, Math.PI * 2);
+            ctx.fillStyle = border;
+            ctx.fill();
+        }
+
+        ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Microsoft JhengHei", sans-serif`;
+        const metrics = ctx.measureText(text);
+        const padX = 9, padY = 5;
+        const w = metrics.width + padX * 2;
+        const h = fontSize + padY * 2;
+
+        let bx = x - w / 2;
+        if (align === 'left') bx = x;
+        if (align === 'right') bx = x - w;
+        const by = y - h / 2;
+
+        ctx.fillStyle = bg;
+        ctx.strokeStyle = border;
+        ctx.lineWidth = 1.2;
+        roundRect(ctx, bx, by, w, h, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = color;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, bx + padX, y + 1);
+        ctx.restore();
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+    }
+
+    function drawArrow(x1, y1, x2, y2, color = '#38bdf8', width = 3, headLen = 11) {
+        const angle = Math.atan2(y2 - y1, x2 - x1);
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = width;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - headLen * Math.cos(angle - Math.PI / 6), y2 - headLen * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI / 6), y2 - headLen * Math.sin(angle + Math.PI / 6));
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+
+    // 右上角「內耳迷路解剖定位小地圖 (Anatomical Locator Mini-Map)」
+    // 讓使用者在任何 2D 放大視圖中，都能一目了然目前看的是 3D 迷路中的哪一個位置！
+    function drawAnatomicalLocatorMiniMap(activeLocId, subNote = '') {
+        const mx = 775, my = 52, mw = 200, mh = 152;
+        ctx.save();
+        ctx.fillStyle = 'rgba(11, 17, 32, 0.92)';
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.5;
+        roundRect(ctx, mx, my, mw, mh, 10);
+        ctx.fill();
+        ctx.stroke();
+
+        // 標題
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = '700 11.5px "Microsoft JhengHei", sans-serif';
+        ctx.fillText('📍 目前檢視位置 (點擊切換)', mx + 10, my + 18);
+
+        const cx = mx + 92, cy = my + 92;
+
+        // 1. 繪製迷你三半規管 (與總腳銜接於橢圓囊)
+        // 前半規管
+        ctx.strokeStyle = activeLocId === 'ampulla_ant' ? '#34d399' : 'rgba(52, 211, 153, 0.4)';
+        ctx.lineWidth = activeLocId === 'ampulla_ant' ? 4 : 2.5;
+        ctx.beginPath();
+        ctx.moveTo(cx + 6, cy - 8);
+        ctx.bezierCurveTo(cx + 16, cy - 58, cx - 28, cy - 62, cx - 22, cy - 12);
+        ctx.stroke();
+
+        // 後半規管
+        ctx.strokeStyle = activeLocId === 'ampulla_post' ? '#2dd4bf' : 'rgba(45, 212, 191, 0.4)';
+        ctx.lineWidth = activeLocId === 'ampulla_post' ? 4 : 2.5;
+        ctx.beginPath();
+        ctx.moveTo(cx - 22, cy - 12);
+        ctx.bezierCurveTo(cx - 56, cy - 35, cx - 58, cy + 18, cx - 16, cy + 8);
+        ctx.stroke();
+
+        // 水平半規管
+        ctx.strokeStyle = activeLocId === 'ampulla_horiz' ? '#38bdf8' : 'rgba(56, 189, 248, 0.4)';
+        ctx.lineWidth = activeLocId === 'ampulla_horiz' ? 4 : 2.5;
+        ctx.beginPath();
+        ctx.moveTo(cx + 4, cy - 2);
+        ctx.bezierCurveTo(cx - 45, cy - 14, cx - 50, cy + 12, cx - 12, cy + 2);
+        ctx.stroke();
+
+        // 2. 迷你耳蝸 (右下方螺旋)
+        ctx.strokeStyle = 'rgba(167, 139, 250, 0.45)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(cx + 18, cy + 24);
+        ctx.bezierCurveTo(cx + 42, cy + 28, cx + 56, cy + 10, cx + 46, cy - 2);
+        ctx.bezierCurveTo(cx + 36, cy - 10, cx + 28, cy + 6, cx + 38, cy + 8);
+        ctx.stroke();
+
+        // 3. 橢圓囊 (Utricle) + 水平囊斑紅線
+        ctx.fillStyle = activeLocId === 'utricle' ? 'rgba(245, 158, 11, 0.85)' : 'rgba(245, 158, 11, 0.32)';
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.ellipse(cx - 2, cy, 16, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        // 水平囊斑線
+        ctx.strokeStyle = '#fef08a';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(cx - 11, cy + 2);
+        ctx.lineTo(cx + 7, cy + 2);
+        ctx.stroke();
+
+        // 4. 球囊 (Saccule) + 垂直囊斑線
+        ctx.fillStyle = activeLocId === 'saccule' ? 'rgba(251, 191, 36, 0.85)' : 'rgba(251, 191, 36, 0.32)';
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.ellipse(cx + 14, cy + 18, 9, 13, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        // 垂直囊斑線
+        ctx.strokeStyle = '#fef08a';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(cx + 14, cy + 10);
+        ctx.lineTo(cx + 14, cy + 26);
+        ctx.stroke();
+
+        // 5. 三個壺腹小圓點
+        const ampCoords = {
+            ampulla_ant:   { x: cx + 7,  y: cy - 11, c: '#34d399', label: '前壺腹' },
+            ampulla_horiz: { x: cx + 3,  y: cy - 3,  c: '#38bdf8', label: '水平壺腹' },
+            ampulla_post:  { x: cx - 17, y: cy + 8,  c: '#2dd4bf', label: '後壺腹' },
+            utricle:       { x: cx - 2,  y: cy + 1,  c: '#fbbf24', label: '橢圓囊(水平囊斑)' },
+            saccule:       { x: cx + 14, y: cy + 18, c: '#f59e0b', label: '球囊(垂直囊斑)' }
+        };
+
+        ['ampulla_ant', 'ampulla_horiz', 'ampulla_post'].forEach(k => {
+            const p = ampCoords[k];
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, activeLocId === k ? 5.5 : 3.8, 0, Math.PI * 2);
+            ctx.fillStyle = activeLocId === k ? '#fb7185' : 'rgba(251, 113, 133, 0.65)';
+            ctx.fill();
+        });
+
+        // 6. 在目前檢視的目標位置繪製脈衝雷達光圈
+        const target = ampCoords[activeLocId] || ampCoords.utricle;
+        const pulse = (Math.sin(state.time * 5.5) * 0.5 + 0.5);
+        ctx.beginPath();
+        ctx.arc(target.x, target.y, 8 + pulse * 7, 0, Math.PI * 2);
+        ctx.strokeStyle = '#fde047';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(target.x, target.y, 4.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#fde047';
+        ctx.fill();
+
+        // 底部顯示目前鎖定部位文字
+        ctx.fillStyle = '#fef08a';
+        ctx.font = '600 11.5px "Microsoft JhengHei", sans-serif';
+        const footerText = subNote || target.label;
+        ctx.fillText(`🎯 ${footerText}`, mx + 10, my + mh - 10);
+
+        // 註冊小地圖上的熱區讓使用者也能直接點擊小地圖返回 3D 微距位置
+        state.hitRegions2D.push({
+            x: mx, y: my, w: mw, h: mh,
+            label: '點擊在 3D 模型中微距檢視此位置',
+            onClick: () => {
+                state.step = 0;
+                updateStepUI(false);
+                focus3DLocation(activeLocId, false);
+            }
+        });
+
+        ctx.restore();
+    }
+
+    // 繪製單一毛細胞束 (支援 clickableOriginId：點擊毛細胞直接 Zoom-in 跳轉到 Step 2 毛細胞微觀視圖!)
+    function drawHairCellUnit(x, y, scale, bend, polarity = 1, showDetail = false, clickableOriginId = null) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(scale, scale);
+
+        const excitation = bend * polarity;
+        let bodyColor = '#475569';
+        if (excitation > 0.15) bodyColor = '#e11d48';
+        else if (excitation < -0.15) bodyColor = '#2563eb';
+
+        // 若此毛細胞可點擊跳轉至 Step 2 微觀放大，註冊熱區並顯示懸停光暈
+        if (clickableOriginId) {
+            const boxW = 96 * scale;
+            const boxH = 230 * scale;
+            const hx = x - boxW / 2;
+            const hy = y - 135 * scale;
+            const isHovered = state.hoveredHit2D && state.hoveredHit2D.id === `hc_${x}_${y}`;
+            if (isHovered) {
+                ctx.save();
+                ctx.strokeStyle = '#fde047';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([5, 3]);
+                roundRect(ctx, -50, -135, 100, 235, 14);
+                ctx.stroke();
+                ctx.restore();
+            }
+            state.hitRegions2D.push({
+                id: `hc_${x}_${y}`,
+                x: hx, y: hy, w: boxW, h: boxH,
+                onClick: () => {
+                    state.hairCellOriginId = clickableOriginId;
+                    state.activeLocationId = clickableOriginId;
+                    state.hairDeflection = Math.max(-1, Math.min(1, bend * polarity));
+                    state.step = 1; // 跳轉至 Step 2：單一毛細胞機械電傳導放大
+                    updateStepUI(true);
+                }
+            });
+        }
+
+        // 繪製多根階梯狀靜纖毛 + 1 根最長動纖毛
+        const count = 6;
+        const spacing = 11;
+        const startX = -((count - 1) * spacing) / 2;
+
+        const tips = [];
+        for (let i = 0; i < count; i++) {
+            const idx = polarity === 1 ? i : (count - 1 - i);
+            const isKino = (idx === count - 1);
+            const baseX = startX + i * spacing;
+            const h = 38 + idx * 14;
+            const tipX = baseX + bend * (h * 0.45);
+            const tipY = -50 - h + Math.abs(bend) * 6;
+            tips.push({ x: tipX, y: tipY, isKino });
+
+            ctx.beginPath();
+            ctx.moveTo(baseX, -50);
+            ctx.quadraticCurveTo(baseX + bend * 8, -50 - h * 0.55, tipX, tipY);
+            ctx.lineWidth = isKino ? 5.5 : 4;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = isKino ? '#facc15' : '#cbd5e1';
+            ctx.stroke();
+
+            if (isKino) {
+                ctx.beginPath();
+                ctx.arc(tipX, tipY, 4.5, 0, Math.PI * 2);
+                ctx.fillStyle = '#fde047';
+                ctx.fill();
+            }
+        }
+
+        // 頂端連線 (Tip links) 與 K+ 離子通道細節
+        if (showDetail) {
+            ctx.strokeStyle = excitation > 0.15 ? '#fb7185' : '#94a3b8';
+            ctx.lineWidth = 1.6;
+            for (let i = 0; i < tips.length - 1; i++) {
+                ctx.beginPath();
+                ctx.moveTo(tips[i].x, tips[i].y);
+                ctx.lineTo(tips[i + 1].x, tips[i + 1].y + 10);
+                ctx.stroke();
+            }
+
+            if (excitation > 0.1) {
+                for (let k = 0; k < 5; k++) {
+                    const phase = (state.time * 1.8 + k * 0.2) % 1;
+                    const targetTip = tips[k + 1];
+                    const kx = targetTip.x + Math.sin(k * 2) * 8;
+                    const ky = targetTip.y - 35 + phase * 55;
+                    ctx.beginPath();
+                    ctx.arc(kx, ky, 4.5, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(251, 191, 36, ${1 - phase * 0.6})`;
+                    ctx.fill();
+                }
+            }
+        }
+
+        // 毛細胞瓶狀胞體
+        ctx.beginPath();
+        ctx.moveTo(-36, -50);
+        ctx.lineTo(36, -50);
+        ctx.bezierCurveTo(42, -10, 48, 35, 28, 65);
+        ctx.quadraticCurveTo(0, 82, -28, 65);
+        ctx.bezierCurveTo(-48, 35, -42, -10, -36, -50);
+        ctx.closePath();
+
+        const grad = ctx.createLinearGradient(0, -50, 0, 75);
+        grad.addColorStop(0, bodyColor);
+        grad.addColorStop(1, '#1e293b');
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 2.2;
+        ctx.stroke();
+
+        // 細胞核
+        ctx.beginPath();
+        ctx.arc(0, 18, 15, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.65)';
+        ctx.fill();
+
+        // 突觸小泡釋放
+        const vesicleCount = excitation > 0.15 ? 7 : (excitation < -0.15 ? 1 : 3);
+        for (let v = 0; v < vesicleCount; v++) {
+            const vx = -18 + (v % 4) * 12;
+            const vy = 62 + ((state.time * (2 + excitation * 1.5) + v * 0.3) % 1) * 18;
+            ctx.beginPath();
+            ctx.arc(vx, vy, 3.2, 0, Math.PI * 2);
+            ctx.fillStyle = '#38bdf8';
+            ctx.fill();
+        }
+
+        // 初級傳入神經杯狀末梢
+        ctx.beginPath();
+        ctx.moveTo(-36, 72);
+        ctx.quadraticCurveTo(0, 96, 36, 72);
+        ctx.lineTo(10, 102);
+        ctx.lineTo(10, 135);
+        ctx.lineTo(-10, 135);
+        ctx.lineTo(-10, 102);
+        ctx.closePath();
+        ctx.fillStyle = '#eab308';
+        ctx.fill();
+
+        ctx.restore();
+        return { excitation, tips };
+    }
+
+    // 繪製神經動作電位放電頻率示波器
+    function drawSpikeTrainBox(x, y, w, h, excitation, title) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 1.5;
+        roundRect(ctx, x, y, w, h, 8);
+        ctx.fill();
+        ctx.stroke();
+
+        const freq = Math.max(1, Math.round(4.5 + excitation * 5.5));
+        const traceColor = excitation > 0.15 ? '#fb7185' : (excitation < -0.15 ? '#60a5fa' : '#34d399');
+
+        ctx.beginPath();
+        const baseY = y + h * 0.74;
+        ctx.moveTo(x + 12, baseY);
+        const usableW = w - 24;
+        const stepW = usableW / freq;
+        const scrollOffset = (state.time * (45 + excitation * 30)) % stepW;
+
+        for (let sx = x + 12; sx < x + w - 12; sx += 2) {
+            const rel = (sx - (x + 12) + scrollOffset) % stepW;
+            let py = baseY;
+            if (rel < 5) {
+                py = baseY - (h * 0.50) * Math.sin((rel / 5) * Math.PI);
+            } else if (rel < 9) {
+                py = baseY + 5;
+            }
+            ctx.lineTo(sx, py);
+        }
+        ctx.strokeStyle = traceColor;
+        ctx.lineWidth = 2.2;
+        ctx.stroke();
+
+        if (state.showLabels) {
+            ctx.fillStyle = '#e2e8f0';
+            ctx.font = '600 12.5px "Microsoft JhengHei", sans-serif';
+            ctx.fillText(title, x + 12, y + 20);
+        }
+        ctx.restore();
+    }
+
+    // ==================== Step 2：毛細胞機械電傳導繪製 (包含所屬器官定位小地圖) ====================
+    function renderStep2HairCell() {
+        const bend = state.hairDeflection;
+        const originInfo = ANATOMY_LOCATIONS[state.hairCellOriginId] || ANATOMY_LOCATIONS.utricle;
+
+        // 上方內淋巴液背景區
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.06)';
+        roundRect(ctx, 50, 52, 705, 220, 14);
+        ctx.fill();
+
+        // 施力方向大箭頭
+        if (Math.abs(bend) > 0.08) {
+            const arrowColor = bend > 0 ? '#fb7185' : '#60a5fa';
+            drawArrow(330 - bend * 55, 95, 330 + bend * 85, 95, arrowColor, 5, 15);
+        }
+
+        // 主毛細胞放大圖
+        const { excitation: exc, tips } = drawHairCellUnit(330, 325, 1.55, bend, 1, true, null);
+        const kinoTip = tips[tips.length - 1];
+        const kinoWorldX = 330 + kinoTip.x * 1.55;
+        const kinoWorldY = 325 + kinoTip.y * 1.55;
+
+        // 右上角：內耳迷路解剖定位小地圖 (清楚標示這顆毛細胞位於哪個囊斑或壺腹嵴!)
+        drawAnatomicalLocatorMiniMap(state.hairCellOriginId, `${originInfo.shortName} ▸ 毛細胞`);
+
+        // 右中：電生理狀態儀表與神經衝動頻率
+        drawSpikeTrainBox(555, 220, 415, 138, exc,
+            exc > 0.15 ? '膜電位：去極化 (Depolarization) · 高頻放電' :
+            (exc < -0.15 ? '膜電位：超極化 (Hyperpolarization) · 低頻抑制' : '膜電位：靜止膜電位 · 基礎放電頻率')
+        );
+
+        // 右下：離子通道與神經傳導物質圖示卡
+        ctx.save();
+        ctx.fillStyle = 'rgba(22, 32, 51, 0.88)';
+        ctx.strokeStyle = '#334155';
+        roundRect(ctx, 555, 375, 415, 210, 10);
+        ctx.fill();
+        ctx.stroke();
+
+        const statusColor = exc > 0.15 ? '#fb7185' : (exc < -0.15 ? '#60a5fa' : '#94a3b8');
+        ctx.fillStyle = '#475569';
+        roundRect(ctx, 680, 440, 65, 36, 6);
+        ctx.fill();
+        const gap = Math.max(2, 18 + exc * 22);
+        roundRect(ctx, 745 + gap, 440, 65, 36, 6);
+        ctx.fill();
+
+        if (exc > 0.1) {
+            drawArrow(745 + gap / 2, 412, 745 + gap / 2, 502, '#fbbf24', 3.5, 10);
+        }
+        ctx.restore();
+
+        // 標籤
+        drawLabel(`高鉀內淋巴液 (Endolymph) · 來自：${originInfo.shortName}`, 260, 72, { border: '#38bdf8' });
+        drawLabel('動纖毛 (Kinocilium, 最長極性軸)', 525, 132, {
+            border: '#facc15',
+            leaderTo: [kinoWorldX, kinoWorldY]
+        });
+        drawLabel('靜纖毛階梯束 (Stereocilia)', 145, 182, {
+            border: '#cbd5e1',
+            leaderTo: [285 + bend * 35, 200]
+        });
+        drawLabel('前庭毛細胞 (次級感覺受器)', 145, 355, {
+            border: statusColor,
+            leaderTo: [270, 355]
+        });
+        drawLabel('神經傳導物質釋放 (麩胺酸)', 155, 445, {
+            border: '#38bdf8',
+            leaderTo: [305, 435]
+        });
+        drawLabel('初級傳入神經纖維 (往 CN VIII)', 330, 572, { border: '#eab308' });
+
+        drawLabel(
+            exc > 0.15 ? '機械敏感 K⁺ 通道開啟 (K⁺ 內流)' : (exc < -0.15 ? '離子通道關閉 (抑制)' : '部分通道開啟 (靜止張力)'),
+            762, 402, { border: statusColor }
+        );
+        drawLabel('電壓敏感 Ca²⁺ 內流調控突觸小泡釋放', 762, 545, { border: '#38bdf8' });
+    }
+
+    // ==================== Step 3：耳石器（橢圓囊水平囊斑 vs. 球囊垂直囊斑）繪製 ====================
+    function renderStep3Otolith() {
+        const isUtricle = state.otolithOrgan === 'utricle';
+        const stim = state.otolithStimulus; // -1 ~ +1
+        const locId = isUtricle ? 'utricle' : 'saccule';
+
+        // 右上角：內耳迷路解剖定位小地圖
+        drawAnatomicalLocatorMiniMap(locId, isUtricle ? '橢圓囊 ▸ 水平排列囊斑' : '球囊 ▸ 垂直排列囊斑');
+
+        // 左上角：頭部姿態與直線加速度情境視窗 (搭車水平起步/煞車 vs 搭電梯垂直上升/下降)
+        ctx.save();
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.strokeStyle = '#283753';
+        roundRect(ctx, 38, 52, 248, 220, 12);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.save();
+        ctx.translate(162, 165);
+        if (isUtricle) {
+            // 橢圓囊：水平加速或頭部前後傾
+            ctx.rotate(stim * 0.25);
+        } else {
+            // 球囊：搭電梯垂直升降
+            ctx.translate(0, -stim * 18);
+        }
+        // 側面頭部輪廓 (鼻朝右)
+        ctx.beginPath();
+        ctx.arc(0, -6, 38, 0, Math.PI * 2);
+        ctx.fillStyle = '#334155';
+        ctx.fill();
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(35, -12);
+        ctx.lineTo(50, -1);
+        ctx.lineTo(35, 6);
+        ctx.stroke();
+
+        // 在頭內清楚畫出囊斑排列方向 (水平 vs 垂直!)
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 4.5;
+        ctx.beginPath();
+        if (isUtricle) {
+            ctx.moveTo(-18, -4);
+            ctx.lineTo(18, -4);
+        } else {
+            ctx.moveTo(0, -24);
+            ctx.lineTo(0, 14);
+        }
+        ctx.stroke();
+        ctx.restore();
+        ctx.restore();
+
+        drawLabel(isUtricle ? '橢圓囊：囊斑呈水平排列' : '球囊：囊斑呈垂直排列', 162, 76, { border: '#fbbf24', fontSize: 13 });
+
+        if (isUtricle) {
+            const motionTxt = stim > 0.12 ? '🚗 搭車起步加速 / 頭後仰' : (stim < -0.12 ? '🚗 搭車煞車減速 / 頭前傾' : '● 水平靜止平視');
+            drawLabel(motionTxt, 162, 248, { border: '#38bdf8', fontSize: 12.5 });
+            if (Math.abs(stim) > 0.08) {
+                drawArrow(162 - stim * 45, 222, 162 + stim * 45, 222, '#fb7185', 3.5, 10);
+            }
+        } else {
+            const motionTxt = stim > 0.12 ? '🛗 搭電梯上升 (垂直向上加速)' : (stim < -0.12 ? '🛗 搭電梯下降 (垂直向下加速)' : '● 垂直靜止平衡');
+            drawLabel(motionTxt, 162, 248, { border: '#38bdf8', fontSize: 12.5 });
+            if (Math.abs(stim) > 0.08) {
+                drawArrow(255, 165 + stim * 38, 255, 165 - stim * 38, '#fb7185', 3.5, 10);
+            }
+        }
+
+        // 左下角：跨微紋兩區毛細胞放電頻率組合比較
+        drawSpikeTrainBox(38, 295, 248, 128, stim * 0.9, '囊斑 A 區神經放電');
+        drawSpikeTrainBox(38, 442, 248, 128, -stim * 0.9, '囊斑 B 區神經放電 (跨微紋反向)');
+
+        // ==================== 主畫面：分別針對「橢圓囊水平囊斑」與「球囊垂直囊斑」繪製清晰專屬切面 ====================
+        if (isUtricle) {
+            // 【橢圓囊 Utricle：水平排列囊斑橫切面】
+            const maculaX = 325, maculaY = 445, maculaW = 595;
+            const shift = stim * 42; // 高密度耳石膜受水平慣性/重力分量滑移
+
+            // 支持細胞水平基底層
+            ctx.fillStyle = '#1e293b';
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 2;
+            roundRect(ctx, maculaX, maculaY, maculaW, 82, 10);
+            ctx.fill();
+            ctx.stroke();
+
+            // 膠質耳石膜 (Otolithic membrane) 覆蓋毛細胞纖毛
+            ctx.fillStyle = 'rgba(251, 191, 36, 0.22)';
+            ctx.strokeStyle = 'rgba(251, 191, 36, 0.7)';
+            roundRect(ctx, maculaX - 10 + shift, maculaY - 135, maculaW + 20, 96, 22);
+            ctx.fill();
+            ctx.stroke();
+
+            // 頂層碳酸鈣耳石結晶顆粒 (Otoconia)
+            for (let i = 0; i < 22; i++) {
+                const ox = maculaX + 14 + i * 26.5 + shift + (i % 2) * 4;
+                const oy = maculaY - 135 + (i % 3) * 11;
+                ctx.save();
+                ctx.translate(ox, oy);
+                ctx.rotate(0.3);
+                ctx.fillStyle = '#fef3c7';
+                ctx.strokeStyle = '#f59e0b';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(-9, 0); ctx.lineTo(-4, -6); ctx.lineTo(4, -6);
+                ctx.lineTo(9, 0); ctx.lineTo(4, 6); ctx.lineTo(-4, 6);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // 微紋 (Striola) 分界線
+            const striolaX = maculaX + maculaW / 2;
+            ctx.strokeStyle = '#38bdf8';
+            ctx.setLineDash([6, 4]);
+            ctx.beginPath();
+            ctx.moveTo(striolaX, maculaY - 155);
+            ctx.lineTo(striolaX, maculaY + 92);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 左區 A 毛細胞 (動纖毛朝向中央微紋 polarity = +1，可點擊 Zoom-in 至毛細胞!)
+            drawHairCellUnit(maculaX + 115, maculaY - 8, 0.62, stim * 0.9, 1, false, 'utricle');
+            drawHairCellUnit(maculaX + 215, maculaY - 8, 0.62, stim * 0.9, 1, false, 'utricle');
+
+            // 右區 B 毛細胞 (動纖毛亦朝向中央微紋 polarity = -1，可點擊 Zoom-in 至毛細胞!)
+            drawHairCellUnit(maculaX + 380, maculaY - 8, 0.62, stim * 0.9, -1, false, 'utricle');
+            drawHairCellUnit(maculaX + 480, maculaY - 8, 0.62, stim * 0.9, -1, false, 'utricle');
+
+            if (Math.abs(stim) > 0.08) {
+                drawArrow(striolaX - stim * 65, maculaY - 175, striolaX + stim * 65, maculaY - 175, '#fbbf24', 4, 12);
+            }
+
+            drawLabel('橢圓囊水平囊斑 (Horizontal Macula of Utricle)', 535, 195, { border: '#fbbf24', fontSize: 14.5 });
+            drawLabel('碳酸鈣耳石結晶 (Otoconia，高密度受水平慣性/側傾重力牽引)', 575, 255, { border: '#f59e0b' });
+            drawLabel('膠質耳石膜 (Otolithic Membrane)', 825, 345, { border: '#fbbf24' });
+            drawLabel('微紋 (Striola)：兩側動纖毛極性相反', striolaX, 565, { border: '#38bdf8' });
+            drawLabel('🔬 點擊任一毛細胞可 Zoom-in 至單一毛細胞機制', 435, 505, { border: '#fde047', fontSize: 12.5 });
+        } else {
+            // 【球囊 Saccule：垂直排列囊斑縱切面（清晰直立標籤，展示電梯垂直升降慣性）】
+            const wallX = 435, wallY = 125, wallH = 445;
+            // 當電梯向上加速 (stim > 0) 時，高密度耳石膜因慣性相對向下 (+Y) 滑移牽引纖毛
+            const vertShift = stim * 38;
+
+            // 球囊內側垂直壁基底層 (Vertical Macular Epithelium)
+            ctx.fillStyle = '#1e293b';
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 2;
+            roundRect(ctx, wallX - 78, wallY, 78, wallH, 10);
+            ctx.fill();
+            ctx.stroke();
+
+            // 垂直排列的膠質耳石膜 (隨垂直重力/電梯升降慣性上下滑移)
+            ctx.fillStyle = 'rgba(251, 191, 36, 0.22)';
+            ctx.strokeStyle = 'rgba(251, 191, 36, 0.75)';
+            roundRect(ctx, wallX + 35, wallY - 8 + vertShift, 92, wallH + 16, 22);
+            ctx.fill();
+            ctx.stroke();
+
+            // 外側垂直排列的碳酸鈣耳石結晶 (Otoconia)
+            for (let i = 0; i < 18; i++) {
+                const ox = wallX + 105 + (i % 3) * 10;
+                const oy = wallY + 14 + i * 24.5 + vertShift;
+                ctx.save();
+                ctx.translate(ox, oy);
+                ctx.rotate(0.2);
+                ctx.fillStyle = '#fef3c7';
+                ctx.strokeStyle = '#f59e0b';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(-6, -8); ctx.lineTo(6, -5); ctx.lineTo(6, 5); ctx.lineTo(-6, 8);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // 水平伸入垂直耳石膜的毛細胞群 (將局部座標旋轉 +90 度繪製水平伸出的毛細胞，並註冊正確的世界座標熱區)
+            const striolaY = wallY + wallH / 2;
+            ctx.strokeStyle = '#38bdf8';
+            ctx.setLineDash([6, 4]);
+            ctx.beginPath();
+            ctx.moveTo(wallX - 88, striolaY);
+            ctx.lineTo(wallX + 145, striolaY);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            const cellYOffsets = [-145, -65, 65, 145];
+            cellYOffsets.forEach((dy, idx) => {
+                const cy = striolaY + dy;
+                const pol = idx < 2 ? 1 : -1; // 上區 A 與下區 B 跨微紋極性相反
+                ctx.save();
+                ctx.translate(wallX + 5, cy);
+                ctx.rotate(Math.PI / 2);
+                drawHairCellUnit(0, 0, 0.56, stim * 0.9, pol, false, null);
+                ctx.restore();
+
+                // 為垂直牆上的毛細胞註冊點擊放大熱區
+                state.hitRegions2D.push({
+                    id: `sac_hc_${idx}`,
+                    x: wallX - 65, y: cy - 28, w: 155, h: 56,
+                    onClick: () => {
+                        state.hairCellOriginId = 'saccule';
+                        state.activeLocationId = 'saccule';
+                        state.hairDeflection = Math.max(-1, Math.min(1, stim * 0.9 * pol));
+                        state.step = 1;
+                        updateStepUI(true);
+                    }
+                });
+            });
+
+            // 垂直慣性牽引大箭頭
+            if (Math.abs(stim) > 0.08) {
+                drawArrow(wallX + 168, striolaY - stim * 65, wallX + 168, striolaY + stim * 65, '#fbbf24', 4.5, 13);
+            }
+
+            drawLabel('球囊垂直囊斑 (Vertical Macula of Saccule)', 535, 85, { border: '#fbbf24', fontSize: 14.5 });
+            drawLabel('垂直囊斑上皮與毛細胞層 (🔬 點擊毛細胞可放大)', 415, 595, { border: '#fde047', fontSize: 12.5 });
+            drawLabel('碳酸鈣耳石結晶 (受垂直重力 / 電梯升降慣性上下牽引)', 755, 265, {
+                border: '#f59e0b',
+                leaderTo: [wallX + 120, 265 + vertShift * 0.5]
+            });
+            drawLabel('微紋 (Striola)：上下兩區動纖毛極性相反', 735, striolaY, {
+                border: '#38bdf8',
+                leaderTo: [wallX + 135, striolaY]
+            });
+            drawLabel(
+                stim > 0.12 ? '電梯上升 ➔ 耳石膜慣性向下牽引' : (stim < -0.12 ? '電梯下降 ➔ 耳石膜慣性向上偏移' : '垂直重力軸穩定基準'),
+                745, 435, { border: '#fb7185' }
+            );
+        }
+    }
+
+    // ==================== Step 4：單側半規管—壺腹—橢圓囊迴路與壺腹嵴/頂帽繪製 ====================
+    // 修正重點：不再畫容易被誤解為「兩個水平半規管」的雙圓環，改以「單側單一條半規管與橢圓囊的完整閉合流體迴路」+「壺腹（壺腹嵴與頂帽）微觀縱切面」呈現！
+    function updateCanalPhysics(dt) {
+        if (!state.isPlaying) return;
+        state.canalAnimTimer += dt;
+
+        let targetCupula = 0;
+        let targetHeadVel = 0;
+
+        if (state.canalMode === 'accel_left') {
+            targetHeadVel = -1.8;
+            targetCupula = 0.88; // 內淋巴流向壺腹/橢圓囊(朝向動纖毛)，毛細胞一致去極化興奮
+        } else if (state.canalMode === 'const_left') {
+            targetHeadVel = -1.8;
+            // 等速旋轉：內淋巴追上管壁速度，無相對流動，頂帽回彈復位！
+            targetCupula = Math.max(0, 0.85 * Math.exp(-state.canalAnimTimer * 1.1));
+        } else if (state.canalMode === 'stop_left') {
+            targetHeadVel = 0;
+            // 驟停：內淋巴因慣性繼續前衝，反向推擠頂帽，隨後衰減
+            targetCupula = -0.88 * Math.exp(-state.canalAnimTimer * 0.45);
+        } else if (state.canalMode === 'accel_right') {
+            targetHeadVel = 1.8;
+            targetCupula = -0.88;
+        } else {
+            targetHeadVel = 0;
+            targetCupula = 0;
+        }
+
+        state.headAngleVel += (targetHeadVel - state.headAngleVel) * Math.min(1, dt * 6);
+        state.cupulaDeflect += (targetCupula - state.cupulaDeflect) * Math.min(1, dt * 5);
+        state.headAngle += state.headAngleVel * dt;
+    }
+
+    function renderStep4Canal() {
+        const deflect = state.cupulaDeflect; // >0 代表朝向動纖毛去極化興奮，<0 代表背離動纖毛超極化抑制
+        const canalType = state.selectedCanal || 'horiz';
+        const locId = 'ampulla_' + canalType;
+
+        const canalNames = {
+            horiz: { title: '水平半規管 (Horizontal Canal)', plane: '水平面旋轉 (如左右搖頭「不」)', color: '#38bdf8' },
+            ant:   { title: '前(上)半規管 (Anterior Canal)', plane: '前後垂直面旋轉 (如點頭「是」)', color: '#34d399' },
+            post:  { title: '後半規管 (Posterior Canal)',    plane: '冠狀垂直面旋轉 (如頭向肩側傾)', color: '#2dd4bf' }
+        };
+        const cInfo = canalNames[canalType];
+
+        // 右上角：內耳迷路解剖定位小地圖 (高亮目前檢視的半規管壺腹!)
+        drawAnatomicalLocatorMiniMap(locId, `${cInfo.title.split(' ')[0]} ▸ 壺腹嵴與頂帽`);
+
+        // ==================== 左側：單側內耳的「單一條半規管 — 壺腹 — 橢圓囊」完整閉合迴路圖 ====================
+        ctx.save();
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+        ctx.strokeStyle = '#283753';
+        roundRect(ctx, 35, 72, 405, 345, 14);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        // 左上角極簡頭部旋轉方向小圖示 (僅標示頭部旋轉方向，不畫雙圓環以免誤解)
+        ctx.save();
+        ctx.translate(92, 132);
+        ctx.rotate(state.headAngle * 0.45);
+        ctx.beginPath();
+        ctx.arc(0, 0, 24, 0, Math.PI * 2);
+        ctx.fillStyle = '#334155';
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 2;
+        ctx.fill();
+        ctx.stroke();
+        // 鼻尖方向
+        ctx.beginPath();
+        ctx.moveTo(-6, -23); ctx.lineTo(0, -33); ctx.lineTo(6, -23);
+        ctx.fillStyle = '#94a3b8';
+        ctx.fill();
+        // 左耳單一位置標記點
+        ctx.beginPath();
+        ctx.arc(-14, 2, 4.5, 0, Math.PI * 2);
+        ctx.fillStyle = cInfo.color;
+        ctx.fill();
+        ctx.restore();
+
+        // 繪製單一條半規管與橢圓囊 (Utricle) 銜接的完整流體環路
+        const loopCX = 248, loopCY = 238, loopR = 88;
+        ctx.save();
+        ctx.translate(loopCX, loopCY);
+        // 微幅呈現管壁旋轉感
+        const wallRot = Math.max(-0.32, Math.min(0.32, state.headAngleVel * 0.14));
+        ctx.rotate(wallRot);
+
+        const isExcited = deflect > 0.12;
+        const isInhibited = deflect < -0.12;
+        const canalStrokeColor = isExcited ? '#fb7185' : (isInhibited ? '#60a5fa' : cInfo.color);
+
+        // 1. 半規管 C 型管腔 (兩端皆銜接於右側的橢圓囊 Utricle!)
+        ctx.beginPath();
+        ctx.arc(-15, 0, loopR, 0.22 * Math.PI, 1.78 * Math.PI, false);
+        ctx.strokeStyle = 'rgba(30, 41, 59, 0.95)';
+        ctx.lineWidth = 26;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(-15, 0, loopR, 0.22 * Math.PI, 1.78 * Math.PI, false);
+        ctx.strokeStyle = canalStrokeColor;
+        ctx.lineWidth = 18;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        // 2. 橢圓囊 (Utricle) 與半規管兩端無縫銜接形成閉合迴路
+        ctx.fillStyle = 'rgba(245, 158, 11, 0.35)';
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.ellipse(58, 0, 32, 62, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // 3. 一端膨大為壺腹 (Ampulla - 位於上端銜接處)
+        const ampLoopX = -15 + Math.cos(1.78 * Math.PI) * loopR;
+        const ampLoopY = Math.sin(1.78 * Math.PI) * loopR;
+        ctx.fillStyle = 'rgba(251, 113, 133, 0.35)';
+        ctx.strokeStyle = '#fb7185';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(ampLoopX, ampLoopY, 22, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // 壺腹內的迷你頂帽 (Cupula) 隨內淋巴流動偏折
+        ctx.strokeStyle = '#34d399';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(ampLoopX - 6, ampLoopY - 12);
+        ctx.quadraticCurveTo(ampLoopX + deflect * 14, ampLoopY, ampLoopX + 6, ampLoopY + 12);
+        ctx.stroke();
+
+        // 4. 單一半規管內的內淋巴液 (Endolymph) 慣性流動粒子
+        for (let p = 0; p < 10; p++) {
+            const pAngle = 0.25 * Math.PI + ((p / 10 + state.time * deflect * 0.35 + 10) % 1) * (1.5 * Math.PI);
+            const px = -15 + Math.cos(pAngle) * loopR;
+            const py = Math.sin(pAngle) * loopR;
+            ctx.beginPath();
+            ctx.arc(px, py, 3.8, 0, Math.PI * 2);
+            ctx.fillStyle = '#e0f2fe';
+            ctx.fill();
+        }
+        ctx.restore();
+
+        // 管壁隨頭旋轉方向 vs 內淋巴慣性滯後方向標示
+        if (Math.abs(state.headAngleVel) > 0.15) {
+            const dir = state.headAngleVel < 0 ? -1 : 1;
+            drawArrow(loopCX - dir * 45, 112, loopCX + dir * 45, 112, '#facc15', 3.5, 10);
+            drawLabel('頭部與半規管壁旋轉方向', loopCX, 90, { border: '#facc15', fontSize: 12 });
+        }
+        if (Math.abs(deflect) > 0.08) {
+            drawLabel(
+                deflect > 0 ? '內淋巴慣性滯後：流向壺腹與橢圓囊' : '內淋巴相對流向：背離橢圓囊',
+                215, 385, { border: '#38bdf8', fontSize: 12.2 }
+            );
+        }
+
+        drawLabel(`單側${cInfo.title.split(' ')[0]}閉合迴路`, 238, 348, { border: cInfo.color, fontSize: 12.5 });
+        drawLabel('橢圓囊 (Utricle)', 338, 238, { border: '#fbbf24', fontSize: 12 });
+        drawLabel('壺腹 (Ampulla)', 305, 155, {
+            border: '#fb7185',
+            fontSize: 12,
+            leaderTo: [loopCX + ampLoopX, loopCY + ampLoopY]
+        });
+
+        // 繪製從左側小壺腹指向右側壺腹放大圖的 Zoom 投影導引線
+        ctx.save();
+        ctx.strokeStyle = 'rgba(251, 113, 133, 0.35)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.moveTo(loopCX + ampLoopX + 18, loopCY + ampLoopY - 14);
+        ctx.lineTo(485, 225);
+        ctx.moveTo(loopCX + ampLoopX + 18, loopCY + ampLoopY + 14);
+        ctx.lineTo(485, 455);
+        ctx.stroke();
+        ctx.restore();
+
+        // 左下角：該條半規管傳入神經放電頻率示波器 (單一示波器，清晰對照興奮/抑制/等速回彈)
+        drawSpikeTrainBox(35, 435, 405, 145, deflect,
+            `${cInfo.title.split(' ')[0]}傳入神經放電頻率 (${deflect > 0.15 ? '去極化興奮' : (deflect < -0.15 ? '超極化抑制' : '基礎放電率')})`
+        );
+
+        // ==================== 右側大圖：壺腹（Ampulla）縱切面放大圖（壺腹嵴 + 頂帽 + 朝向一致毛細胞） ====================
+        const ampX = 715, ampY = 340;
+        ctx.save();
+        // 半規管管壁與壺腹拱頂 (左側為半規管管腔，右側通往橢圓囊 Utricle)
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.08)';
+        ctx.strokeStyle = '#475569';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(475, 250);
+        ctx.quadraticCurveTo(ampX, 115, 955, 250);
+        ctx.lineTo(955, 465);
+        ctx.quadraticCurveTo(ampX, 495, 475, 465);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // 內淋巴慣性相對流動箭頭
+        if (Math.abs(deflect) > 0.08) {
+            drawArrow(ampX - deflect * 125, 225, ampX + deflect * 105, 225, '#38bdf8', 5, 14);
+        }
+
+        // 膠狀頂帽 (Cupula - 無耳石，頂端延伸至壺腹頂壁受內淋巴推擠彎曲)
+        const cupTipShift = deflect * 92;
+        ctx.beginPath();
+        ctx.moveTo(ampX - 78, 412);
+        ctx.bezierCurveTo(ampX - 75 + cupTipShift * 0.5, 280, ampX - 38 + cupTipShift, 178, ampX + cupTipShift, 170);
+        ctx.bezierCurveTo(ampX + 38 + cupTipShift, 178, ampX + 75 + cupTipShift * 0.5, 280, ampX + 78, 412);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(52, 211, 153, 0.34)';
+        ctx.strokeStyle = '#34d399';
+        ctx.lineWidth = 2.5;
+        ctx.fill();
+        ctx.stroke();
+
+        // 同一壺腹嵴內所有毛細胞的動纖毛排列方向完全一致 (polarity = +1，且可點擊放大至 Step 2 毛細胞!)
+        drawHairCellUnit(ampX - 44, 414, 0.55, deflect, 1, false, locId);
+        drawHairCellUnit(ampX,      407, 0.55, deflect, 1, false, locId);
+        drawHairCellUnit(ampX + 44, 414, 0.55, deflect, 1, false, locId);
+
+        // 底部鞍狀壺腹嵴 (Crista ampullaris)
+        ctx.beginPath();
+        ctx.moveTo(ampX - 115, 475);
+        ctx.quadraticCurveTo(ampX, 375, ampX + 115, 475);
+        ctx.closePath();
+        ctx.fillStyle = '#1e293b';
+        ctx.strokeStyle = '#fb7185';
+        ctx.lineWidth = 2.2;
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+
+        // 頂部運動狀態總標題
+        let stateTitle = `${cInfo.title.split(' ')[0]} · 完全靜止：頂帽直立，維持基礎放電`;
+        if (state.canalMode === 'accel_left') stateTitle = '開始旋轉 (角加速)：內淋巴因慣性滯後推彎頂帽 ➔ 朝向動纖毛去極化 (高頻興奮)';
+        else if (state.canalMode === 'const_left') stateTitle = '維持等速旋轉：內淋巴追上管壁同速 ➔ 頂帽彈性回彈直立，放電回到基準';
+        else if (state.canalMode === 'stop_left') stateTitle = '旋轉驟停 (角減速)：內淋巴因慣性繼續前衝 ➔ 頂帽反向彎曲超極化 (產生反向眩暈感)';
+        else if (state.canalMode === 'accel_right') stateTitle = '反方向角加速：內淋巴推擠頂帽背離動纖毛 ➔ 超極化抑制 (低頻放電)';
+
+        drawLabel(stateTitle, 400, 36, { border: '#38bdf8', fontSize: 13.5 });
+        drawLabel('◀ 連通半規管管腔', 535, 365, { border: '#64748b', fontSize: 12 });
+        drawLabel('連通橢圓囊 (Utricle) ▶', 885, 365, { border: '#fbbf24', fontSize: 12 });
+        drawLabel('膠狀頂帽 (Cupula，無耳石結晶，毛細胞纖毛伸入其中)', 635, 145, {
+            border: '#34d399',
+            leaderTo: [ampX + deflect * 72, 195]
+        });
+        drawLabel('壺腹嵴 (Crista ampullaris)：動纖毛朝向完全一致', 715, 518, {
+            border: '#fb7185',
+            leaderTo: [ampX, 445]
+        });
+        drawLabel('🔬 點擊壺腹嵴上的毛細胞可 Zoom-in 至單一毛細胞機制', 715, 562, { border: '#fde047', fontSize: 12.5 });
+    }
+
+    // ==================== Step 5：靜與動平衡覺並列對照繪製 ====================
+    function renderStep5Comparison() {
+        const f = state.compareSyncForce;
+
+        // 分隔線
+        ctx.strokeStyle = '#283753';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(500, 65);
+        ctx.lineTo(500, 590);
+        ctx.stroke();
+
+        // 左半部：靜的平衡覺（耳石器囊斑 Macula）
+        ctx.save();
+        ctx.fillStyle = 'rgba(251, 191, 36, 0.05)';
+        roundRect(ctx, 40, 70, 435, 510, 14);
+        ctx.fill();
+
+        const lx = 258, ly = 415;
+        const shift = f * 35;
+
+        // 耳石膜 + 碳酸鈣結晶 (修正高度使毛細胞纖毛明確伸入耳石膜內)
+        ctx.fillStyle = 'rgba(251, 191, 36, 0.25)';
+        ctx.strokeStyle = '#f59e0b';
+        roundRect(ctx, lx - 165 + shift, ly - 132, 330, 92, 18);
+        ctx.fill();
+        ctx.stroke();
+
+        for (let i = 0; i < 12; i++) {
+            ctx.fillStyle = '#fef3c7';
+            ctx.beginPath();
+            ctx.arc(lx - 140 + i * 25 + shift, ly - 125 + (i % 2) * 10, 6, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // 微紋與反向極性毛細胞（左 +1，右 -1，可點擊跳轉毛細胞）
+        ctx.strokeStyle = '#38bdf8';
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.moveTo(lx, ly - 148);
+        ctx.lineTo(lx, ly + 85);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        drawHairCellUnit(lx - 75, ly - 12, 0.62, f, 1, false, 'utricle');
+        drawHairCellUnit(lx + 75, ly - 12, 0.62, f, -1, false, 'utricle');
+
+        ctx.fillStyle = '#1e293b';
+        roundRect(ctx, lx - 175, ly + 25, 350, 55, 8);
+        ctx.fill();
+        ctx.restore();
+
+        // 右半部：動的平衡覺（半規管壺腹嵴 Crista ampullaris & 頂帽 Cupula）
+        ctx.save();
+        ctx.fillStyle = 'rgba(52, 211, 153, 0.05)';
+        roundRect(ctx, 525, 70, 435, 510, 14);
+        ctx.fill();
+
+        const rx = 742, ry = 415;
+        const cupShift = f * 75;
+
+        // 頂帽（高聳無耳石，包裹毛細胞纖毛）
+        ctx.beginPath();
+        ctx.moveTo(rx - 85, ry + 15);
+        ctx.bezierCurveTo(rx - 78 + cupShift * 0.5, ry - 130, rx - 35 + cupShift, ry - 225, rx + cupShift, ry - 230);
+        ctx.bezierCurveTo(rx + 35 + cupShift, ry - 225, rx + 78 + cupShift * 0.5, ry - 130, rx + 85, ry + 15);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(52, 211, 153, 0.32)';
+        ctx.strokeStyle = '#34d399';
+        ctx.lineWidth = 2;
+        ctx.fill();
+        ctx.stroke();
+
+        // 同一壺腹嵴極性完全一致（皆為 +1，可點擊跳轉毛細胞）
+        drawHairCellUnit(rx - 52, ry - 12, 0.62, f, 1, false, 'ampulla_horiz');
+        drawHairCellUnit(rx + 52, ry - 12, 0.62, f, 1, false, 'ampulla_horiz');
+
+        ctx.fillStyle = '#1e293b';
+        roundRect(ctx, rx - 175, ry + 25, 350, 55, 8);
+        ctx.fill();
+        ctx.restore();
+
+        // 對照標籤
+        drawLabel('靜的平衡覺：耳石器 (橢圓囊水平囊斑 / 球囊垂直囊斑)', 258, 98, { border: '#fbbf24', fontSize: 14 });
+        drawLabel('覆蓋構造：耳石膜 (含碳酸鈣耳石結晶，感測直線加速與重力)', 258, 225, { border: '#f59e0b', fontSize: 12.2 });
+        drawLabel('纖毛排列：跨微紋朝向相反 (一區興奮、另一區抑制)', 258, 535, { border: '#38bdf8', fontSize: 12.5 });
+
+        drawLabel('動的平衡覺：半規管壺腹 (壺腹嵴與頂帽)', 742, 98, { border: '#34d399', fontSize: 14 });
+        drawLabel('覆蓋構造：膠狀頂帽 Cupula (無耳石，感測旋轉角加速度)', 742, 150, { border: '#34d399', fontSize: 12.2 });
+        drawLabel('纖毛排列：同一壺腹嵴朝向一致 (同步去極化或超極化)', 742, 535, { border: '#facc15', fontSize: 12.5 });
+    }
+
+    // ==================== Step 6：中樞神經傳導路徑與 VOR 反射繪製 ====================
+    function renderStep6Pathways() {
+        const pw = state.activePathway;
+        const headOsc = Math.sin(state.time * 2.6 * Math.max(0.15, state.vorHeadSpeed)) * 0.42 * (state.vorHeadSpeed > 0.02 ? 1 : 0);
+
+        // 左上角：前庭眼動反射 (VOR) 即時互動展示盒
+        ctx.save();
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.strokeStyle = pw === 'vor' || pw === 'all' ? '#fb7185' : '#283753';
+        ctx.lineWidth = 2;
+        roundRect(ctx, 40, 50, 295, 250, 12);
+        ctx.fill();
+        ctx.stroke();
+
+        // 遠方視覺凝視目標星號
+        const targetX = 188, targetY = 92;
+        ctx.fillStyle = '#facc15';
+        ctx.beginPath();
+        ctx.arc(targetX, targetY, 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 轉動的頭部與等速反向移動的雙眼
+        const hcx = 188, hcy = 215;
+        ctx.save();
+        ctx.translate(hcx, hcy);
+        ctx.rotate(headOsc);
+
+        ctx.beginPath();
+        ctx.arc(0, 0, 54, 0, Math.PI * 2);
+        ctx.fillStyle = '#1e293b';
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 2.5;
+        ctx.fill();
+        ctx.stroke();
+
+        [-22, 22].forEach(ex => {
+            ctx.save();
+            ctx.translate(ex, -38);
+            ctx.beginPath();
+            ctx.arc(0, 0, 12, 0, Math.PI * 2);
+            ctx.fillStyle = '#f8fafc';
+            ctx.fill();
+
+            ctx.rotate(-headOsc);
+            ctx.beginPath();
+            ctx.arc(0, -6, 5, 0, Math.PI * 2);
+            ctx.fillStyle = '#0284c7';
+            ctx.fill();
+
+            ctx.strokeStyle = 'rgba(250, 204, 21, 0.45)';
+            ctx.lineWidth = 1.2;
+            ctx.setLineDash([3, 3]);
+            ctx.beginPath();
+            ctx.moveTo(0, -10);
+            ctx.lineTo(0, -85);
+            ctx.stroke();
+            ctx.restore();
+        });
+        ctx.restore();
+        ctx.restore();
+
+        // 右側與下方：中樞神經解剖傳導架構圖
+        const nodes = {
+            innerEar:  { x: 188, y: 430, r: 34, color: '#eab308', name: '內耳前庭受器' },
+            scarpa:    { x: 345, y: 430, r: 26, color: '#f59e0b', name: '前庭神經節 (Scarpa)' },
+            vn:        { x: 545, y: 410, r: 44, color: '#38bdf8', name: '腦幹前庭神經核群' },
+            sensInput: { x: 545, y: 555, r: 28, color: '#94a3b8', name: '視覺與本體感覺輸入' },
+            vorNuc:    { x: 545, y: 215, r: 34, color: '#fb7185', name: 'CN III / IV / VI 眼動核團' },
+            cereb:     { x: 825, y: 365, r: 40, color: '#fbbf24', name: '小腦絨球小結葉' },
+            thalamus:  { x: 785, y: 215, r: 28, color: '#c084fc', name: '丘腦 (Thalamus)' },
+            cortex:    { x: 865, y: 95,  r: 38, color: '#a855f7', name: '大腦皮質前庭區' },
+            spinal:    { x: 785, y: 545, r: 36, color: '#34d399', name: '脊髓運動神經元' }
+        };
+
+        const links = [
+            { from: 'innerEar', to: 'scarpa', group: 'base', color: '#eab308' },
+            { from: 'scarpa',   to: 'vn',     group: 'base', color: '#eab308' },
+            { from: 'sensInput',to: 'vn',     group: 'base', color: '#94a3b8' },
+            { from: 'vn',       to: 'vorNuc', group: 'vor',  color: '#fb7185' },
+            { from: 'vorNuc',   to: { x: 335, y: 185 }, group: 'vor', color: '#fb7185' },
+            { from: 'vn',       to: 'spinal', group: 'vsr',  color: '#34d399' },
+            { from: 'vn',       to: 'cereb',  group: 'cortex', color: '#fbbf24' },
+            { from: 'vn',       to: 'thalamus', group: 'cortex', color: '#c084fc' },
+            { from: 'thalamus', to: 'cortex', group: 'cortex', color: '#a855f7' }
+        ];
+
+        links.forEach((lk, idx) => {
+            const p1 = typeof lk.from === 'string' ? nodes[lk.from] : lk.from;
+            const p2 = typeof lk.to === 'string' ? nodes[lk.to] : lk.to;
+            const active = pw === 'all' || lk.group === 'base' || pw === lk.group;
+
+            ctx.save();
+            ctx.globalAlpha = active ? 1.0 : 0.16;
+            ctx.strokeStyle = lk.color;
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+
+            if (active) {
+                for (let k = 0; k < 3; k++) {
+                    const t = (state.time * 0.75 + k * 0.33 + idx * 0.1) % 1;
+                    const px = p1.x + (p2.x - p1.x) * t;
+                    const py = p1.y + (p2.y - p1.y) * t;
+                    ctx.beginPath();
+                    ctx.arc(px, py, 5, 0, Math.PI * 2);
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fill();
+                }
+            }
+            ctx.restore();
+        });
+
+        Object.entries(nodes).forEach(([key, nd]) => {
+            let active = true;
+            if (pw === 'vor' && ['cereb', 'thalamus', 'cortex', 'spinal'].includes(key)) active = false;
+            if (pw === 'vsr' && ['vorNuc', 'cereb', 'thalamus', 'cortex'].includes(key)) active = false;
+            if (pw === 'cortex' && ['vorNuc', 'spinal'].includes(key)) active = false;
+
+            ctx.save();
+            ctx.globalAlpha = active ? 1.0 : 0.22;
+            ctx.beginPath();
+            ctx.arc(nd.x, nd.y, nd.r, 0, Math.PI * 2);
+            ctx.fillStyle = '#162033';
+            ctx.fill();
+            ctx.lineWidth = 3.5;
+            ctx.strokeStyle = nd.color;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(nd.x, nd.y, nd.r * 0.45, 0, Math.PI * 2);
+            ctx.fillStyle = nd.color;
+            ctx.fill();
+            ctx.restore();
+        });
+
+        drawLabel('前庭眼動反射 (VOR)：轉頭時眼球等速反向補償', 188, 68, { border: '#fb7185', fontSize: 12.5 });
+        drawLabel('內耳毛細胞', 188, 485, { border: '#eab308', fontSize: 12.5 });
+        drawLabel('Scarpa 神經節 (雙極神經元)', 345, 382, { border: '#f59e0b', fontSize: 12.5 });
+        drawLabel('CN VIII 前庭耳蝸神經', 445, 452, { border: '#eab308', fontSize: 12 });
+        drawLabel('腦幹前庭神經核群 (上/內/外/下核)', 545, 348, { border: '#38bdf8', fontSize: 13 });
+        drawLabel('視覺與本體感覺 (頸/四肢肌梭) 整合', 545, 602, { border: '#94a3b8', fontSize: 12.5 });
+
+        drawLabel('經內側縱束 (MLF) → CN III, IV, VI', 545, 162, { border: '#fb7185', fontSize: 12.5 });
+        drawLabel('小腦絨球小結葉 (運動協調與校準)', 825, 425, { border: '#fbbf24', fontSize: 12.5 });
+        drawLabel('丘腦中繼', 705, 195, { border: '#c084fc', fontSize: 12.5 });
+        drawLabel('大腦皮質前庭區 (空間方位知覺)', 805, 42, { border: '#a855f7', fontSize: 12.5 });
+        drawLabel('前庭脊髓徑 (調節伸肌/屈肌維持姿勢平衡)', 785, 602, { border: '#34d399', fontSize: 12.5 });
+    }
+
+    // ==================== 2D 主渲染管線（套用 Zoom & Pan 矩陣） ====================
+    function render2DCanvas() {
+        const w = canvas2d.width;
+        const h = canvas2d.height;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, w, h);
+        state.hitRegions2D = [];
+
+        const cssW = w / dpr;
+        const cssH = h / dpr;
+        const fitScale = Math.min(cssW / state.logicalW, cssH / state.logicalH) * 0.96;
+
+        ctx.save();
+        ctx.scale(dpr, dpr);
+        ctx.translate(cssW / 2 + state.panX, cssH / 2 + state.panY);
+        ctx.scale(fitScale * state.zoom, fitScale * state.zoom);
+        ctx.translate(-state.logicalW / 2, -state.logicalH / 2);
+
+        // 繪製微弱邏輯邊界輔助網底
+        ctx.strokeStyle = 'rgba(40, 55, 83, 0.35)';
+        ctx.lineWidth = 1;
+        roundRect(ctx, 12, 12, state.logicalW - 24, state.logicalH - 24, 16);
+        ctx.stroke();
+
+        switch (state.step) {
+            case 1: renderStep2HairCell(); break;
+            case 2: renderStep3Otolith(); break;
+            case 3: renderStep4Canal(); break;
+            case 4: renderStep5Comparison(); break;
+            case 5: renderStep6Pathways(); break;
+        }
+
+        ctx.restore();
+    }
+
+    // ==================== 更新頂部「目前檢視位置」導覽列 ====================
+    function updateLocationHUD() {
+        if (state.step === 0) {
+            const info = ANATOMY_LOCATIONS[state.activeLocationId] || ANATOMY_LOCATIONS.overview;
+            hudLocationBar.textContent = info.breadcrumb;
+            backTo3dBtn.style.display = 'none';
+            view3dCloseupBtn.style.display = 'none';
+        } else if (state.step === 1) {
+            const originInfo = ANATOMY_LOCATIONS[state.hairCellOriginId] || ANATOMY_LOCATIONS.utricle;
+            hudLocationBar.textContent = `📍 目前檢視位置：3D 內耳迷路 ▸ ${originInfo.shortName} ▸ 單一前庭毛細胞 (Hair Cell) 微觀放大`;
+            backTo3dBtn.style.display = 'flex';
+            view3dCloseupBtn.style.display = 'flex';
+        } else if (state.step === 2) {
+            const locKey = state.otolithOrgan === 'utricle' ? 'utricle' : 'saccule';
+            state.activeLocationId = locKey;
+            hudLocationBar.textContent = ANATOMY_LOCATIONS[locKey].breadcrumb;
+            backTo3dBtn.style.display = 'flex';
+            view3dCloseupBtn.style.display = 'flex';
+        } else if (state.step === 3) {
+            const locKey = 'ampulla_' + (state.selectedCanal || 'horiz');
+            state.activeLocationId = locKey;
+            hudLocationBar.textContent = ANATOMY_LOCATIONS[locKey].breadcrumb;
+            backTo3dBtn.style.display = 'flex';
+            view3dCloseupBtn.style.display = 'flex';
+        } else if (state.step === 4) {
+            hudLocationBar.textContent = '📍 目前檢視位置：耳石器囊斑 (Macula) vs. 半規管壺腹嵴與頂帽 (Crista & Cupula) 並列對照';
+            backTo3dBtn.style.display = 'flex';
+            view3dCloseupBtn.style.display = 'none';
+        } else if (state.step === 5) {
+            hudLocationBar.textContent = '📍 目前檢視位置：內耳前庭受器 ➔ 腦幹前庭神經核群、VOR 眼動反射與中樞傳導路徑';
+            backTo3dBtn.style.display = 'flex';
+            view3dCloseupBtn.style.display = 'none';
+        }
+    }
+
+    // ==================== UI 更新與事件控制 ====================
+    function updateStepUI(resetView = true) {
+        const data = stepsData[state.step];
+        hudBadge.textContent = data.badge;
+        stepDescBox.innerHTML = `<h3>${data.title}</h3>${data.html}`;
+        data.renderControls(stepControlsBox);
+        updateLocationHUD();
+
+        stepDots.forEach((dot, idx) => {
+            dot.classList.toggle('active', idx === state.step);
+        });
+        prevStepBtn.disabled = (state.step === 0);
+        nextStepBtn.disabled = (state.step === stepsData.length - 1);
+
+        // 切換 3D (Step 0) 與 2D Canvas (Step 1~5)
+        if (state.step === 0) {
+            container3d.style.display = 'block';
+            labels3dContainer.style.display = 'block';
+            canvas2d.style.display = 'none';
+            if (state.activeLocationId && state.activeLocationId !== 'overview') {
+                show3DFocusCard(state.activeLocationId);
+            } else {
+                focusCard3d.style.display = 'none';
+                hint3dBar.style.display = 'block';
+            }
+            update3DHighlight();
+        } else {
+            container3d.style.display = 'none';
+            labels3dContainer.style.display = 'none';
+            focusCard3d.style.display = 'none';
+            hint3dBar.style.display = 'none';
+            canvas2d.style.display = 'block';
+        }
+
+        if (resetView) {
+            state.zoom = 1;
+            state.panX = 0;
+            state.panY = 0;
+        }
+        resizeViewport();
+    }
+
+    stepDots.forEach(dot => {
+        dot.addEventListener('click', () => {
+            state.step = parseInt(dot.dataset.step, 10);
+            updateStepUI(true);
+        });
+    });
+
+    prevStepBtn.addEventListener('click', () => {
+        if (state.step > 0) {
+            state.step--;
+            updateStepUI(true);
+        }
+    });
+
+    nextStepBtn.addEventListener('click', () => {
+        if (state.step < stepsData.length - 1) {
+            state.step++;
+            updateStepUI(true);
+        }
+    });
+
+    toggleLabelsChk.addEventListener('change', (e) => {
+        state.showLabels = e.target.checked;
+    });
+
+    playPauseBtn.addEventListener('click', () => {
+        state.isPlaying = !state.isPlaying;
+        playPauseBtn.textContent = state.isPlaying ? '⏸ 暫停動畫' : '▶ 繼續動畫';
+    });
+
+    resetViewBtn.addEventListener('click', resetCameraAndPan);
+
+    closePanelBtn.addEventListener('click', () => {
+        appEl.classList.add('panel-hidden');
+        resizeViewport();
+    });
+
+    openPanelBtn.addEventListener('click', () => {
+        appEl.classList.remove('panel-hidden');
+        resizeViewport();
+    });
+
+    // ==================== 動畫主迴圈 ====================
+    let lastTimestamp = performance.now();
+    function animate(now) {
+        const dt = Math.min(0.05, (now - lastTimestamp) / 1000);
+        lastTimestamp = now;
+
+        if (state.isPlaying) {
+            state.time += dt;
+        }
+
+        if (state.step === 0) {
+            render3DScene(now);
+        } else {
+            if (state.step === 3) updateCanalPhysics(dt);
+            render2DCanvas();
+        }
+
+        requestAnimationFrame(animate);
+    }
+
+    // 啟動初始化
+    initThreeJS();
+    updateStepUI(true);
+    resizeViewport();
+    requestAnimationFrame(animate);
+})();
+</script>
+</body>
+</html>

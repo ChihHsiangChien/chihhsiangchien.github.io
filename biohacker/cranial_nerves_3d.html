@@ -1207,7 +1207,7 @@ BRAIN_REGIONS.forEach(reg => {
     div.className = 'region-row';
     div.id = `region-row-${reg.id}`;
     div.innerHTML = `
-        <div class="region-name-btn" onclick="selectBrainRegion('${reg.id}')" title="聚焦 ${reg.name}">
+        <div class="region-name-btn" onclick="selectBrainRegion('${reg.id}', true)" title="聚焦 ${reg.name}">
             <span>${reg.name}</span>
         </div>
         <div class="region-actions">
@@ -1225,7 +1225,7 @@ Object.values(MODALITIES).forEach(m => {
     btn.className = 'mod-btn';
     btn.id = `btn-mod-${m.code}`;
     btn.innerHTML = `<span class="mod-dot" style="background:${m.color}"></span><span><strong>${m.code}</strong> ${m.name.replace(/\(.*\)/, '')}</span>`;
-    btn.onclick = () => selectModality(m.code);
+    btn.onclick = () => selectModality(m.code, true);
     modBtnContainer.appendChild(btn);
 });
 
@@ -1237,7 +1237,7 @@ CRANIAL_NERVES.forEach(cn => {
     btn.id = `btn-cn-${cn.id}`;
     btn.textContent = `CN ${cn.num}`;
     btn.title = `${cn.name} (${cn.en})`;
-    btn.onclick = () => selectCN(cn.id);
+    btn.onclick = () => selectCN(cn.id, true);
     cnBtnContainer.appendChild(btn);
 });
 
@@ -1250,7 +1250,7 @@ NUCLEI.forEach(nuc => {
     div.id = `item-nuc-${nuc.id}`;
     div.style.borderLeftColor = mod.color;
     div.innerHTML = `<span>${nuc.name.split(' (')[0]}</span><span style="font-size:10px; color:${mod.color}; font-weight:700;">${nuc.mod}</span>`;
-    div.onclick = () => selectNucleus(nuc.id);
+    div.onclick = () => selectNucleus(nuc.id, true);
     nucleiListContainer.appendChild(div);
 });
 
@@ -1302,139 +1302,31 @@ function focusTargetY(yVal) {
     targetLookAt.set(0, THREE.MathUtils.clamp(yVal, -7.5, 11.2), 0);
 }
 
-// A. 選擇特定「腦神經」
-window.selectCN = function(cnId) {
-    clearActiveUI();
-    const cn = cnObjects[cnId].data;
-    document.getElementById(`btn-cn-${cnId}`)?.classList.add('active');
-
-    const relatedNucs = NUCLEI.filter(n => n.cns.includes(cnId));
-    const nucSet = new Set(relatedNucs.map(n => n.id));
-    const cnSet = new Set([cnId]);
-
-    relatedNucs.forEach(n => document.getElementById(`item-nuc-${n.id}`)?.classList.add('active'));
-    applyVisualFilter(nucSet, cnSet);
-    focusTargetY(cn.exitPos[1]);
-
-    // 更新右側資訊卡
-    document.getElementById('info-title').textContent = `CN ${cn.num}：${cn.name} (${cn.en})`;
-    document.getElementById('info-sub').textContent = `穿出位置：${cn.exitZone}`;
-    document.getElementById('info-badges').innerHTML = cn.mods.map(m =>
-        `<span class="badge" style="background:${MODALITIES[m].color}">${m} · ${MODALITIES[m].name}</span>`
-    ).join('');
-    document.getElementById('info-desc').innerHTML = `${cn.summary}`;
-    document.getElementById('info-relations').innerHTML = `<strong>關聯腦幹/前腦神經核 (${relatedNucs.length})：</strong>
-        <div class="related-chips">
-            ${relatedNucs.map(n => `<span class="chip" style="border-left:3px solid ${MODALITIES[n.mod].color}" onclick="selectNucleus('${n.id}')">${n.name.split(' (')[0]} (${n.mod})</span>`).join('')}
-        </div>`;
+// 多選狀態管理
+const selectedState = {
+    regions: new Set(),
+    mods: new Set(),
+    cns: new Set(),
+    nuclei: new Set()
 };
 
-// B. 選擇特定「神經核」
-window.selectNucleus = function(nucId) {
-    clearActiveUI();
-    const nuc = nucleiObjects[nucId].data;
-    const mod = MODALITIES[nuc.mod];
-    document.getElementById(`item-nuc-${nucId}`)?.classList.add('active');
-    document.getElementById(`item-nuc-${nucId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+function updateSelectionState(category, id, toggle = false) {
+    if (!toggle) {
+        selectedState.regions.clear();
+        selectedState.mods.clear();
+        selectedState.cns.clear();
+        selectedState.nuclei.clear();
+        selectedState[category].add(id);
+    } else {
+        if (selectedState[category].has(id)) selectedState[category].delete(id);
+        else selectedState[category].add(id);
+    }
+}
 
-    const nucSet = new Set([nucId]);
-    const cnSet = new Set(nuc.cns);
-    nuc.cns.forEach(cid => document.getElementById(`btn-cn-${cid}`)?.classList.add('active'));
-
-    applyVisualFilter(nucSet, cnSet);
-    focusTargetY(nuc.pos[1]);
-
-    document.getElementById('info-title').textContent = nuc.name;
-    document.getElementById('info-sub').textContent = `解剖高度：${nuc.level}`;
-    document.getElementById('info-badges').innerHTML = `<span class="badge" style="background:${mod.color}">${mod.code} · ${mod.name}</span>`;
-    document.getElementById('info-desc').innerHTML = `${nuc.func}`;
-    document.getElementById('info-relations').innerHTML = `<strong>出入此核團的腦神經：</strong>
-        <div class="related-chips">
-            ${nuc.cns.map(cid => {
-                const c = cnObjects[cid].data;
-                return `<span class="chip" onclick="selectCN('${cid}')">CN ${c.num} ${c.name}</span>`;
-            }).join('')}
-        </div>`;
-};
-
-// C. 選擇特定「感覺/運動功能分類」
-window.selectModality = function(modCode) {
-    clearActiveUI();
-    const mod = MODALITIES[modCode];
-    document.getElementById(`btn-mod-${modCode}`)?.classList.add('active');
-
-    const matchedNucs = NUCLEI.filter(n => n.mod === modCode);
-    const nucSet = new Set(matchedNucs.map(n => n.id));
-    const cnSet = new Set();
-    matchedNucs.forEach(n => {
-        document.getElementById(`item-nuc-${n.id}`)?.classList.add('active');
-        n.cns.forEach(c => {
-            cnSet.add(c);
-            document.getElementById(`btn-cn-${c}`)?.classList.add('active');
-        });
-    });
-
-    applyVisualFilter(nucSet, cnSet);
-    focusTargetY(0.8);
-
-    document.getElementById('info-title').textContent = `${mod.code}：${mod.name}`;
-    document.getElementById('info-sub').textContent = mod.type;
-    document.getElementById('info-badges').innerHTML = `<span class="badge" style="background:${mod.color}">${mod.code} 功能柱</span>`;
-    document.getElementById('info-desc').innerHTML = `${mod.desc}`;
-    document.getElementById('info-relations').innerHTML = `<strong>屬於此功能柱的神經核 (${matchedNucs.length})：</strong>
-        <div class="related-chips">
-            ${matchedNucs.map(n => `<span class="chip" onclick="selectNucleus('${n.id}')">${n.name.split(' (')[0]}</span>`).join('')}
-        </div>`;
-};
-
-// D. 選擇特定「腦部節段 (間腦/中腦/橋腦/延腦/脊髓)」
-window.selectBrainRegion = function(regId) {
-    clearActiveUI();
-    const reg = regionObjects[regId]?.data;
-    if (!reg) return;
-
-    document.getElementById(`region-row-${regId}`)?.classList.add('active');
-    document.getElementById(`label-reg-${regId}`)?.classList.add('active');
-
-    const nucSet = new Set(reg.nuclei);
-    const cnSet = new Set(reg.cns);
-
-    reg.cns.forEach(c => document.getElementById(`btn-cn-${c}`)?.classList.add('active'));
-    reg.nuclei.forEach(n => document.getElementById(`item-nuc-${n}`)?.classList.add('active'));
-
-    applyVisualFilter(nucSet, cnSet);
-    focusTargetY(reg.yTarget);
-
-    document.getElementById('info-title').textContent = `${reg.name} (${reg.en})`;
-    document.getElementById('info-sub').textContent = `解剖高度 Y: ${reg.yTarget}`;
-    document.getElementById('info-badges').innerHTML = `
-        <span class="badge" style="background:#38bdf8;">腦幹解剖節段</span>
-        <span class="badge" style="background:#818cf8;">出入神經：${reg.cns.map(c => c.replace('CN', 'CN ')).join(', ')}</span>
-    `;
-    document.getElementById('info-desc').innerHTML = `
-        ${reg.desc}<br><br>
-        <strong>出入此節段的腦神經 (${reg.cns.length})：</strong><br>
-        • ${reg.cns.map(c => {
-            const cnObj = cnObjects[c]?.data;
-            return `<strong>CN ${cnObj.num} ${cnObj.name}</strong> (${cnObj.mods.join('/')})`;
-        }).join('<br>• ')}<br><br>
-        <strong>位於此節段的核心神經核 (${reg.nuclei.length})：</strong><br>
-        • ${reg.nuclei.map(n => {
-            const nucObj = nucleiObjects[n]?.data;
-            return `<strong>${nucObj.name}</strong> [${nucObj.mod}]`;
-        }).join('<br>• ')}
-    `;
-    document.getElementById('info-relations').innerHTML = `
-        <strong>快速切換節段內元素：</strong>
-        <div class="related-chips">
-            ${reg.cns.map(c => `<span class="chip" onclick="selectCN('${c}')">CN ${cnObjects[c].data.num} ${cnObjects[c].data.name}</span>`).join('')}
-            ${reg.nuclei.map(n => `<span class="chip" onclick="selectNucleus('${n}')">${nucleiObjects[n].data.name.split(' (')[0]}</span>`).join('')}
-        </div>
-    `;
-
-    // 聚焦時自動高亮此節段的外殼
+function syncRegionHighlightsFromSelection() {
+    const hasRegionSel = selectedState.regions.size > 0;
     Object.keys(regionObjects).forEach(id => {
-        const isTarget = (id === regId);
+        const isTarget = hasRegionSel && selectedState.regions.has(id);
         regionObjects[id].isHighlighted = isTarget;
         applyRegionHighlight(id, isTarget);
         const btn = document.getElementById(`btn-reg-highlight-${id}`);
@@ -1442,14 +1334,215 @@ window.selectBrainRegion = function(regId) {
     });
     const topBtn = document.getElementById('btn-top-region-highlight');
     if (topBtn) {
-        topBtn.textContent = '腦區高亮: 開';
-        topBtn.classList.add('active');
+        topBtn.textContent = `腦區高亮: ${hasRegionSel ? '開' : '關'}`;
+        topBtn.classList.toggle('active', hasRegionSel);
     }
     const panelBtn = document.getElementById('btn-toggle-all-highlight');
     if (panelBtn) {
-        panelBtn.textContent = '高亮: 開';
-        panelBtn.classList.add('active');
+        panelBtn.textContent = `高亮: ${hasRegionSel ? '開' : '關'}`;
+        panelBtn.classList.toggle('active', hasRegionSel);
     }
+}
+
+function applyCurrentSelection(focusY = null, syncRegions = false) {
+    const total = selectedState.regions.size + selectedState.mods.size + selectedState.cns.size + selectedState.nuclei.size;
+    if (total === 0) {
+        resetSelection();
+        return;
+    }
+
+    clearActiveUI();
+    selectedState.regions.forEach(regId => {
+        document.getElementById(`region-row-${regId}`)?.classList.add('active');
+        document.getElementById(`label-reg-${regId}`)?.classList.add('active');
+    });
+    selectedState.mods.forEach(m => document.getElementById(`btn-mod-${m}`)?.classList.add('active'));
+    selectedState.cns.forEach(cid => document.getElementById(`btn-cn-${cid}`)?.classList.add('active'));
+    selectedState.nuclei.forEach(nid => document.getElementById(`item-nuc-${nid}`)?.classList.add('active'));
+
+    const nucSet = new Set();
+    const cnSet = new Set();
+
+    selectedState.cns.forEach(cnId => {
+        cnSet.add(cnId);
+        NUCLEI.filter(n => n.cns.includes(cnId)).forEach(n => nucSet.add(n.id));
+    });
+    selectedState.nuclei.forEach(nucId => {
+        nucSet.add(nucId);
+        const nuc = nucleiObjects[nucId]?.data;
+        if (nuc) nuc.cns.forEach(cid => cnSet.add(cid));
+    });
+    selectedState.mods.forEach(modCode => {
+        NUCLEI.filter(n => n.mod === modCode).forEach(n => {
+            nucSet.add(n.id);
+            n.cns.forEach(c => cnSet.add(c));
+        });
+    });
+    selectedState.regions.forEach(regId => {
+        const reg = regionObjects[regId]?.data;
+        if (!reg) return;
+        reg.nuclei.forEach(n => nucSet.add(n));
+        reg.cns.forEach(c => cnSet.add(c));
+    });
+
+    applyVisualFilter(nucSet, cnSet);
+    if (focusY !== null) focusTargetY(focusY);
+    if (syncRegions || selectedState.regions.size > 0) syncRegionHighlightsFromSelection();
+
+    if (total === 1) {
+        if (selectedState.cns.size === 1) {
+            const cnId = [...selectedState.cns][0];
+            const cn = cnObjects[cnId].data;
+            const relatedNucs = NUCLEI.filter(n => n.cns.includes(cnId));
+            document.getElementById('info-title').textContent = `CN ${cn.num}：${cn.name} (${cn.en})`;
+            document.getElementById('info-sub').textContent = `穿出位置：${cn.exitZone}`;
+            document.getElementById('info-badges').innerHTML = cn.mods.map(m =>
+                `<span class="badge" style="background:${MODALITIES[m].color}">${m} · ${MODALITIES[m].name}</span>`
+            ).join('');
+            document.getElementById('info-desc').innerHTML = `${cn.summary}`;
+            document.getElementById('info-relations').innerHTML = `<strong>關聯腦幹/前腦神經核 (${relatedNucs.length})：</strong>
+                <div class="related-chips">
+                    ${relatedNucs.map(n => `<span class="chip" style="border-left:3px solid ${MODALITIES[n.mod].color}" onclick="selectNucleus('${n.id}')">${n.name.split(' (')[0]} (${n.mod})</span>`).join('')}
+                </div>`;
+        } else if (selectedState.nuclei.size === 1) {
+            const nucId = [...selectedState.nuclei][0];
+            const nuc = nucleiObjects[nucId].data;
+            const mod = MODALITIES[nuc.mod];
+            document.getElementById('info-title').textContent = nuc.name;
+            document.getElementById('info-sub').textContent = `解剖高度：${nuc.level}`;
+            document.getElementById('info-badges').innerHTML = `<span class="badge" style="background:${mod.color}">${mod.code} · ${mod.name}</span>`;
+            document.getElementById('info-desc').innerHTML = `${nuc.func}`;
+            document.getElementById('info-relations').innerHTML = `<strong>出入此核團的腦神經：</strong>
+                <div class="related-chips">
+                    ${nuc.cns.map(cid => {
+                        const c = cnObjects[cid].data;
+                        return `<span class="chip" onclick="selectCN('${cid}')">CN ${c.num} ${c.name}</span>`;
+                    }).join('')}
+                </div>`;
+        } else if (selectedState.mods.size === 1) {
+            const modCode = [...selectedState.mods][0];
+            const mod = MODALITIES[modCode];
+            const matchedNucs = NUCLEI.filter(n => n.mod === modCode);
+            document.getElementById('info-title').textContent = `${mod.code}：${mod.name}`;
+            document.getElementById('info-sub').textContent = mod.type;
+            document.getElementById('info-badges').innerHTML = `<span class="badge" style="background:${mod.color}">${mod.code} 功能柱</span>`;
+            document.getElementById('info-desc').innerHTML = `${mod.desc}`;
+            document.getElementById('info-relations').innerHTML = `<strong>屬於此功能柱的神經核 (${matchedNucs.length})：</strong>
+                <div class="related-chips">
+                    ${matchedNucs.map(n => `<span class="chip" onclick="selectNucleus('${n.id}')">${n.name.split(' (')[0]}</span>`).join('')}
+                </div>`;
+        } else if (selectedState.regions.size === 1) {
+            const regId = [...selectedState.regions][0];
+            const reg = regionObjects[regId].data;
+            document.getElementById('info-title').textContent = `${reg.name} (${reg.en})`;
+            document.getElementById('info-sub').textContent = `解剖高度 Y: ${reg.yTarget}`;
+            document.getElementById('info-badges').innerHTML = `
+                <span class="badge" style="background:#38bdf8;">腦幹解剖節段</span>
+                <span class="badge" style="background:#818cf8;">出入神經：${reg.cns.map(c => c.replace('CN', 'CN ')).join(', ')}</span>
+            `;
+            document.getElementById('info-desc').innerHTML = `
+                ${reg.desc}<br><br>
+                <strong>出入此節段的腦神經 (${reg.cns.length})：</strong><br>
+                • ${reg.cns.map(c => {
+                    const cnObj = cnObjects[c]?.data;
+                    return `<strong>CN ${cnObj.num} ${cnObj.name}</strong> (${cnObj.mods.join('/')})`;
+                }).join('<br>• ')}<br><br>
+                <strong>位於此節段的核心神經核 (${reg.nuclei.length})：</strong><br>
+                • ${reg.nuclei.map(n => {
+                    const nucObj = nucleiObjects[n]?.data;
+                    return `<strong>${nucObj.name}</strong> [${nucObj.mod}]`;
+                }).join('<br>• ')}
+            `;
+            document.getElementById('info-relations').innerHTML = `
+                <strong>快速切換節段內元素：</strong>
+                <div class="related-chips">
+                    ${reg.cns.map(c => `<span class="chip" onclick="selectCN('${c}')">CN ${cnObjects[c].data.num} ${cnObjects[c].data.name}</span>`).join('')}
+                    ${reg.nuclei.map(n => `<span class="chip" onclick="selectNucleus('${n}')">${nucleiObjects[n].data.name.split(' (')[0]}</span>`).join('')}
+                </div>
+            `;
+        }
+        return;
+    }
+
+    // 複選模式資訊卡
+    const summaryParts = [];
+    if (selectedState.regions.size) summaryParts.push(`腦部節段 ×${selectedState.regions.size}`);
+    if (selectedState.mods.size) summaryParts.push(`功能分類 ×${selectedState.mods.size}`);
+    if (selectedState.cns.size) summaryParts.push(`腦神經 ×${selectedState.cns.size}`);
+    if (selectedState.nuclei.size) summaryParts.push(`神經核 ×${selectedState.nuclei.size}`);
+
+    const badges = [];
+    const descLines = [];
+    selectedState.regions.forEach(regId => {
+        const reg = regionObjects[regId]?.data;
+        if (!reg) return;
+        badges.push(`<span class="badge" style="background:#38bdf8; cursor:pointer;" title="點擊取消選取" onclick="selectBrainRegion('${regId}', true)">${reg.name} ×</span>`);
+        descLines.push(`• <strong style="color:#38bdf8">${reg.name}</strong>：${reg.cns.map(c => c.replace('CN', 'CN ')).join(', ')}`);
+    });
+    selectedState.mods.forEach(code => {
+        const mod = MODALITIES[code];
+        badges.push(`<span class="badge" style="background:${mod.color}; cursor:pointer;" title="點擊取消選取" onclick="selectModality('${code}', true)">${mod.code} ×</span>`);
+        descLines.push(`• <strong style="color:${mod.color}">${mod.code} ${mod.name}</strong>：${mod.type}`);
+    });
+    selectedState.cns.forEach(cnId => {
+        const cn = cnObjects[cnId]?.data;
+        if (!cn) return;
+        const cColor = MODALITIES[cn.mods[0]]?.color || '#38bdf8';
+        badges.push(`<span class="badge" style="background:${cColor}; cursor:pointer;" title="點擊取消選取" onclick="selectCN('${cnId}', true)">CN ${cn.num} ×</span>`);
+        descLines.push(`• <strong>CN ${cn.num} ${cn.name}</strong> (${cn.mods.join('/')})：${cn.exitZone}`);
+    });
+    selectedState.nuclei.forEach(nucId => {
+        const nuc = nucleiObjects[nucId]?.data;
+        if (!nuc) return;
+        const mod = MODALITIES[nuc.mod];
+        badges.push(`<span class="badge" style="background:${mod.color}; cursor:pointer;" title="點擊取消選取" onclick="selectNucleus('${nucId}', true)">${nuc.name.split(' (')[0]} ×</span>`);
+        descLines.push(`• <strong style="color:${mod.color}">${nuc.name}</strong> [${nuc.mod}]：${nuc.level}`);
+    });
+
+    document.getElementById('info-title').textContent = `已複選 ${total} 個項目`;
+    document.getElementById('info-sub').textContent = summaryParts.join(' ｜ ') + '（再次點擊左側按鈕或上方標籤可取消）';
+    document.getElementById('info-badges').innerHTML = badges.join('');
+    document.getElementById('info-desc').innerHTML = descLines.join('<br>');
+    document.getElementById('info-relations').innerHTML = `
+        <div class="related-chips">
+            <span class="chip" onclick="resetSelection()">↺ 清除全部選取 (顯示全部)</span>
+        </div>
+    `;
+}
+
+// A. 選擇特定「腦神經」
+window.selectCN = function(cnId, toggle = false) {
+    if (!cnObjects[cnId]) return;
+    updateSelectionState('cns', cnId, toggle);
+    const focusY = selectedState.cns.has(cnId) ? cnObjects[cnId].data.exitPos[1] : null;
+    applyCurrentSelection(focusY, !toggle);
+};
+
+// B. 選擇特定「神經核」
+window.selectNucleus = function(nucId, toggle = false) {
+    if (!nucleiObjects[nucId]) return;
+    updateSelectionState('nuclei', nucId, toggle);
+    if (toggle && selectedState.nuclei.has(nucId)) {
+        document.getElementById(`item-nuc-${nucId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    const focusY = selectedState.nuclei.has(nucId) ? nucleiObjects[nucId].data.pos[1] : null;
+    applyCurrentSelection(focusY, !toggle);
+};
+
+// C. 選擇特定「感覺/運動功能分類」
+window.selectModality = function(modCode, toggle = false) {
+    if (!MODALITIES[modCode]) return;
+    updateSelectionState('mods', modCode, toggle);
+    applyCurrentSelection(toggle ? null : 0.8, !toggle);
+};
+
+// D. 選擇特定「腦部節段 (間腦/中腦/橋腦/延腦/脊髓)」
+window.selectBrainRegion = function(regId, toggle = false) {
+    const reg = regionObjects[regId]?.data;
+    if (!reg) return;
+    updateSelectionState('regions', regId, toggle);
+    const focusY = selectedState.regions.has(regId) ? reg.yTarget : null;
+    applyCurrentSelection(focusY, true);
 };
 
 // 套用單一節段外殼高亮材質
@@ -1578,6 +1671,10 @@ window.toggleAllRegionLabels = function() {
 
 // E. 重設全部顯示
 window.resetSelection = function() {
+    selectedState.regions.clear();
+    selectedState.mods.clear();
+    selectedState.cns.clear();
+    selectedState.nuclei.clear();
     clearActiveUI();
     applyVisualFilter(null, null);
     focusTargetY(0.8);
