@@ -1,0 +1,2580 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>人體皮膚全層結構、角質層形成與黑色素代謝動態模擬</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap');
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Noto Sans TC', system-ui, -apple-system, sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      cursor: grab;
+    }
+
+    canvas:active {
+      cursor: grabbing;
+    }
+
+    /* 自訂捲軸 */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.4);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.35);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, 0.6);
+    }
+
+    /* 玻璃擬態面板 */
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.82);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+    }
+
+    /* 範圍滑桿美化 */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: rgba(51, 65, 85, 0.8);
+      height: 6px;
+      border-radius: 999px;
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #38bdf8;
+      cursor: pointer;
+      border: 2px solid #f8fafc;
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+    }
+  </style>
+</head>
+<body class="relative w-screen h-screen overflow-hidden bg-slate-950">
+
+  <!-- 主視覺全螢幕 Canvas -->
+  <canvas id="epidermisCanvas"></canvas>
+
+  <!-- 左上角標題與狀態摘要浮動列 -->
+  <header class="fixed top-3 left-3 z-20 flex flex-wrap items-center gap-2 pointer-events-none max-w-[calc(100vw-64px)]">
+    <div class="glass-panel px-3.5 py-2 rounded-2xl shadow-xl pointer-events-auto flex items-center gap-3">
+      <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-rose-400 via-amber-300 to-sky-400 flex items-center justify-center text-slate-950 font-bold text-sm shadow">
+        膚
+      </div>
+      <div>
+        <h1 class="text-sm sm:text-base font-bold tracking-wide text-slate-100 leading-tight">
+          皮膚全層結構、角質化與黑色素代謝模擬
+        </h1>
+        <p class="text-[11px] text-slate-400 hidden sm:block">
+          拖曳平移・滾輪縮放・點擊表皮/真皮微血管/皮下組織檢視微觀機制
+        </p>
+      </div>
+    </div>
+
+    <!-- 目前生理模式即時狀態膠囊 -->
+    <div id="statusBadge" class="glass-panel px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 shadow-lg pointer-events-auto border border-emerald-400/30 text-emerald-300">
+      <span id="statusDot" class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+      <span id="statusText">正常生理平衡（約 28 天週期）</span>
+    </div>
+
+    <!-- 紫外線日曬即時狀態膠囊 -->
+    <div id="uvStatusBadge" class="glass-panel px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 shadow-lg pointer-events-auto border border-slate-600/50 text-slate-300">
+      <span id="uvStatusDot" class="w-2 h-2 rounded-full bg-slate-400"></span>
+      <span id="uvStatusText">室內低光（UV 關閉・黑色素代謝平衡）</span>
+    </div>
+  </header>
+
+  <!-- 左下角視角控制與快速分層聚焦按鈕 -->
+  <div class="fixed bottom-3 left-3 z-20 flex flex-wrap items-center gap-1.5 sm:gap-2 pointer-events-auto max-w-[calc(100vw-24px)]">
+    <button id="btnViewFull" title="檢視表皮、真皮與皮下組織全層剖面"
+      class="glass-panel hover:bg-slate-800/90 active:scale-95 transition px-2.5 py-2 rounded-xl text-xs font-semibold text-sky-300 border-sky-400/40 flex items-center gap-1.5 shadow-lg">
+      <span>全層總覽</span>
+    </button>
+
+    <button id="btnViewEpidermis" title="放大特寫表皮五層與角質磚牆"
+      class="glass-panel hover:bg-slate-800/90 active:scale-95 transition px-2.5 py-2 rounded-xl text-xs font-medium text-amber-200 flex items-center gap-1 shadow-lg">
+      <span>表皮特寫</span>
+    </button>
+
+    <button id="btnViewDermis" title="放大檢視真皮乳頭微血管袢與皮下脂肪組織"
+      class="glass-panel hover:bg-slate-800/90 active:scale-95 transition px-2.5 py-2 rounded-xl text-xs font-medium text-rose-200 flex items-center gap-1 shadow-lg">
+      <span>真皮微血管與皮下</span>
+    </button>
+
+    <button id="btnZoomIn" title="放大"
+      class="glass-panel hover:bg-slate-800/90 active:scale-95 transition p-2 rounded-xl text-slate-200 shadow-lg">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+      </svg>
+    </button>
+
+    <button id="btnZoomOut" title="縮小"
+      class="glass-panel hover:bg-slate-800/90 active:scale-95 transition p-2 rounded-xl text-slate-200 shadow-lg">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+      </svg>
+    </button>
+
+    <button id="btnBrickLens"
+      class="glass-panel hover:bg-amber-500/20 border-amber-400/40 active:scale-95 transition px-3 py-2 rounded-xl text-xs font-semibold text-amber-300 flex items-center gap-1.5 shadow-lg">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+      </svg>
+      <span>磚牆微觀放大鏡</span>
+    </button>
+  </div>
+
+  <!-- 單一細胞追蹤即時浮動追蹤卡（啟動追蹤時顯示） -->
+  <div id="trackerHud" class="hidden fixed bottom-16 left-3 z-20 glass-panel rounded-2xl p-3.5 w-72 sm:w-80 shadow-2xl border border-cyan-400/40 transition-all">
+    <div class="flex items-center justify-between mb-1.5">
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping"></span>
+        <span class="text-xs font-bold text-cyan-300 tracking-wide">單細胞生命週期追蹤</span>
+      </div>
+      <button id="btnCloseTracker" class="text-slate-400 hover:text-white text-xs px-1.5 py-0.5 rounded bg-slate-800/70">結束</button>
+    </div>
+    <div class="flex items-baseline justify-between mb-1">
+      <span id="trackLayerName" class="text-sm font-bold text-white">基底層 (Stratum basale)</span>
+      <span id="trackDayBadge" class="text-xs font-mono font-semibold text-amber-300 bg-amber-500/15 px-2 py-0.5 rounded-full">第 0.5 天</span>
+    </div>
+    <!-- 進度條 -->
+    <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden mb-2">
+      <div id="trackProgressBar" class="h-full bg-gradient-to-r from-rose-400 via-purple-400 to-amber-300 transition-all duration-150" style="width: 5%"></div>
+    </div>
+    <p id="trackBioEvent" class="text-xs text-slate-300 leading-relaxed">
+      剛由基底層幹細胞有絲分裂誕生，準備脫離基底膜向上推移。
+    </p>
+  </div>
+
+  <!-- 結構與細胞點擊說明彈出卡 -->
+  <div id="infoCard" class="hidden fixed top-16 left-3 z-20 glass-panel rounded-2xl p-4 w-80 sm:w-96 shadow-2xl border border-sky-400/40 transition-all">
+    <div class="flex items-start justify-between gap-2 mb-2">
+      <div>
+        <span id="infoCategory" class="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300">表皮層次構造</span>
+        <h2 id="infoTitle" class="text-base font-bold text-white mt-1">顆粒層 (Stratum granulosum)</h2>
+      </div>
+      <button id="btnCloseInfo" class="p-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+    <p id="infoDesc" class="text-xs text-slate-200 leading-relaxed mb-2.5"></p>
+    <div class="bg-slate-900/80 rounded-xl p-2.5 border border-slate-700/70">
+      <div class="text-[11px] font-semibold text-amber-300 mb-1">關鍵生化與生理機制：</div>
+      <p id="infoMechanism" class="text-xs text-slate-300 leading-relaxed"></p>
+    </div>
+  </div>
+
+  <!-- 右上角收合/展開控制抽屜按鈕 -->
+  <button id="btnTogglePanel"
+    class="fixed top-3 right-3 z-30 glass-panel hover:bg-slate-800/90 active:scale-95 transition p-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-semibold text-slate-100">
+    <svg id="iconPanelToggle" class="w-4 h-4 text-sky-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+    </svg>
+    <span class="hidden sm:inline" id="togglePanelLabel">控制與微觀面板</span>
+  </button>
+
+  <!-- 右側可收合精簡控制與微觀資訊面板 -->
+  <aside id="controlDrawer"
+    class="fixed top-14 right-3 bottom-3 z-20 w-80 sm:w-88 glass-panel rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all duration-300 translate-x-0">
+    
+    <div class="p-3.5 overflow-y-auto flex-1 space-y-3.5">
+      
+      <!-- 1. 曬太陽變黑與漸漸白回來（UV & 黑色素動態代謝） -->
+      <section class="bg-gradient-to-br from-amber-950/60 via-slate-900/80 to-indigo-950/60 rounded-xl p-3 border border-amber-400/40 space-y-2.5">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-1.5">
+            <span class="text-sm">☀️</span>
+            <span class="text-xs font-bold text-amber-200">紫外線日曬與黑色素代謝</span>
+          </div>
+          <!-- 即時表皮膚色預覽色塊 -->
+          <div class="flex items-center gap-1.5 bg-slate-950/70 px-2 py-0.5 rounded-full border border-slate-700">
+            <span id="skinToneSwatch" class="w-3.5 h-3.5 rounded-full border border-white/40 transition-colors" style="background-color: #f6c39b;"></span>
+            <span id="melaninPctLabel" class="text-[10px] font-mono text-amber-300">黑色素 18%</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-1.5">
+          <button id="btnToggleUV"
+            class="py-2 px-2.5 rounded-xl bg-slate-800 hover:bg-amber-500/25 border border-amber-400/50 text-amber-200 font-bold text-xs flex items-center justify-center gap-1.5 transition shadow">
+            <span id="uvBtnIcon">☀️</span>
+            <span id="uvBtnText">開啟 UV 日曬</span>
+          </button>
+
+          <button id="btnAutoUVCycle"
+            class="py-2 px-2.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-400/40 text-indigo-200 font-semibold text-xs flex items-center justify-center gap-1 transition">
+            <span>🔄</span>
+            <span id="autoCycleText">日曬→白回循環</span>
+          </button>
+        </div>
+
+        <div class="space-y-1">
+          <div class="flex items-center justify-between text-[11px]">
+            <span class="text-slate-300">紫外線強度 (UV Index)</span>
+            <span id="uvIndexLabel" class="font-mono font-bold text-amber-300">UV 8（強日照）</span>
+          </div>
+          <input id="uvIndexSlider" type="range" min="1" max="11" step="1" value="8" class="w-full" />
+        </div>
+
+        <p id="tanningPhaseDesc" class="text-[11px] text-slate-300 leading-relaxed bg-slate-950/60 p-2 rounded-lg border border-slate-800">
+          目前無紫外線照射：黑色素細胞處於基礎低活性狀態，表皮維持自然白皙透亮膚色。
+        </p>
+      </section>
+
+      <!-- 2. 播放與時間速度控制 -->
+      <section class="bg-slate-900/60 rounded-xl p-3 border border-slate-800">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-bold text-slate-200">模擬時間與細胞追蹤</span>
+          <span id="speedValueLabel" class="text-xs font-mono text-sky-400 font-semibold">1.0x 速度</span>
+        </div>
+        <div class="flex items-center gap-2 mb-2.5">
+          <button id="btnPlayPause"
+            class="flex-1 py-2 px-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition shadow">
+            <svg id="iconPlayPause" class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+            </svg>
+            <span id="playPauseText">暫停模擬</span>
+          </button>
+
+          <button id="btnTrackCell"
+            class="py-2 px-3 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/50 text-cyan-300 font-semibold text-xs flex items-center gap-1.5 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            <span>追蹤單細胞</span>
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <span class="text-[11px] text-slate-400">0.5x</span>
+          <input id="speedSlider" type="range" min="0.5" max="3.0" step="0.25" value="1.0" class="flex-1" />
+          <span class="text-[11px] text-slate-400">3.0x</span>
+        </div>
+      </section>
+
+      <!-- 3. 生理與病理情境切換 -->
+      <section class="bg-slate-900/60 rounded-xl p-3 border border-slate-800 space-y-2">
+        <div class="text-xs font-bold text-slate-200 mb-1">生理 / 病理情境模式</div>
+
+        <button data-mode="normal" class="mode-btn w-full text-left p-2.5 rounded-xl border border-emerald-400/60 bg-emerald-500/15 transition">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-emerald-300">1. 正常生理平衡</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-200">28 天週期</span>
+          </div>
+          <p class="text-[11px] text-slate-300 mt-1 leading-snug">
+            水合度與 KLKs 蛋白酶活性正常，角質生成與最外層脫屑達成動態平衡。
+          </p>
+        </button>
+
+        <button data-mode="dry" class="mode-btn w-full text-left p-2.5 rounded-xl border border-slate-700/80 bg-slate-800/40 hover:bg-slate-800/70 transition">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-amber-300">2. 乾燥缺水 / 脫落受阻</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200">角質堆積</span>
+          </div>
+          <p class="text-[11px] text-slate-400 mt-1 leading-snug">
+            水分梯度與 NMF 減少，KLKs 酵素無法順利切斷角質橋粒，導致老廢角質堆積與粗糙皮屑。
+          </p>
+        </button>
+
+        <button data-mode="damaged" class="mode-btn w-full text-left p-2.5 rounded-xl border border-slate-700/80 bg-slate-800/40 hover:bg-slate-800/70 transition">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-rose-300">3. 過度去角質 / 屏障受損</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-200">TEWL 劇增</span>
+          </div>
+          <p class="text-[11px] text-slate-400 mt-1 leading-snug">
+            外力或強酸過度剝除角質層與細胞間脂質，經皮水分散失（TEWL）劇增並引發敏感發炎警示。
+          </p>
+        </button>
+      </section>
+
+      <!-- 3. 顯示圖層與微觀標註開關 -->
+      <section class="bg-slate-900/60 rounded-xl p-3 border border-slate-800 space-y-2">
+        <div class="text-xs font-bold text-slate-200">微觀結構視覺標註</div>
+        <label class="flex items-center justify-between text-xs text-slate-300 cursor-pointer py-1">
+          <span>顯示表皮五層名稱與標尺</span>
+          <input id="chkLabels" type="checkbox" checked class="accent-sky-400 w-4 h-4 rounded" />
+        </label>
+        <label class="flex items-center justify-between text-xs text-slate-300 cursor-pointer py-1">
+          <span>顯示橋粒 / 板層小體 / 黑色素傘</span>
+          <input id="chkOrganelles" type="checkbox" checked class="accent-sky-400 w-4 h-4 rounded" />
+        </label>
+        <label class="flex items-center justify-between text-xs text-slate-300 cursor-pointer py-1">
+          <span>顯示水合梯度與 TEWL 蒸散箭頭</span>
+          <input id="chkHydration" type="checkbox" checked class="accent-sky-400 w-4 h-4 rounded" />
+        </label>
+      </section>
+
+      <!-- 5. 快速結構索引（點擊直接檢視解說） -->
+      <section class="bg-slate-900/60 rounded-xl p-3 border border-slate-800">
+        <div class="text-xs font-bold text-slate-200 mb-2">點選檢視全層皮膚與血管構造</div>
+        <div class="grid grid-cols-2 gap-1.5 text-[11px]">
+          <button data-topic="corneum" class="topic-btn px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/30 text-amber-200 text-left truncate">
+            ● 角質層 (磚牆屏障)
+          </button>
+          <button data-topic="lucidum" class="topic-btn px-2.5 py-1.5 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 border border-sky-400/30 text-sky-200 text-left truncate">
+            ● 透明層 (厚皮專屬)
+          </button>
+          <button data-topic="granulosum" class="topic-btn px-2.5 py-1.5 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 border border-purple-400/30 text-purple-200 text-left truncate">
+            ● 顆粒層 (板層小體)
+          </button>
+          <button data-topic="spinosum" class="topic-btn px-2.5 py-1.5 rounded-lg bg-orange-500/15 hover:bg-orange-500/25 border border-orange-400/30 text-orange-200 text-left truncate">
+            ● 棘狀層 (橋粒/角蛋白)
+          </button>
+          <button data-topic="basale" class="topic-btn px-2.5 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 border border-rose-400/30 text-rose-200 text-left truncate">
+            ● 基底層 (半橋粒/分裂)
+          </button>
+          <button data-topic="melanocyte" class="topic-btn px-2.5 py-1.5 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-400/30 text-indigo-200 text-left truncate">
+            ▲ 黑色素細胞 (曬黑核心)
+          </button>
+          <button data-topic="langerhans" class="topic-btn px-2.5 py-1.5 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 border border-teal-400/30 text-teal-200 text-left truncate">
+            ▲ 蘭格漢氏細胞
+          </button>
+          <button data-topic="merkel" class="topic-btn px-2.5 py-1.5 rounded-lg bg-pink-500/15 hover:bg-pink-500/25 border border-pink-400/30 text-pink-200 text-left truncate">
+            ▲ 梅克爾細胞
+          </button>
+          <button data-topic="dermis" class="topic-btn px-2.5 py-1.5 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-400/30 text-red-200 text-left truncate">
+            ■ 真皮層 (膠原/彈性纖維)
+          </button>
+          <button data-topic="capillaries" class="topic-btn px-2.5 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 border border-rose-400/40 text-rose-200 text-left truncate">
+            ■ 真皮微血管網 (動靜脈袢)
+          </button>
+          <button data-topic="subcutis" class="topic-btn col-span-2 px-2.5 py-1.5 rounded-lg bg-yellow-500/15 hover:bg-yellow-500/25 border border-yellow-400/30 text-yellow-200 text-left truncate">
+            ■ 皮下組織 (脂肪細胞小葉與深層血管)
+          </button>
+        </div>
+      </section>
+
+    </div>
+  </aside>
+
+  <!-- 磚牆微觀放大鏡專屬互動模態視窗 -->
+  <div id="brickModal" class="hidden fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6">
+    <div class="glass-panel rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-amber-400/40 shadow-2xl">
+      <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-900/70">
+        <div class="flex items-center gap-2.5">
+          <span class="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold">微觀特寫視角</span>
+          <h3 class="text-base sm:text-lg font-bold text-white">角質層「磚牆模型 (Brick & Mortar)」與 KLKs 脫屑機制</h3>
+        </div>
+        <button id="btnCloseBrickModal" class="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-4 sm:p-5 grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <!-- 微觀 Canvas -->
+        <div class="lg:col-span-2 relative rounded-2xl overflow-hidden border border-slate-700/80 bg-slate-950 min-h-[290px] sm:min-h-[360px]">
+          <canvas id="brickLensCanvas" class="w-full h-full"></canvas>
+          <div class="absolute bottom-2.5 left-2.5 right-2.5 flex flex-wrap gap-2 justify-between items-center pointer-events-none">
+            <span id="brickLensLegend" class="bg-slate-950/85 text-amber-200 text-[11px] px-2.5 py-1 rounded-lg border border-amber-400/30">
+              黃色磚塊：無核角質細胞 + NMF｜橘藍雙層：細胞間脂質水泥（親水頭/疏水尾）
+            </span>
+          </div>
+        </div>
+
+        <!-- 微觀解說與互動說明 -->
+        <div class="space-y-3 text-xs text-slate-300 flex flex-col justify-between">
+          <div class="space-y-2.5">
+            <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-400/30">
+              <div class="font-bold text-amber-300 mb-1">1. 磚塊：扁平無核角質細胞 (Corneocytes)</div>
+              <p class="leading-relaxed text-slate-200">
+                細胞核與胞器完全崩解，內部充滿交聯角蛋白絲網與<strong>天然保濕因子 (NMF)</strong>，外圍包覆堅韌的<strong>角化細胞套膜</strong>，彼此緊密交錯堆疊。
+              </p>
+            </div>
+
+            <div class="p-3 rounded-xl bg-sky-500/10 border border-sky-400/30">
+              <div class="font-bold text-sky-300 mb-1">2. 水泥：層狀細胞間脂質雙層</div>
+              <p class="leading-relaxed text-slate-200">
+                填滿極窄的細胞間隙，包含<strong>神經醯胺 (~50%)、膽固醇 (~25%)、游離脂肪酸 (~15%)</strong>，排列成雙分子層（親水頭與疏水尾）鎖住水分。
+              </p>
+            </div>
+
+            <div class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-400/30">
+              <div class="font-bold text-emerald-300 mb-1">3. 生理脫落：角質橋粒與 KLKs 蛋白酶剪斷</div>
+              <p class="leading-relaxed text-slate-200">
+                上下磚塊由<strong>角質橋粒 (Corneodesmosomes)</strong> 緊密扣合。最外層的 <strong>KLKs 蛋白酶（綠色剪刀標示）</strong>會切斷橋粒鉚釘，讓最表層角質磚塊鬆動翹起並自然脫落。
+              </p>
+            </div>
+          </div>
+
+          <div class="pt-1 flex gap-2">
+            <button id="btnTriggerExfoliate" class="w-full py-2.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition shadow">
+              模擬 KLKs 切斷橋粒（觸發最表層脫落）
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * ============================================================================
+     * 表皮分層與角質層形成（緊密上皮拓撲、角化作用與脫落）互動教學模擬系統
+     * ----------------------------------------------------------------------------
+     * 核心解剖學與物理引擎重構：
+     * 1. 複層扁平上皮緊密嵌合 (Tightly Packed Stratified Squamous Epithelium)：
+     *    - 建立連續交錯網格列 (Staggered Tessellated Rows)，每個細胞的幾何寬度、
+     *      高度與多邊形頂點均隨垂直位置 (y 座標) 連續平滑變形，確保相鄰細胞膜
+     *      緊密貼合、無任何不自然的背景空洞。
+     *    - 僅在「過度去角質／屏障受損」模式下，角質層細胞間脂質流失、橋粒斷裂，
+     *      才會在最表層出現微裂隙與經皮水分蒸散 (TEWL) 逸出。
+     * 2. 各層微觀細胞特徵：
+     *    - 基底層：單層高柱狀/立方狀細胞緊密並排立於波浪狀基底膜上，底部以
+     *      半橋粒 (Hemidesmosomes) 錨定基底膜；可見有絲分裂（染色體分離與一分為二）。
+     *    - 棘狀層：緊密嵌合的多邊形磚牆拓撲，細胞膜邊界繪製密集橋粒 (Desmosomes)
+     *      與橫跨極窄細胞間隙的角蛋白張力絲 (Tonofilaments) 輻射橋接。
+     *    - 顆粒層：扁平梭形緊密疊合，胞質內具深紫色角質透明顆粒與向間隙外吐的板層小體。
+     *    - 透明層：3～4 層高度扁平、折光性強的無核透明細胞緊密疊壓。
+     *    - 角質層：12～15 層扁平六角形/磚塊狀無核角質細胞交錯堆疊，填滿連續層狀脂質水泥；
+     *      僅最表層 1～2 層受 KLKs 酵素剪斷角質橋粒後才翹起剝離。
+     * ============================================================================
+     */
+
+    // --------------------------------------------------------------------------
+    // 1. 醫學知識庫 (繁體中文 - 涵蓋表皮、真皮、微血管、皮下組織與黑色素代謝)
+    // --------------------------------------------------------------------------
+    const TOPIC_DATA = {
+      basale: {
+        category: '表皮第 1 層（最深層生發層）',
+        title: '基底層 (Stratum basale)',
+        desc: '由單層高柱狀或立方狀的基底角質形成細胞緊密並排組成，底部透過「半橋粒 (Hemidesmosomes)」牢固錨定於波浪狀基底膜上，側壁則以橋粒與鄰近細胞緊密相連。',
+        mechanism: '基底層幹細胞持續進行有絲分裂，新生子細胞向上推擠上方緊密排列的細胞柱；同時接收黑色素細胞注入的黑色素小體，於細胞核上方形成保護 DNA 的遮陽傘。'
+      },
+      spinosum: {
+        category: '表皮第 2 層（緊密多邊形嵌合層）',
+        title: '棘狀層 (Stratum spinosum)',
+        desc: '約 8～10 層多角形細胞以緊密嵌合（鋪路石拓撲）方式排列，細胞膜彼此緊靠，邊界佈滿密集的「橋粒 (Desmosomes)」與輻射狀角蛋白張力絲 (Tonofilaments)。',
+        mechanism: '日曬期間細胞內充滿深棕色黑色素小體遮陽傘；停止日曬後，這批含黑色素的細胞隨表皮更新持續向上推移，是膚色「漸漸白回來」的代謝主力。'
+      },
+      granulosum: {
+        category: '表皮第 3 層（角化關鍵轉折）',
+        title: '顆粒層 (Stratum granulosum)',
+        desc: '約 3～5 層高度壓扁的梭形／扁平多邊形細胞緊密疊合，胞質內充滿深紫色的「角質透明顆粒」與富含脂質的「板層小體 (Lamellar bodies)」。',
+        mechanism: '顆粒層頂端將板層小體排入極窄細胞間隙，釋出神經醯胺、膽固醇與游離脂肪酸（磚牆水泥）；細胞核與胞器瓦解，殘留的黑色素微粒隨角蛋白網進入角質層。'
+      },
+      lucidum: {
+        category: '表皮第 4 層（手掌/腳底厚皮專屬）',
+        title: '透明層 (Stratum lucidum)',
+        desc: '見於手掌、腳底等高摩擦厚皮部位，由 3～4 層界線模糊、折光性強的扁平透明無核細胞緊密疊壓而成。',
+        mechanism: '細胞核與胞器已完全退化消失，內部充滿緊密排列的角蛋白與透明蛋白 (Eleidin)，提供額外的防水與抗壓緩衝。'
+      },
+      corneum: {
+        category: '表皮第 5 層（緊密磚牆屏障）',
+        title: '角質層 (Stratum corneum)',
+        desc: '由 12～16 層完全扁平的六角形／長磚塊狀無核角質細胞（Corneocytes）以交錯砌磚方式緊密堆疊，極窄細胞間隙填滿連續的層狀脂質水泥，並由角質橋粒扣合。',
+        mechanism: '日曬後隨細胞向上推移而帶上來的黑色素微粒，最終在此層隨 KLKs 蛋白酶剪斷橋粒、角質細胞自然脫屑（Desquamation）而排出體外，使皮膚逐漸恢復白皙。'
+      },
+      melanocyte: {
+        category: '特殊樹突狀細胞（曬黑核心引擎）',
+        title: '黑色素細胞 (Melanocyte)',
+        desc: '嵌入基底層細胞之間，伸出細長樹突穿行於棘狀層極窄的細胞間隙中，將黑色素小體輸送給周圍約 36 顆角質形成細胞（表皮黑色素單位）。',
+        mechanism: '紫外線（UVA/UVB）照射時，細胞內「酪胺酸酶 (Tyrosinase)」高度活化，加速合成深棕色黑色素小體並沿樹突輸送至角質形成細胞核上方遮蔽紫外線；停止日曬後合成速率回落。'
+      },
+      langerhans: {
+        category: '特殊免疫細胞（嵌入棘狀層）',
+        title: '蘭格漢氏細胞 (Langerhans cell)',
+        desc: '源自骨髓的樹突狀抗原呈現細胞，緊密嵌入棘狀層細胞間並伸出細長觸手進行免疫巡邏。',
+        mechanism: '偵測並捕捉穿透角質層的微生物或過敏原，遷移至淋巴結呈現抗原給 T 細胞；過度紫外線照射會暫時抑制其免疫監視功能。'
+      },
+      merkel: {
+        category: '特殊感覺受器細胞（嵌入基底層）',
+        title: '梅克爾細胞 (Merkel cell)',
+        desc: '嵌入基底層的橢圓形機械受器細胞，以橋粒與鄰近角質細胞相連，底部與真皮感覺神經末梢形成突觸。',
+        mechanism: '精準偵測輕觸壓力與物體表面紋理（慢適應 I 型機械受器），在指尖與唇部密度最高。'
+      },
+      dermis: {
+        category: '皮膚第 2 大層（結締組織支撐層）',
+        title: '真皮層 (Dermis：乳頭層與網狀層)',
+        desc: '位於基底膜下方，分為上方的「真皮乳頭層 (Dermal Papillae)」與深層「網狀層」，富含交織的膠原蛋白纖維 (Collagen)、彈性纖維 (Elastin) 與纖維母細胞。',
+        mechanism: '提供皮膚抗張強度與回彈力；注意表皮層本身「沒有血管」，必須完全仰賴真皮乳頭層的微血管網透過基底膜擴散供應氧氣與營養。'
+      },
+      capillaries: {
+        category: '真皮循環系統（乳頭微血管袢與乳頭下血管叢）',
+        title: '真皮微血管網 (Dermal Capillary Loops)',
+        desc: '由深層小動脈 (紅) 分支向上形成「乳頭下動脈叢」，再垂直伸入每個真皮乳頭突起形成「毛細血管袢 (Capillary Loops)」，進行氣體與養分交換後匯入小靜脈 (藍)。',
+        mechanism: '負責供應表皮細胞分裂與角化所需養分及調節體溫；當受到紫外線 (UV) 強烈照射時，微血管會反應性擴張充血（微紅反應），加速帶入免疫與修復因子。'
+      },
+      subcutis: {
+        category: '皮膚第 3 大層（皮下脂肪與深層血管）',
+        title: '皮下組織 (Subcutis / Hypodermis)',
+        desc: '位於真皮層下方，由緊密排列的飽滿「脂肪細胞小葉 (Adipose Lobules)」與纖維結締組織間隔構成，內部穿行較粗的皮下動靜脈主幹。',
+        mechanism: '具備隔熱保溫、緩衝外力撞擊、儲存三酸甘油酯能量以及固定皮膚與深層筋膜的重要生理功能。'
+      }
+    };
+
+    // --------------------------------------------------------------------------
+    // 2. 世界座標與皮膚全層結構配置 (World Y: 0 為外界空氣與太陽，向下延伸至皮下組織)
+    // --------------------------------------------------------------------------
+    const WORLD = {
+      width: 1120,
+      height: 1120,
+      tissueLeft: 185,
+      tissueRight: 1075,
+      skyTop: 0,
+      corneumTop: 155,      // 正常角質層頂部 (155 ~ 280)
+      lucidumTop: 280,      // 透明層頂部 (280 ~ 318)
+      granulosumTop: 318,   // 顆粒層頂部 (318 ~ 405)
+      spinosumTop: 405,     // 棘狀層頂部 (405 ~ 595)
+      basaleTop: 595,       // 基底層頂部 (595 ~ 670)
+      dermisTop: 670,       // 波浪狀基底膜 / 真皮乳頭層頂部 (670 ~ 915)
+      subcutisTop: 915,     // 皮下組織頂部 (915 ~ 1110)
+      subcutisBottom: 1110
+    };
+
+    // --------------------------------------------------------------------------
+    // 3. 主模擬狀態（整合 UV 日曬變黑/變白循環、真皮血流與緊密表皮拓撲）
+    // --------------------------------------------------------------------------
+    const state = {
+      mode: 'normal',          // 'normal' | 'dry' | 'damaged'
+      paused: false,
+      timeScale: 1.0,
+      simTime: 0,
+      showLabels: true,
+      showOrganelles: true,
+      showHydration: true,
+      trackedCellId: null,
+      mitosisEvents: [],
+
+      // 紫外線日曬與黑色素動態系統狀態
+      uvActive: false,         // 是否開啟 UV 照射
+      autoUVCycle: false,      // 是否開啟「日曬變黑 -> 停止日曬漸漸白回來」自動展示循環
+      autoCycleTimer: 0,
+      uvIndex: 8,              // 紫外線指數 1 ~ 11
+      melanocyteActivity: 0.15,// 黑色素細胞酪胺酸酶活性 (0.15 基礎 ~ 1.0 高度活化)
+      vascularDilation: 0.0    // 真皮微血管受 UV 刺激的擴張充血程度 (0.0 ~ 1.0)
+    };
+
+    let nextCellId = 1;
+    let shedParticles = [];  // 已脫離表皮的角質磚塊粒子
+    let melanosomeParticles = []; // 正在沿黑色素細胞樹突轉運注入角質形成細胞的黑色素小體粒子
+    let bloodCells = [];     // 在真皮微血管網與皮下血管中循環流動的紅血球粒子
+
+    // --------------------------------------------------------------------------
+    // 4. 初始化真皮微血管網紅血球與皮下組織脂肪小葉拓撲
+    // --------------------------------------------------------------------------
+    const CAPILLARY_LOOPS_X = [265, 425, 595, 765, 935]; // 5 組真皮乳頭微血管袢中心 X
+    let adiposeLobules = [];
+    let deepBloodCells = []; // 皮下組織深層動靜脈與穿通支的血球粒子
+
+    function initDermisAndSubcutis() {
+      // 1. 確保 5 組真皮乳頭微血管袢（含最左側 x=265）每組都有獨立的 9 顆紅血球循環流動
+      bloodCells = [];
+      for (let loopIdx = 0; loopIdx < CAPILLARY_LOOPS_X.length; loopIdx++) {
+        const countPerLoop = 9;
+        for (let k = 0; k < countPerLoop; k++) {
+          bloodCells.push({
+            loopIdx,
+            t: k / countPerLoop, // 0 -> 1 均勻分布於動脈上升支、頂端髮夾彎與靜脈下降支
+            isPlexus: false,
+            speedOffset: 0.92 + (k % 3) * 0.06
+          });
+        }
+      }
+      // 額外加入 14 顆在乳頭下水平動靜脈叢流動的血球
+      for (let i = 0; i < 14; i++) {
+        bloodCells.push({
+          loopIdx: 0,
+          t: i / 14,
+          isPlexus: true,
+          isVein: i % 2 === 1,
+          speedOffset: 0.85 + (i % 4) * 0.08
+        });
+      }
+
+      // 2. 初始化皮下組織深層動脈（紅）、深層靜脈（藍）與垂直穿通支中的血球粒子
+      deepBloodCells = [];
+      for (let i = 0; i < 24; i++) {
+        deepBloodCells.push({
+          t: i / 24,
+          vesselType: i % 2 === 0 ? 'artery' : 'vein', // 動脈向右流，靜脈向左回流
+          speedOffset: 0.9 + (i % 3) * 0.08
+        });
+      }
+      const perforatorXs = [330, 680, 980];
+      for (let pIdx = 0; pIdx < perforatorXs.length; pIdx++) {
+        for (let k = 0; k < 6; k++) {
+          deepBloodCells.push({
+            t: k / 6,
+            vesselType: k % 2 === 0 ? 'perf_up' : 'perf_down',
+            perfX: perforatorXs[pIdx],
+            speedOffset: 0.95
+          });
+        }
+      }
+
+      // 3. 初始化皮下組織緊密排列的飽滿脂肪細胞小葉 (Adipocytes)
+      adiposeLobules = [];
+      const fatRows = [
+        { y: 948, r: 24 },
+        { y: 992, r: 26 },
+        { y: 1038, r: 26 },
+        { y: 1082, r: 24 }
+      ];
+      fatRows.forEach((fr, rIdx) => {
+        const stepX = fr.r * 2.02;
+        const offsetX = (rIdx % 2) * fr.r;
+        for (let x = WORLD.tissueLeft + 26 + offsetX; x < WORLD.tissueRight - 20; x += stepX) {
+          adiposeLobules.push({
+            x: x + (Math.sin(x * 0.1 + rIdx) * 3),
+            y: fr.y + (Math.cos(x * 0.08) * 2.5),
+            rx: fr.r * (0.95 + (Math.sin(x) * 0.08)),
+            ry: fr.r * 0.88,
+            nucAngle: (x + rIdx * 40) % (Math.PI * 2)
+          });
+        }
+      });
+    }
+
+    // --------------------------------------------------------------------------
+    // 5. 緊密上皮列 (EpithelialRow) 與幾何形態演算法
+    // --------------------------------------------------------------------------
+    function getLayerKeyByY(y) {
+      if (y < WORLD.lucidumTop) return 'corneum';
+      if (y < WORLD.granulosumTop) return 'lucidum';
+      if (y < WORLD.spinosumTop) return 'granulosum';
+      if (y < WORLD.basaleTop) return 'spinosum';
+      return 'basale';
+    }
+
+    function getEpithelialGeometryAtY(y) {
+      const isDamaged = state.mode === 'damaged';
+      const isDry = state.mode === 'dry';
+
+      if (y >= WORLD.basaleTop) {
+        return {
+          layer: 'basale',
+          colCount: 25,
+          rowHeight: 68,
+          gapX: 1.5,
+          gapY: 2.0,
+          cornerRadius: 9,
+          flattenRatio: 0
+        };
+      }
+
+      if (y >= WORLD.spinosumTop) {
+        const t = Math.max(0, Math.min(1, (WORLD.basaleTop - y) / (WORLD.basaleTop - WORLD.spinosumTop)));
+        return {
+          layer: 'spinosum',
+          colCount: Math.round(23 - t * 4),
+          rowHeight: 44 - t * 14,
+          gapX: 1.6,
+          gapY: 1.6,
+          cornerRadius: 11 - t * 3,
+          flattenRatio: t * 0.35
+        };
+      }
+
+      if (y >= WORLD.granulosumTop) {
+        const t = Math.max(0, Math.min(1, (WORLD.spinosumTop - y) / (WORLD.spinosumTop - WORLD.granulosumTop)));
+        return {
+          layer: 'granulosum',
+          colCount: Math.round(18 - t * 4),
+          rowHeight: 26 - t * 9,
+          gapX: 1.8,
+          gapY: 2.0,
+          cornerRadius: 7 - t * 2,
+          flattenRatio: 0.35 + t * 0.35
+        };
+      }
+
+      if (y >= WORLD.lucidumTop) {
+        return {
+          layer: 'lucidum',
+          colCount: 13,
+          rowHeight: 13,
+          gapX: 1.5,
+          gapY: 1.4,
+          cornerRadius: 4,
+          flattenRatio: 0.85
+        };
+      }
+
+      const t = Math.max(0, Math.min(1, (WORLD.lucidumTop - y) / (WORLD.lucidumTop - WORLD.corneumTop)));
+      return {
+        layer: 'corneum',
+        colCount: 11,
+        rowHeight: isDry ? 11.5 : 10.5,
+        gapX: isDamaged ? 11 + t * 14 : (isDry ? 2.2 : 2.5),
+        gapY: isDamaged ? 6.5 + t * 8 : (isDry ? 1.8 : 2.2),
+        cornerRadius: 3.5,
+        flattenRatio: 1.0
+      };
+    }
+
+    class EpithelialRow {
+      constructor(y, rowIndex, isBasal = false, initialMelanin = 0.14) {
+        this.y = y;
+        this.rowIndex = rowIndex;
+        this.isBasal = isBasal;
+        this.cells = [];
+        this.rebuildCellsForWidth(true, initialMelanin);
+      }
+
+      rebuildCellsForWidth(init = false, initialMelanin = 0.14) {
+        const geom = getEpithelialGeometryAtY(this.y);
+        const targetCount = geom.colCount;
+
+        if (init) {
+          this.cells = [];
+          for (let i = 0; i < targetCount; i++) {
+            let specialType = null;
+            if (this.isBasal) {
+              if (i === 4 || i === 12 || i === 20) specialType = 'melanocyte';
+              else if (i === 8 || i === 17) specialType = 'merkel';
+            }
+            this.cells.push({
+              id: nextCellId++,
+              specialType,
+              melaninLoad: initialMelanin + (Math.random() * 0.04),
+              phase: Math.random() * Math.PI * 2,
+              isTracked: false,
+              peelAngle: 0,
+              peelOffsetY: 0
+            });
+          }
+          return;
+        }
+
+        if (this.isBasal) return;
+
+        while (this.cells.length > targetCount) {
+          const removeIdx = Math.floor(this.cells.length * 0.5);
+          const merged = this.cells[removeIdx];
+          if (merged && merged.isTracked && this.cells[removeIdx - 1]) {
+            this.cells[removeIdx - 1].isTracked = true;
+          }
+          this.cells.splice(removeIdx, 1);
+        }
+        while (this.cells.length < targetCount) {
+          const avgMel = this.cells.length > 0 ? this.cells[0].melaninLoad : 0.14;
+          this.cells.push({
+            id: nextCellId++,
+            specialType: null,
+            melaninLoad: avgMel,
+            phase: Math.random() * Math.PI * 2,
+            isTracked: false,
+            peelAngle: 0,
+            peelOffsetY: 0
+          });
+        }
+      }
+    }
+
+    let basalRow = null;
+    let migratingRows = [];
+    let divisionPushSparks = []; // 記錄剛由基底層分裂並向上推入棘狀層底部的動態光波標記
+    const langerhansCells = [
+      { x: 425, y: 500, phase: 0.6 },
+      { x: 805, y: 480, phase: 2.8 }
+    ];
+
+    function initTightEpidermis() {
+      nextCellId = 1;
+      migratingRows = [];
+      shedParticles = [];
+      melanosomeParticles = [];
+      divisionPushSparks = [];
+
+      basalRow = new EpithelialRow(633, 0, true, 0.16);
+
+      const initialYs = [
+        578, 542, 508, 476, 446, 418,
+        390, 366, 344, 326,
+        308, 294,
+        278, 265, 252, 239, 226, 213, 200, 187, 174, 161
+      ];
+
+      initialYs.forEach((yPos, idx) => {
+        const row = new EpithelialRow(yPos, idx + 1, false, 0.15);
+        migratingRows.push(row);
+      });
+    }
+
+    // --------------------------------------------------------------------------
+    // 6. Canvas 初始化與視角縮放 / 拖曳 / 雙指捏合系統
+    // --------------------------------------------------------------------------
+    const canvas = document.getElementById('epidermisCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const view = {
+      scale: 1,
+      offsetX: 0,
+      offsetY: 0,
+      targetScale: null,
+      targetOffsetX: null,
+      targetOffsetY: null,
+      isDragging: false,
+      dragMoved: false,
+      lastX: 0,
+      lastY: 0,
+      pinchDist: 0
+    };
+
+    function resetViewport(instant = false) {
+      const cw = canvas.clientWidth;
+      const ch = canvas.clientHeight;
+      const targetS = Math.min((cw - 24) / WORLD.width, (ch - 32) / WORLD.height) * 0.96;
+      const targetX = (cw - WORLD.width * targetS) * 0.5 - 40 * targetS;
+      const targetY = (ch - WORLD.height * targetS) * 0.5;
+
+      if (instant) {
+        view.scale = targetS;
+        view.offsetX = targetX;
+        view.offsetY = targetY;
+        view.targetScale = null;
+      } else {
+        view.targetScale = targetS;
+        view.targetOffsetX = targetX;
+        view.targetOffsetY = targetY;
+      }
+    }
+
+    function focusWorldRegion(centerWorldY, spanWorldHeight, instant = false) {
+      const cw = canvas.clientWidth;
+      const ch = canvas.clientHeight;
+      const targetS = Math.min((cw - 40) / WORLD.width, (ch - 60) / spanWorldHeight);
+      const targetX = (cw - WORLD.width * targetS) * 0.5 - 35 * targetS;
+      const targetY = ch * 0.5 - centerWorldY * targetS;
+
+      if (instant) {
+        view.scale = targetS;
+        view.offsetX = targetX;
+        view.offsetY = targetY;
+        view.targetScale = null;
+      } else {
+        view.targetScale = targetS;
+        view.targetOffsetX = targetX;
+        view.targetOffsetY = targetY;
+      }
+    }
+
+    function resizeCanvas() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      canvas.width = Math.floor(width * dpr);
+      canvas.height = Math.floor(height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (view.offsetX === 0 && view.offsetY === 0) {
+        resetViewport(true);
+      }
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    initDermisAndSubcutis();
+    initTightEpidermis();
+    resizeCanvas();
+
+    function screenToWorld(sx, sy) {
+      return {
+        x: (sx - view.offsetX) / view.scale,
+        y: (sy - view.offsetY) / view.scale
+      };
+    }
+
+    function zoomAt(factor, screenX, screenY) {
+      view.targetScale = null;
+      const newScale = Math.max(0.42, Math.min(3.4, view.scale * factor));
+      const ratio = newScale / view.scale;
+      view.offsetX = screenX - (screenX - view.offsetX) * ratio;
+      view.offsetY = screenY - (screenY - view.offsetY) * ratio;
+      view.scale = newScale;
+    }
+
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.12 : 0.89;
+      zoomAt(factor, e.clientX, e.clientY);
+    }, { passive: false });
+
+    canvas.addEventListener('pointerdown', (e) => {
+      view.targetScale = null;
+      view.isDragging = true;
+      view.dragMoved = false;
+      view.lastX = e.clientX;
+      view.lastY = e.clientY;
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (!view.isDragging) return;
+      const dx = e.clientX - view.lastX;
+      const dy = e.clientY - view.lastY;
+      if (Math.hypot(dx, dy) > 4) view.dragMoved = true;
+      view.offsetX += dx;
+      view.offsetY += dy;
+      view.lastX = e.clientX;
+      view.lastY = e.clientY;
+    });
+
+    window.addEventListener('pointerup', (e) => {
+      if (view.isDragging && !view.dragMoved) {
+        handleCanvasClick(e.clientX, e.clientY);
+      }
+      view.isDragging = false;
+    });
+
+    canvas.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        view.isDragging = false;
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        view.pinchDist = Math.hypot(dx, dy);
+      }
+    }, { passive: true });
+
+    canvas.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.hypot(dx, dy);
+        if (view.pinchDist > 0) {
+          const midX = (e.touches[0].clientX + e.touches[1].clientX) * 0.5;
+          const midY = (e.touches[0].clientY + e.touches[1].clientY) * 0.5;
+          zoomAt(dist / view.pinchDist, midX, midY);
+        }
+        view.pinchDist = dist;
+      }
+    }, { passive: true });
+
+    // --------------------------------------------------------------------------
+    // 7. 顏色與幾何輔助函式
+    // --------------------------------------------------------------------------
+    function drawRoundedRect(context, x, y, w, h, r) {
+      const radius = Math.max(0, Math.min(r, Math.abs(w) * 0.5, Math.abs(h) * 0.5));
+      context.beginPath();
+      context.moveTo(x + radius, y);
+      context.lineTo(x + w - radius, y);
+      context.quadraticCurveTo(x + w, y, x + w, y + radius);
+      context.lineTo(x + w, y + h - radius);
+      context.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+      context.lineTo(x + radius, y + h);
+      context.quadraticCurveTo(x, y + h, x, y + h - radius);
+      context.lineTo(x, y + radius);
+      context.quadraticCurveTo(x, y, x + radius, y);
+      context.closePath();
+    }
+
+    function lerpColor(hexA, hexB, t) {
+      const clamped = Math.max(0, Math.min(1, t));
+      const a = parseInt(hexA.slice(1), 16);
+      const b = parseInt(hexB.slice(1), 16);
+      const rA = (a >> 16) & 255, gA = (a >> 8) & 255, bA = a & 255;
+      const rB = (b >> 16) & 255, gB = (b >> 8) & 255, bB = b & 255;
+      const r = Math.round(rA + (rB - rA) * clamped);
+      const g = Math.round(gA + (gB - gA) * clamped);
+      const bl = Math.round(bA + (bB - bA) * clamped);
+      return `rgb(${r}, ${g}, ${bl})`;
+    }
+
+    // --------------------------------------------------------------------------
+    // 8. 點擊互動偵測（涵蓋表皮五層、特殊細胞、真皮層、真皮微血管網與皮下組織）
+    // --------------------------------------------------------------------------
+    function handleCanvasClick(sx, sy) {
+      const pt = screenToWorld(sx, sy);
+
+      for (const lh of langerhansCells) {
+        if (Math.hypot(pt.x - lh.x, pt.y - lh.y) < 34) {
+          showTopicCard('langerhans');
+          return;
+        }
+      }
+
+      if (Math.abs(pt.y - basalRow.y) < 38) {
+        const spanW = WORLD.tissueRight - WORLD.tissueLeft;
+        const colIdx = Math.floor(((pt.x - WORLD.tissueLeft) / spanW) * basalRow.cells.length);
+        const clickedCell = basalRow.cells[colIdx];
+        if (clickedCell) {
+          if (clickedCell.specialType === 'melanocyte') {
+            showTopicCard('melanocyte');
+            return;
+          }
+          if (clickedCell.specialType === 'merkel') {
+            showTopicCard('merkel');
+            return;
+          }
+        }
+      }
+
+      if (pt.x >= WORLD.tissueLeft && pt.x <= WORLD.tissueRight) {
+        if (pt.y >= WORLD.corneumTop - 25 && pt.y < WORLD.lucidumTop) {
+          showTopicCard('corneum');
+        } else if (pt.y >= WORLD.lucidumTop && pt.y < WORLD.granulosumTop) {
+          showTopicCard('lucidum');
+        } else if (pt.y >= WORLD.granulosumTop && pt.y < WORLD.spinosumTop) {
+          showTopicCard('granulosum');
+        } else if (pt.y >= WORLD.spinosumTop && pt.y < WORLD.basaleTop) {
+          showTopicCard('spinosum');
+        } else if (pt.y >= WORLD.basaleTop && pt.y < WORLD.dermisTop) {
+          showTopicCard('basale');
+        } else if (pt.y >= WORLD.dermisTop && pt.y < WORLD.subcutisTop) {
+          if (pt.y >= WORLD.dermisTop + 95) {
+            showTopicCard('capillaries');
+          } else {
+            showTopicCard('dermis');
+          }
+        } else if (pt.y >= WORLD.subcutisTop && pt.y <= WORLD.subcutisBottom) {
+          showTopicCard('subcutis');
+        }
+      }
+    }
+
+    // --------------------------------------------------------------------------
+    // 9. 繪製太陽、紫外線光束 (UVA/UVB)、全層皮膚基質、真皮微血管與皮下組織
+    // --------------------------------------------------------------------------
+    function drawSunAndUVRays() {
+      const left = WORLD.tissueLeft;
+      const right = WORLD.tissueRight;
+      const sunX = WORLD.tissueRight - 80;
+      const sunY = 48;
+
+      ctx.save();
+
+      if (state.uvActive) {
+        const intensity = 0.25 + (state.uvIndex / 11) * 0.75;
+        const beamGrad = ctx.createLinearGradient(sunX, sunY, WORLD.width * 0.52, WORLD.basaleTop + 30);
+        beamGrad.addColorStop(0, `rgba(250, 204, 21, ${0.32 * intensity})`);
+        beamGrad.addColorStop(0.45, `rgba(192, 132, 252, ${0.22 * intensity})`);
+        beamGrad.addColorStop(1, `rgba(168, 85, 247, 0.0)`);
+
+        ctx.fillStyle = beamGrad;
+        ctx.beginPath();
+        ctx.moveTo(sunX - 30, sunY);
+        ctx.lineTo(sunX + 30, sunY);
+        ctx.lineTo(right - 20, WORLD.basaleTop + 30);
+        ctx.lineTo(left + 20, WORLD.basaleTop + 30);
+        ctx.closePath();
+        ctx.fill();
+
+        const rayCount = 9;
+        for (let i = 0; i < rayCount; i++) {
+          const targetX = left + 55 + (i / (rayCount - 1)) * (right - left - 110);
+          const waveOffset = Math.sin(state.simTime * 5 + i) * 6;
+          ctx.strokeStyle = i % 2 === 0
+            ? `rgba(253, 224, 71, ${0.55 * intensity})`
+            : `rgba(192, 132, 252, ${0.52 * intensity})`;
+          ctx.lineWidth = 2;
+          ctx.setLineDash([7, 6]);
+          ctx.lineDashOffset = -state.simTime * 65;
+          ctx.beginPath();
+          ctx.moveTo(sunX, sunY);
+          ctx.quadraticCurveTo((sunX + targetX) * 0.5 + waveOffset, 280, targetX, WORLD.basaleTop + 16);
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+
+        const sunGlow = ctx.createRadialGradient(sunX, sunY, 8, sunX, sunY, 54);
+        sunGlow.addColorStop(0, '#fef08a');
+        sunGlow.addColorStop(0.45, '#f59e0b');
+        sunGlow.addColorStop(1, 'rgba(245, 158, 11, 0)');
+        ctx.fillStyle = sunGlow;
+        ctx.beginPath();
+        ctx.arc(sunX, sunY, 54, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#fef08a';
+        ctx.beginPath();
+        ctx.arc(sunX, sunY, 20, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        drawRoundedRect(ctx, sunX - 185, 24, 150, 42, 10);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(250, 204, 21, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.fillStyle = '#fde047';
+        ctx.font = 'bold 11px "Noto Sans TC", sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(`☀️ UV Index ${state.uvIndex} 照射中`, sunX - 175, 42);
+        ctx.fillStyle = '#e9d5ff';
+        ctx.font = '10px "Noto Sans TC", sans-serif';
+        ctx.fillText('UVA/UVB 刺激黑色素合成', sunX - 175, 57);
+      } else {
+        ctx.fillStyle = 'rgba(30, 41, 59, 0.75)';
+        ctx.beginPath();
+        ctx.arc(sunX, sunY, 16, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '11px "Noto Sans TC", sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText('無 UV 日曬（黑色素自然代謝排出）', sunX - 24, sunY + 4);
+      }
+
+      ctx.restore();
+    }
+
+    function drawFullSkinSubstrate() {
+      const left = WORLD.tissueLeft;
+      const right = WORLD.tissueRight;
+      const width = right - left;
+
+      ctx.save();
+
+      const matrixGrad = ctx.createLinearGradient(0, WORLD.corneumTop, 0, WORLD.dermisTop);
+      if (state.mode === 'damaged') {
+        matrixGrad.addColorStop(0, '#3b1522');
+        matrixGrad.addColorStop(0.32, '#5c1f33');
+        matrixGrad.addColorStop(1, '#70243b');
+      } else {
+        matrixGrad.addColorStop(0, '#b45309');
+        matrixGrad.addColorStop(0.28, '#d97706');
+        matrixGrad.addColorStop(0.55, '#c27856');
+        matrixGrad.addColorStop(1, '#9f4a5c');
+      }
+      ctx.fillStyle = matrixGrad;
+      ctx.fillRect(left, WORLD.corneumTop, width, WORLD.dermisTop - WORLD.corneumTop);
+
+      drawDermisAndCapillaries();
+      drawSubcutisLayer();
+
+      ctx.strokeStyle = '#fda4af';
+      ctx.lineWidth = 3.2;
+      ctx.beginPath();
+      for (let x = left; x <= right; x += 6) {
+        const waveY = WORLD.dermisTop + Math.sin((x - left) * 0.036) * 6;
+        if (x === left) ctx.moveTo(x, waveY);
+        else ctx.lineTo(x, waveY);
+      }
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function drawDermisAndCapillaries() {
+      const left = WORLD.tissueLeft;
+      const right = WORLD.tissueRight;
+      const width = right - left;
+      const dilation = state.vascularDilation;
+
+      ctx.save();
+
+      const dermisGrad = ctx.createLinearGradient(0, WORLD.dermisTop, 0, WORLD.subcutisTop);
+      dermisGrad.addColorStop(0, lerpColor('#6b283b', '#88293e', dilation));
+      dermisGrad.addColorStop(0.45, '#542032');
+      dermisGrad.addColorStop(1, '#3f1927');
+      ctx.fillStyle = dermisGrad;
+      ctx.fillRect(left, WORLD.dermisTop, width, WORLD.subcutisTop - WORLD.dermisTop);
+
+      ctx.strokeStyle = 'rgba(244, 114, 182, 0.22)';
+      ctx.lineWidth = 3.2;
+      for (let row = 0; row < 5; row++) {
+        const baseY = WORLD.dermisTop + 38 + row * 44;
+        ctx.beginPath();
+        for (let x = left + 10; x <= right - 10; x += 20) {
+          const wy = baseY + Math.sin(x * 0.025 + row * 1.4) * 7;
+          if (x === left + 10) ctx.moveTo(x, wy);
+          else ctx.lineTo(x, wy);
+        }
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.22)';
+      ctx.lineWidth = 1.2;
+      for (let i = 0; i < 16; i++) {
+        const ex = left + 40 + i * 54;
+        const ey = WORLD.dermisTop + 50 + (i % 3) * 65;
+        ctx.beginPath();
+        ctx.moveTo(ex, ey);
+        ctx.bezierCurveTo(ex + 25, ey - 18, ex + 45, ey + 22, ex + 70, ey - 6);
+        ctx.stroke();
+      }
+
+      const plexusY = WORLD.dermisTop + 178;
+      const vesselScale = 1 + dilation * 0.35;
+
+      ctx.strokeStyle = 'rgba(220, 38, 38, 0.85)';
+      ctx.lineWidth = 6.5 * vesselScale;
+      ctx.beginPath();
+      ctx.moveTo(left + 6, plexusY);
+      ctx.bezierCurveTo(left + 300, plexusY - 12, left + 600, plexusY + 12, left + width - 6, plexusY - 4);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(37, 99, 235, 0.85)';
+      ctx.lineWidth = 7.0 * vesselScale;
+      ctx.beginPath();
+      ctx.moveTo(left + 6, plexusY + 12);
+      ctx.bezierCurveTo(left + 300, plexusY + 2, left + 600, plexusY + 22, left + width - 6, plexusY + 8);
+      ctx.stroke();
+
+      const perforators = [330, 680, 980];
+      for (const px of perforators) {
+        ctx.strokeStyle = 'rgba(220, 38, 38, 0.8)';
+        ctx.lineWidth = 5.5;
+        ctx.beginPath();
+        ctx.moveTo(px - 6, plexusY);
+        ctx.lineTo(px - 10, WORLD.subcutisTop + 95);
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(37, 99, 235, 0.8)';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(px + 6, plexusY + 12);
+        ctx.lineTo(px + 10, WORLD.subcutisTop + 105);
+        ctx.stroke();
+      }
+
+      for (const lx of CAPILLARY_LOOPS_X) {
+        const loopTopY = WORLD.dermisTop + 26;
+
+        if (dilation > 0.1) {
+          const glow = ctx.createRadialGradient(lx, loopTopY + 35, 4, lx, loopTopY + 35, 45);
+          glow.addColorStop(0, `rgba(244, 63, 94, ${0.28 * dilation})`);
+          glow.addColorStop(1, 'rgba(244, 63, 94, 0)');
+          ctx.fillStyle = glow;
+          ctx.beginPath();
+          ctx.arc(lx, loopTopY + 35, 45, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 4.2 * vesselScale;
+        ctx.beginPath();
+        ctx.moveTo(lx - 14, plexusY);
+        ctx.quadraticCurveTo(lx - 18, loopTopY + 55, lx - 8, loopTopY + 10);
+        ctx.stroke();
+
+        const archGrad = ctx.createLinearGradient(lx - 8, loopTopY, lx + 8, loopTopY);
+        archGrad.addColorStop(0, '#ef4444');
+        archGrad.addColorStop(0.5, '#a855f7');
+        archGrad.addColorStop(1, '#3b82f6');
+        ctx.strokeStyle = archGrad;
+        ctx.lineWidth = 4.0 * vesselScale;
+        ctx.beginPath();
+        ctx.arc(lx, loopTopY + 10, 8, Math.PI, 0, false);
+        ctx.stroke();
+
+        ctx.strokeStyle = '#3b82f6';
+        ctx.lineWidth = 4.5 * vesselScale;
+        ctx.beginPath();
+        ctx.moveTo(lx + 8, loopTopY + 10);
+        ctx.quadraticCurveTo(lx + 18, loopTopY + 55, lx + 14, plexusY + 12);
+        ctx.stroke();
+      }
+
+      // E. 繪製在微血管袢與水平血管叢中流動的紅血球 (RBCs)
+      for (const rbc of bloodCells) {
+        let bx = 0;
+        let by = 0;
+        let isDeoxygenated = false;
+
+        if (rbc.isPlexus) {
+          bx = left + 12 + rbc.t * (width - 24);
+          by = rbc.isVein ? plexusY + 12 : plexusY;
+          isDeoxygenated = rbc.isVein;
+        } else {
+          const lx = CAPILLARY_LOOPS_X[rbc.loopIdx];
+          const loopTopY = WORLD.dermisTop + 26;
+          if (rbc.t < 0.42) {
+            const u = rbc.t / 0.42;
+            bx = lx - 14 + u * 6;
+            by = plexusY - u * (plexusY - (loopTopY + 10));
+            isDeoxygenated = false;
+          } else if (rbc.t < 0.58) {
+            const u = (rbc.t - 0.42) / 0.16;
+            const ang = Math.PI * (1 - u);
+            bx = lx + Math.cos(ang) * 8;
+            by = (loopTopY + 10) - Math.sin(ang) * 8;
+            isDeoxygenated = u > 0.5;
+          } else {
+            const u = (rbc.t - 0.58) / 0.42;
+            bx = lx + 8 + u * 6;
+            by = (loopTopY + 10) + u * (plexusY + 12 - (loopTopY + 10));
+            isDeoxygenated = true;
+          }
+        }
+
+        ctx.fillStyle = isDeoxygenated ? '#93c5fd' : '#fca5a5';
+        ctx.beginPath();
+        ctx.arc(bx, by, 2.7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+
+    function drawSubcutisLayer() {
+      const left = WORLD.tissueLeft;
+      const right = WORLD.tissueRight;
+      const width = right - left;
+
+      ctx.save();
+
+      const subGrad = ctx.createLinearGradient(0, WORLD.subcutisTop, 0, WORLD.subcutisBottom);
+      subGrad.addColorStop(0, '#422006');
+      subGrad.addColorStop(1, '#291506');
+      ctx.fillStyle = subGrad;
+      ctx.fillRect(left, WORLD.subcutisTop, width, WORLD.subcutisBottom - WORLD.subcutisTop);
+
+      for (const fat of adiposeLobules) {
+        const fatGrad = ctx.createRadialGradient(fat.x - 5, fat.y - 5, 3, fat.x, fat.y, fat.rx);
+        fatGrad.addColorStop(0, '#fef08a');
+        fatGrad.addColorStop(0.65, '#facc15');
+        fatGrad.addColorStop(1, '#ca8a04');
+        ctx.fillStyle = fatGrad;
+        ctx.strokeStyle = 'rgba(254, 249, 195, 0.45)';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.ellipse(fat.x, fat.y, fat.rx, fat.ry, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        const nx = fat.x + Math.cos(fat.nucAngle) * (fat.rx * 0.72);
+        const ny = fat.y + Math.sin(fat.nucAngle) * (fat.ry * 0.72);
+        ctx.fillStyle = '#854d0e';
+        ctx.beginPath();
+        ctx.arc(nx, ny, 3.0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      const deepVesselY = WORLD.subcutisTop + 98;
+      ctx.strokeStyle = '#dc2626';
+      ctx.lineWidth = 8.5;
+      ctx.beginPath();
+      ctx.moveTo(left + 4, deepVesselY);
+      ctx.bezierCurveTo(left + 320, deepVesselY - 14, left + 650, deepVesselY + 14, right - 4, deepVesselY - 4);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#2563eb';
+      ctx.lineWidth = 9.5;
+      ctx.beginPath();
+      ctx.moveTo(left + 4, deepVesselY + 14);
+      ctx.bezierCurveTo(left + 320, deepVesselY + 2, left + 650, deepVesselY + 26, right - 4, deepVesselY + 10);
+      ctx.stroke();
+
+      const plexusY = WORLD.dermisTop + 178;
+      for (const db of deepBloodCells) {
+        let bx = 0;
+        let by = 0;
+        let isVein = false;
+
+        if (db.vesselType === 'artery') {
+          bx = left + 10 + db.t * (width - 20);
+          by = deepVesselY;
+          isVein = false;
+        } else if (db.vesselType === 'vein') {
+          bx = right - 10 - db.t * (width - 20);
+          by = deepVesselY + 14;
+          isVein = true;
+        } else if (db.vesselType === 'perf_up') {
+          bx = db.perfX - 6 - db.t * 4;
+          by = deepVesselY - db.t * (deepVesselY - plexusY);
+          isVein = false;
+        } else {
+          bx = db.perfX + 6 + db.t * 4;
+          by = (plexusY + 12) + db.t * ((deepVesselY + 10) - (plexusY + 12));
+          isVein = true;
+        }
+
+        ctx.fillStyle = isVein ? '#93c5fd' : '#fca5a5';
+        ctx.beginPath();
+        ctx.arc(bx, by, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+
+    // --------------------------------------------------------------------------
+    // 10. 緊密細胞繪製函式（整合黑色素遮陽傘、橋粒、角蛋白與真皮/皮下繪製）
+    // --------------------------------------------------------------------------
+    function drawTightEpithelium() {
+      const spanW = WORLD.tissueRight - WORLD.tissueLeft;
+      const allRows = [...migratingRows, basalRow];
+
+      // A. 繪製所有表皮細胞列（由深到淺或是逐層繪製）
+      for (const row of allRows) {
+        const geom = getEpithelialGeometryAtY(row.y);
+        const count = row.cells.length;
+        const cellW = spanW / count;
+        const rowH = geom.rowHeight;
+
+        for (let i = 0; i < count; i++) {
+          const cell = row.cells[i];
+          const cx = WORLD.tissueLeft + i * cellW;
+          const cy = row.y - rowH * 0.5;
+          const cw = cellW - geom.gapX;
+          const ch = rowH - geom.gapY;
+
+          ctx.save();
+
+          // 角質層頂層翹起或受損微隙動畫
+          if (geom.layer === 'corneum') {
+            if (cell.peelAngle || cell.peelOffsetY) {
+              ctx.translate(cx + cw * 0.5, cy + ch * 0.5);
+              ctx.rotate(cell.peelAngle);
+              ctx.translate(-(cx + cw * 0.5), -(cy + ch * 0.5 + cell.peelOffsetY));
+            }
+          }
+
+          // 1. 底色與黑色素深淺計算
+          const mel = Math.max(0, Math.min(1, cell.melaninLoad));
+          let baseHex = '#fda4af';
+          let borderHex = 'rgba(255, 255, 255, 0.25)';
+
+          if (geom.layer === 'basale') {
+            baseHex = lerpColor('#f43f5e', '#78350f', mel * 0.85);
+            borderHex = 'rgba(254, 205, 211, 0.35)';
+          } else if (geom.layer === 'spinosum') {
+            baseHex = lerpColor('#fb923c', '#713f12', mel * 0.9);
+            borderHex = 'rgba(254, 215, 170, 0.3)';
+          } else if (geom.layer === 'granulosum') {
+            baseHex = lerpColor('#a855f7', '#581c87', mel * 0.7);
+            borderHex = 'rgba(233, 213, 255, 0.35)';
+          } else if (geom.layer === 'lucidum') {
+            baseHex = '#fed7aa';
+            borderHex = 'rgba(255, 237, 213, 0.45)';
+          } else { // corneum
+            if (state.mode === 'damaged') {
+              baseHex = lerpColor('#f87171', '#991b1b', mel * 0.6);
+            } else if (state.mode === 'dry') {
+              baseHex = lerpColor('#fde047', '#a16207', mel * 0.8);
+            } else {
+              baseHex = lerpColor('#f59e0b', '#78350f', mel * 0.85);
+            }
+            borderHex = 'rgba(254, 240, 138, 0.25)';
+          }
+
+          // 2. 繪製細胞主體輪廓
+          drawRoundedRect(ctx, cx, cy, cw, ch, geom.cornerRadius);
+          ctx.fillStyle = baseHex;
+          ctx.fill();
+          ctx.strokeStyle = borderHex;
+          ctx.lineWidth = 1.0;
+          ctx.stroke();
+
+          // 3. 各層細胞微觀結構內部繪製
+          if (geom.layer === 'basale') {
+            // 半橋粒 (Hemidesmosomes) 錨定於基底膜
+            if (state.showOrganelles) {
+              ctx.fillStyle = '#38bdf8';
+              for (let d = 3; d < cw - 3; d += 6) {
+                ctx.fillRect(cx + d, cy + ch - 2.5, 3.5, 2.5);
+              }
+            }
+
+            // 特殊細胞（黑色素細胞或梅克爾細胞）
+            if (cell.specialType === 'melanocyte') {
+              // 黑色素細胞本體：淡色光暈與星狀分支基部
+              ctx.fillStyle = 'rgba(240, 249, 255, 0.9)';
+              ctx.beginPath();
+              ctx.arc(cx + cw * 0.5, cy + ch * 0.5, Math.min(cw, ch) * 0.42, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.strokeStyle = '#38bdf8';
+              ctx.lineWidth = 1.5;
+              ctx.stroke();
+
+              // 黑色素細胞核
+              ctx.fillStyle = '#1e293b';
+              ctx.beginPath();
+              ctx.arc(cx + cw * 0.5, cy + ch * 0.5, Math.min(cw, ch) * 0.22, 0, Math.PI * 2);
+              ctx.fill();
+            } else if (cell.specialType === 'merkel') {
+              // 梅克爾細胞
+              ctx.fillStyle = '#fce7f3';
+              ctx.beginPath();
+              ctx.arc(cx + cw * 0.5, cy + ch * 0.5, Math.min(cw, ch) * 0.38, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.fillStyle = '#ec4899';
+              ctx.beginPath();
+              ctx.arc(cx + cw * 0.5, cy + ch * 0.5, 3, 0, Math.PI * 2);
+              ctx.fill();
+              // 突觸感應神經盤
+              ctx.strokeStyle = '#38bdf8';
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.moveTo(cx + cw * 0.5, cy + ch);
+              ctx.lineTo(cx + cw * 0.5, cy + ch + 14);
+              ctx.stroke();
+            } else {
+              // 正常基底角質形成細胞核
+              const mitosis = state.mitosisEvents.find(ev => ev.colIdx === i);
+              if (mitosis) {
+                // 有絲分裂進行中：染色體分離
+                const p = mitosis.progress;
+                ctx.fillStyle = '#38bdf8';
+                ctx.beginPath();
+                ctx.ellipse(cx + cw * 0.5, cy + ch * 0.5 - p * 6, 3, 2, 0, 0, Math.PI * 2);
+                ctx.ellipse(cx + cw * 0.5, cy + ch * 0.5 + p * 6, 3, 2, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(56, 189, 248, 0.6)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(cx + cw * 0.5, cy + ch * 0.5 - p * 6);
+                ctx.lineTo(cx + cw * 0.5, cy + ch * 0.5 + p * 6);
+                ctx.stroke();
+              } else {
+                ctx.fillStyle = '#881337';
+                ctx.beginPath();
+                ctx.arc(cx + cw * 0.5, cy + ch * 0.5, Math.min(cw, ch) * 0.26, 0, Math.PI * 2);
+                ctx.fill();
+                // 黑色素遮陽傘 (Supranuclear Melanin Cap)
+                if (mel > 0.08 && state.showOrganelles) {
+                  ctx.fillStyle = '#1c1917';
+                  ctx.beginPath();
+                  ctx.arc(cx + cw * 0.5, cy + ch * 0.5 - 2, Math.min(cw, ch) * 0.32, Math.PI, 0, false);
+                  ctx.fill();
+                }
+              }
+            }
+          } else if (geom.layer === 'spinosum') {
+            // 圓形細胞核
+            ctx.fillStyle = '#7c2d12';
+            ctx.beginPath();
+            ctx.arc(cx + cw * 0.5, cy + ch * 0.5, Math.min(cw, ch) * 0.24, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 黑色素遮陽傘 (Supranuclear Melanin Cap - 核心護核機制)
+            if (mel > 0.08 && state.showOrganelles) {
+              ctx.fillStyle = mel > 0.4 ? '#18181b' : '#3f2e1a';
+              ctx.beginPath();
+              ctx.arc(cx + cw * 0.5, cy + ch * 0.5 - 2, Math.min(cw, ch) * 0.34, Math.PI, 0, false);
+              ctx.fill();
+            }
+
+            // 橋粒 (Desmosomes) 與角蛋白張力絲 (Tonofilaments)
+            if (state.showOrganelles) {
+              ctx.fillStyle = 'rgba(251, 146, 60, 0.7)';
+              ctx.fillRect(cx - 0.5, cy + ch * 0.3, 1.5, 4);
+              ctx.fillRect(cx + cw - 1, cy + ch * 0.3, 1.5, 4);
+              ctx.fillRect(cx + cw * 0.5 - 2, cy - 0.5, 4, 1.5);
+              ctx.fillRect(cx + cw * 0.5 - 2, cy + ch - 1, 4, 1.5);
+            }
+          } else if (geom.layer === 'granulosum') {
+            // 扁平退化細胞核
+            ctx.fillStyle = '#4a044e';
+            ctx.beginPath();
+            ctx.ellipse(cx + cw * 0.5, cy + ch * 0.5, cw * 0.22, ch * 0.24, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 角質透明顆粒 (Keratohyalin granules)
+            if (state.showOrganelles) {
+              ctx.fillStyle = '#2e1065';
+              ctx.beginPath();
+              ctx.arc(cx + cw * 0.3, cy + ch * 0.5, 1.8, 0, Math.PI * 2);
+              ctx.arc(cx + cw * 0.7, cy + ch * 0.5, 1.8, 0, Math.PI * 2);
+              ctx.arc(cx + cw * 0.45, cy + ch * 0.32, 1.5, 0, Math.PI * 2);
+              ctx.arc(cx + cw * 0.55, cy + ch * 0.68, 1.5, 0, Math.PI * 2);
+              ctx.fill();
+
+              // 板層小體 (Lamellar bodies)
+              ctx.fillStyle = '#facc15';
+              ctx.beginPath();
+              ctx.arc(cx + cw * 0.25, cy + 2.5, 1.2, 0, Math.PI * 2);
+              ctx.arc(cx + cw * 0.75, cy + 2.5, 1.2, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          } else if (geom.layer === 'lucidum') {
+            // 透明層：折光無核透明帶
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(cx + 4, cy + ch * 0.5);
+            ctx.lineTo(cx + cw - 4, cy + ch * 0.5);
+            ctx.stroke();
+          } else { // corneum
+            // 無核扁平角質磚塊：角蛋白交聯網
+            if (state.showOrganelles) {
+              ctx.strokeStyle = 'rgba(0, 0, 0, 0.12)';
+              ctx.lineWidth = 0.8;
+              ctx.beginPath();
+              ctx.moveTo(cx + 3, cy + ch * 0.5);
+              ctx.lineTo(cx + cw - 3, cy + ch * 0.5);
+              ctx.stroke();
+
+              // 角質橋粒 (Corneodesmosomes) 扣合點
+              if (row.y > WORLD.corneumTop + 30 || state.mode === 'dry') {
+                ctx.fillStyle = '#10b981';
+                ctx.fillRect(cx + cw * 0.5 - 2, cy - 1, 4, 2);
+              }
+            }
+          }
+
+          // 4. 單細胞追蹤標記 (Tracked Cell Highlight)
+          if (cell.id === state.trackedCellId || cell.isTracked) {
+            const glowR = Math.max(cw, ch) * 0.65;
+            ctx.strokeStyle = '#22d3ee';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.arc(cx + cw * 0.5, cy + ch * 0.5, glowR, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // 浮動指示箭頭與發光標記
+            ctx.fillStyle = '#22d3ee';
+            ctx.beginPath();
+            ctx.moveTo(cx + cw * 0.5 - 5, cy - 12);
+            ctx.lineTo(cx + cw * 0.5 + 5, cy - 12);
+            ctx.lineTo(cx + cw * 0.5, cy - 4);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.font = 'bold 10px "Noto Sans TC", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('★ 追蹤細胞', cx + cw * 0.5, cy - 16);
+          }
+
+          ctx.restore();
+        }
+      }
+
+      // B. 繪製黑色素細胞樹突 (Melanocyte Dendrites) 向上延伸進入棘狀層
+      drawMelanocyteDendrites();
+
+      // C. 繪製蘭格漢氏細胞 (Langerhans Cells)
+      drawLangerhansCells();
+
+      // D. 繪製向上推擠的光波標記
+      drawDivisionPushSparks();
+
+      // E. 繪製脫落飄逸角質粒子
+      drawShedParticles();
+
+      // F. 繪製微觀標註與水合梯度 / TEWL
+      drawAnnotationsAndHUD();
+    }
+
+    function drawMelanocyteDendrites() {
+      const melColIndices = [4, 12, 20];
+      const spanW = WORLD.tissueRight - WORLD.tissueLeft;
+      const count = basalRow.cells.length;
+      const cellW = spanW / count;
+
+      ctx.save();
+      for (const col of melColIndices) {
+        const rootX = WORLD.tissueLeft + (col + 0.5) * cellW;
+        const rootY = basalRow.y;
+
+        const branches = [
+          { dx: -26, dy: -85, c1x: -12, c1y: -40, c2x: -28, c2y: -65 },
+          { dx: 2, dy: -115, c1x: 8, c1y: -45, c2x: -6, c2y: -80 },
+          { dx: 28, dy: -80, c1x: 18, c1y: -35, c2x: 25, c2y: -60 }
+        ];
+
+        ctx.strokeStyle = state.uvActive ? 'rgba(251, 191, 36, 0.85)' : 'rgba(56, 189, 248, 0.45)';
+        ctx.lineWidth = 2.2;
+        ctx.lineCap = 'round';
+
+        branches.forEach((b, bIdx) => {
+          ctx.beginPath();
+          ctx.moveTo(rootX, rootY - 14);
+          ctx.bezierCurveTo(
+            rootX + b.c1x, rootY + b.c1y,
+            rootX + b.c2x, rootY + b.c2y,
+            rootX + b.dx, rootY + b.dy
+          );
+          ctx.stroke();
+
+          // 樹突末梢突觸小球
+          ctx.fillStyle = state.uvActive ? '#f59e0b' : '#38bdf8';
+          ctx.beginPath();
+          ctx.arc(rootX + b.dx, rootY + b.dy, 3.2, 0, Math.PI * 2);
+          ctx.fill();
+
+          // 黑色素小體 (Melanosomes) 沿樹突運送微粒
+          if (state.melanocyteActivity > 0.2) {
+            const step = ((state.simTime * 2.5 + bIdx * 0.33) % 1);
+            const mx = rootX + b.dx * step;
+            const my = rootY - 14 + (b.dy + 14) * step;
+            ctx.fillStyle = '#1c1917';
+            ctx.beginPath();
+            ctx.arc(mx, my, 2.0, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        });
+      }
+      ctx.restore();
+    }
+
+    function drawLangerhansCells() {
+      ctx.save();
+      for (const lh of langerhansCells) {
+        ctx.fillStyle = 'rgba(20, 184, 166, 0.25)';
+        ctx.beginPath();
+        ctx.arc(lh.x, lh.y, 22, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = '#2dd4bf';
+        ctx.lineWidth = 2.2;
+        ctx.lineCap = 'round';
+
+        const arms = 6;
+        for (let a = 0; a < arms; a++) {
+          const ang = (a / arms) * Math.PI * 2 + lh.phase;
+          const r = 20 + Math.sin(state.simTime * 2 + a) * 3;
+          ctx.beginPath();
+          ctx.moveTo(lh.x, lh.y);
+          ctx.lineTo(lh.x + Math.cos(ang) * r, lh.y + Math.sin(ang) * r);
+          ctx.stroke();
+        }
+
+        ctx.fillStyle = '#0d9488';
+        ctx.beginPath();
+        ctx.arc(lh.x, lh.y, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ccfbf1';
+        ctx.beginPath();
+        ctx.arc(lh.x, lh.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (state.showOrganelles) {
+          ctx.fillStyle = '#5eead4';
+          ctx.font = 'bold 9px "Noto Sans TC", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('蘭格漢氏細胞', lh.x, lh.y - 25);
+        }
+      }
+      ctx.restore();
+    }
+
+    function drawDivisionPushSparks() {
+      ctx.save();
+      for (const s of divisionPushSparks) {
+        ctx.strokeStyle = `rgba(56, 189, 248, ${s.alpha})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(s.x - 7, s.y + 4);
+        ctx.lineTo(s.x, s.y - 3);
+        ctx.lineTo(s.x + 7, s.y + 4);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawShedParticles() {
+      for (const p of shedParticles) {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.fillStyle = `rgba(245, 158, 11, ${p.alpha * 0.8})`;
+        ctx.strokeStyle = `rgba(254, 240, 138, ${p.alpha * 0.6})`;
+        ctx.lineWidth = 1;
+        ctx.fillRect(-p.w * 0.5, -p.h * 0.5, p.w, p.h);
+        ctx.strokeRect(-p.w * 0.5, -p.h * 0.5, p.w, p.h);
+        ctx.restore();
+      }
+    }
+
+    function drawAnnotationsAndHUD() {
+      ctx.save();
+
+      // A. 表皮各層與真皮、皮下名稱標註 (若勾選 showLabels)
+      if (state.showLabels) {
+        const layers = [
+          { label: '角質層 (Stratum corneum)', sub: '12~16層扁平無核磚牆・脂質水泥屏障', yTop: WORLD.corneumTop, yBot: WORLD.lucidumTop, color: '#f59e0b' },
+          { label: '透明層 (Stratum lucidum)', sub: '厚皮特有・折光無核透明帶', yTop: WORLD.lucidumTop, yBot: WORLD.granulosumTop, color: '#fed7aa' },
+          { label: '顆粒層 (Stratum granulosum)', sub: '角質透明顆粒・外吐板層小體釋放脂質', yTop: WORLD.granulosumTop, yBot: WORLD.spinosumTop, color: '#c084fc' },
+          { label: '棘狀層 (Stratum spinosum)', sub: '緊密多邊形嵌合・橋粒鉚釘・黑色素遮陽傘', yTop: WORLD.spinosumTop, yBot: WORLD.basaleTop, color: '#fb923c' },
+          { label: '基底層 (Stratum basale)', sub: '單層柱狀生發層・幹細胞分裂・半橋粒錨定', yTop: WORLD.basaleTop, yBot: WORLD.dermisTop, color: '#f43f5e' },
+          { label: '真皮層 (Dermis)', sub: '膠原/彈性纖維支撐網・真皮微血管袢供氧營養', yTop: WORLD.dermisTop, yBot: WORLD.subcutisTop, color: '#fda4af' },
+          { label: '皮下組織 (Subcutis)', sub: '脂肪細胞小葉・緩衝隔熱・深層血管網絡', yTop: WORLD.subcutisTop, yBot: WORLD.subcutisBottom, color: '#facc15' }
+        ];
+
+        layers.forEach(l => {
+          const midY = (l.yTop + l.yBot) * 0.5;
+
+          // 左側支架引導線
+          ctx.strokeStyle = l.color;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(WORLD.tissueLeft - 8, l.yTop + 2);
+          ctx.lineTo(WORLD.tissueLeft - 18, l.yTop + 2);
+          ctx.lineTo(WORLD.tissueLeft - 18, l.yBot - 2);
+          ctx.lineTo(WORLD.tissueLeft - 8, l.yBot - 2);
+          ctx.moveTo(WORLD.tissueLeft - 18, midY);
+          ctx.lineTo(WORLD.tissueLeft - 26, midY);
+          ctx.stroke();
+
+          // 標籤文字
+          ctx.fillStyle = l.color;
+          ctx.font = 'bold 11px "Noto Sans TC", sans-serif';
+          ctx.textAlign = 'right';
+          ctx.fillText(l.label, WORLD.tissueLeft - 32, midY - 2);
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = '9px "Noto Sans TC", sans-serif';
+          ctx.fillText(l.sub, WORLD.tissueLeft - 32, midY + 11);
+        });
+
+        // 表皮總覽標尺
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(32, WORLD.corneumTop);
+        ctx.lineTo(24, WORLD.corneumTop);
+        ctx.lineTo(24, WORLD.dermisTop);
+        ctx.lineTo(32, WORLD.dermisTop);
+        ctx.stroke();
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 10px "Noto Sans TC", sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText('表皮全層 (Epidermis ~0.1mm)', 32, (WORLD.corneumTop + WORLD.dermisTop) * 0.5);
+      }
+
+      // B. 水合度梯度與經皮水分散失 (TEWL) 蒸散箭頭 (若勾選 showHydration)
+      if (state.showHydration) {
+        const rightX = WORLD.tissueRight + 18;
+
+        // 水合度漸層條 (70% 水分 -> 15% 水分)
+        const hydGrad = ctx.createLinearGradient(0, WORLD.basaleTop, 0, WORLD.corneumTop);
+        hydGrad.addColorStop(0, '#0284c7');
+        hydGrad.addColorStop(0.5, '#38bdf8');
+        hydGrad.addColorStop(1, '#bae6fd');
+        ctx.fillStyle = hydGrad;
+        drawRoundedRect(ctx, rightX, WORLD.corneumTop, 12, WORLD.dermisTop - WORLD.corneumTop, 4);
+        ctx.fill();
+
+        ctx.fillStyle = '#7dd3fc';
+        ctx.font = '9px "Noto Sans TC", sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText('15% 水分', rightX + 18, WORLD.corneumTop + 10);
+        ctx.fillText('50% 顆粒層', rightX + 18, (WORLD.granulosumTop + WORLD.spinosumTop) * 0.5);
+        ctx.fillText('70% 基底層', rightX + 18, WORLD.basaleTop);
+
+        // 經皮水分散失 (TEWL) 蒸散向上箭頭
+        const tewlIsHigh = state.mode === 'damaged';
+        const arrowCount = tewlIsHigh ? 12 : 6;
+        const arrowColor = tewlIsHigh ? 'rgba(239, 68, 68, 0.85)' : 'rgba(56, 189, 248, 0.45)';
+        const arrowW = (WORLD.tissueRight - WORLD.tissueLeft) / (arrowCount + 1);
+
+        for (let k = 1; k <= arrowCount; k++) {
+          const ax = WORLD.tissueLeft + k * arrowW;
+          const ay = WORLD.corneumTop - 8 - ((state.simTime * 35 + k * 18) % 45);
+          ctx.strokeStyle = arrowColor;
+          ctx.lineWidth = tewlIsHigh ? 2.5 : 1.2;
+          ctx.beginPath();
+          ctx.moveTo(ax, ay + 12);
+          ctx.lineTo(ax, ay);
+          ctx.lineTo(ax - 3, ay + 4);
+          ctx.moveTo(ax, ay);
+          ctx.lineTo(ax + 3, ay + 4);
+          ctx.stroke();
+        }
+
+        if (tewlIsHigh) {
+          ctx.fillStyle = '#ef4444';
+          ctx.font = 'bold 11px "Noto Sans TC", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('⚠️ 屏障受損：TEWL 水分散失劇增', (WORLD.tissueLeft + WORLD.tissueRight) * 0.5, WORLD.corneumTop - 52);
+        }
+      }
+
+      ctx.restore();
+    }
+
+    // --------------------------------------------------------------------------
+    // 11. 物理更新引擎（整合紫外線日曬變黑、停止日曬隨角化漸漸白回來、血流與角化推進）
+    // --------------------------------------------------------------------------
+    let mitosisTimer = 0;
+
+    function updateSimulation(dt) {
+      // 平滑視角過渡動畫（切換全層總覽 / 表皮特寫 / 真皮微血管視角時）
+      if (view.targetScale !== null) {
+        view.scale += (view.targetScale - view.scale) * 0.14;
+        view.offsetX += (view.targetOffsetX - view.offsetX) * 0.14;
+        view.offsetY += (view.targetOffsetY - view.offsetY) * 0.14;
+        if (Math.abs(view.targetScale - view.scale) < 0.002) {
+          view.scale = view.targetScale;
+          view.offsetX = view.targetOffsetX;
+          view.offsetY = view.targetOffsetY;
+          view.targetScale = null;
+        }
+      }
+
+      if (state.paused) return;
+      state.simTime += dt;
+
+      // 1. 自動「日曬變黑 -> 停止日曬漸漸白回來」教學循環控制
+      if (state.autoUVCycle) {
+        state.autoCycleTimer += dt;
+        const cycleDuration = 22;
+        const phase = state.autoCycleTimer % cycleDuration;
+        const shouldUV = phase < 8;
+        if (state.uvActive !== shouldUV) {
+          setUVActiveState(shouldUV);
+        }
+      }
+
+      // 2. 更新黑色素細胞酪胺酸酶活性與真皮微血管擴張程度
+      const targetActivity = state.uvActive
+        ? Math.min(1.0, 0.25 + (state.uvIndex / 11) * 0.75)
+        : 0.12;
+      const activityRate = state.uvActive ? 0.55 : 0.45;
+      state.melanocyteActivity += (targetActivity - state.melanocyteActivity) * Math.min(1, dt * activityRate);
+
+      const targetDilation = state.uvActive
+        ? Math.min(1.0, (state.uvIndex / 11) * (state.mode === 'damaged' ? 1.0 : 0.75))
+        : 0.0;
+      state.vascularDilation += (targetDilation - state.vascularDilation) * Math.min(1, dt * 0.6);
+
+      // 3. 更新真皮微血管網與皮下組織深層血管紅血球流動
+      const bloodSpeed = 0.22 + state.vascularDilation * 0.14;
+      for (const rbc of bloodCells) {
+        rbc.t = (rbc.t + bloodSpeed * rbc.speedOffset * dt) % 1;
+      }
+      for (const db of deepBloodCells) {
+        db.t = (db.t + bloodSpeed * 0.9 * db.speedOffset * dt) % 1;
+      }
+
+      // 4. 黑色素細胞向基底層與棘狀層角質形成細胞注入黑色素小體
+      const melColIndices = [4, 12, 20];
+      const spanW = WORLD.tissueRight - WORLD.tissueLeft;
+
+      basalRow.cells.forEach((cell, idx) => {
+        if (cell.specialType) return;
+        const minDist = Math.min(...melColIndices.map(mIdx => Math.abs(idx - mIdx)));
+        const proximity = Math.max(0.35, 1 - minDist * 0.12);
+        if (state.uvActive && state.melanocyteActivity > 0.22) {
+          const injectRate = state.melanocyteActivity * 0.26 * proximity;
+          cell.melaninLoad = Math.min(1.0, cell.melaninLoad + injectRate * dt);
+        } else {
+          cell.melaninLoad += (0.13 - cell.melaninLoad) * Math.min(1, dt * 0.35);
+        }
+      });
+
+      migratingRows.forEach((row) => {
+        if (row.y >= WORLD.spinosumTop + 30 && row.y <= WORLD.basaleTop) {
+          if (state.uvActive && state.melanocyteActivity > 0.25) {
+            const reachFactor = (row.y - (WORLD.spinosumTop + 30)) / (WORLD.basaleTop - (WORLD.spinosumTop + 30));
+            const injectRate = state.melanocyteActivity * 0.22 * reachFactor;
+            row.cells.forEach((cell) => {
+              cell.melaninLoad = Math.min(1.0, cell.melaninLoad + injectRate * dt);
+            });
+          }
+        }
+      });
+
+      // 5. 基底層垂直有絲分裂事件
+      const mitosisInterval = state.mode === 'damaged' ? 0.95 : 1.35;
+      mitosisTimer += dt;
+      if (mitosisTimer >= mitosisInterval) {
+        mitosisTimer = 0;
+        const candidates = basalRow.cells
+          .map((c, idx) => ({ c, idx }))
+          .filter(item => !item.c.specialType && !state.mitosisEvents.some(ev => ev.colIdx === item.idx));
+        if (candidates.length > 0) {
+          const picked = candidates[Math.floor(Math.random() * candidates.length)];
+          state.mitosisEvents.push({
+            colIdx: picked.idx,
+            progress: 0
+          });
+        }
+      }
+
+      for (let i = state.mitosisEvents.length - 1; i >= 0; i--) {
+        const ev = state.mitosisEvents[i];
+        ev.progress += dt * 1.15;
+        if (ev.progress >= 1) {
+          const cellW = spanW / basalRow.cells.length;
+          const spawnX = WORLD.tissueLeft + (ev.colIdx + 0.5) * cellW;
+          divisionPushSparks.push({
+            x: spawnX,
+            y: WORLD.basaleTop - 6,
+            alpha: 1.0
+          });
+          state.mitosisEvents.splice(i, 1);
+        }
+      }
+
+      for (let i = divisionPushSparks.length - 1; i >= 0; i--) {
+        divisionPushSparks[i].y -= 26 * dt;
+        divisionPushSparks[i].alpha -= 1.1 * dt;
+        if (divisionPushSparks[i].alpha <= 0) {
+          divisionPushSparks.splice(i, 1);
+        }
+      }
+
+      // 6. 緊密上皮列向上推移（載著黑色素小體從基底層 -> 棘狀層 -> 顆粒層 -> 角質層）
+      const migrateSpeed = (state.mode === 'damaged' ? 18 : (state.mode === 'dry' ? 7 : 12)) * state.timeScale;
+      for (const row of migratingRows) {
+        row.y -= migrateSpeed * dt;
+        row.rebuildCellsForWidth(false);
+      }
+
+      // 最表層脫屑檢查
+      const shedThreshold = state.mode === 'dry'
+        ? (WORLD.corneumTop - 40)
+        : (state.mode === 'damaged' ? WORLD.corneumTop - 8 : WORLD.corneumTop - 18);
+
+      if (migratingRows.length > 0 && migratingRows[migratingRows.length - 1].y < shedThreshold) {
+        const topRow = migratingRows.pop();
+        const count = topRow.cells.length;
+        const cellW = spanW / count;
+        topRow.cells.forEach((c, idx) => {
+          if (c.isTracked) {
+            state.trackedCellId = null; // 細胞已脫落
+          }
+          if (shedParticles.length < 40) {
+            shedParticles.push({
+              x: WORLD.tissueLeft + (idx + 0.5) * cellW,
+              y: topRow.y,
+              vx: (Math.random() - 0.5) * 22,
+              vy: -15 - Math.random() * 20,
+              rot: Math.random() * Math.PI,
+              rotSpeed: (Math.random() - 0.5) * 3,
+              alpha: 1.0,
+              w: cellW * 0.9,
+              h: 7,
+              melanin: c.melaninLoad
+            });
+          }
+        });
+      }
+
+      // 當底部棘狀層向上推移空出空間時，在基底層上方生成新生上皮列
+      const lowestRow = migratingRows[0];
+      if (!lowestRow || lowestRow.y < (WORLD.basaleTop - 26)) {
+        const nonSpecialCells = basalRow.cells.filter(c => !c.specialType);
+        const avgBasalMel = nonSpecialCells.reduce((acc, c) => acc + c.melaninLoad, 0) / (nonSpecialCells.length || 1);
+        const newRow = new EpithelialRow(WORLD.basaleTop - 2, (lowestRow ? lowestRow.rowIndex - 1 : 1), false, avgBasalMel);
+        migratingRows.unshift(newRow);
+      }
+
+      // 更新已脫落粒子
+      for (let i = shedParticles.length - 1; i >= 0; i--) {
+        const p = shedParticles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.rot += p.rotSpeed * dt;
+        p.alpha -= 0.35 * dt;
+        if (p.alpha <= 0) {
+          shedParticles.splice(i, 1);
+        }
+      }
+
+      // 7. 計算目前表皮平均黑色素與更新介面顯示
+      const allRows = [...migratingRows, basalRow];
+      let totalMel = 0;
+      let countedCells = 0;
+      allRows.forEach(r => {
+        r.cells.forEach(c => {
+          if (!c.specialType) {
+            totalMel += c.melaninLoad;
+            countedCells++;
+          }
+        });
+      });
+      const avgMel = countedCells > 0 ? (totalMel / countedCells) : 0.15;
+      const melPct = Math.round(avgMel * 100);
+
+      const melaninPctLabel = document.getElementById('melaninPctLabel');
+      if (melaninPctLabel) melaninPctLabel.textContent = `黑色素 ${melPct}%`;
+
+      const skinToneSwatch = document.getElementById('skinToneSwatch');
+      if (skinToneSwatch) {
+        skinToneSwatch.style.backgroundColor = lerpColor('#f6c39b', '#7c3f1d', avgMel * 1.1);
+      }
+
+      const phaseDesc = document.getElementById('tanningPhaseDesc');
+      if (phaseDesc) {
+        if (state.uvActive) {
+          phaseDesc.textContent = `☀️ 曬黑階段：UV 活化黑色素細胞酪胺酸酶，大量黑色素小體正注入角質形成細胞核上方形成「遮陽傘」，表皮由下往上漸漸變黑！`;
+        } else if (avgMel > 0.24) {
+          phaseDesc.textContent = `🌤️ 漸漸白回來階段：UV 已停止，黑色素細胞停止大量製造；原有黑色素隨細胞分裂向上推移至角質層並隨皮屑脫落排出，下方新生細胞已恢復白皙！`;
+        } else {
+          phaseDesc.textContent = `✨ 基礎白皙平衡：無紫外線刺激，黑色素細胞維持低活性，表皮黑色素含量已代謝回基礎水平。`;
+        }
+      }
+
+      // 8. 更新單細胞追蹤 HUD 資訊
+      updateTrackerHud();
+    }
+
+    function updateTrackerHud() {
+      const hud = document.getElementById('trackerHud');
+      if (!hud) return;
+      if (!state.trackedCellId) {
+        hud.classList.add('hidden');
+        return;
+      }
+
+      hud.classList.remove('hidden');
+
+      let trackedCell = null;
+      let trackedY = basalRow.y;
+
+      for (const c of basalRow.cells) {
+        if (c.id === state.trackedCellId) {
+          trackedCell = c;
+          trackedY = basalRow.y;
+          break;
+        }
+      }
+      if (!trackedCell) {
+        for (const row of migratingRows) {
+          for (const c of row.cells) {
+            if (c.id === state.trackedCellId) {
+              trackedCell = c;
+              trackedY = row.y;
+              break;
+            }
+          }
+          if (trackedCell) break;
+        }
+      }
+
+      const layerNameElem = document.getElementById('trackLayerName');
+      const dayBadgeElem = document.getElementById('trackDayBadge');
+      const progressBarElem = document.getElementById('trackProgressBar');
+      const bioEventElem = document.getElementById('trackBioEvent');
+
+      if (trackedCell) {
+        const layerKey = getLayerKeyByY(trackedY);
+        const layerNames = {
+          basale: '基底層 (Stratum basale)',
+          spinosum: '棘狀層 (Stratum spinosum)',
+          granulosum: '顆粒層 (Stratum granulosum)',
+          lucidum: '透明層 (Stratum lucidum)',
+          corneum: '角質層 (Stratum corneum)'
+        };
+        if (layerNameElem) layerNameElem.textContent = layerNames[layerKey] || layerKey;
+
+        const progress = Math.max(0, Math.min(1, (WORLD.basaleTop - trackedY) / (WORLD.basaleTop - WORLD.corneumTop)));
+        const day = (progress * 28).toFixed(1);
+        if (dayBadgeElem) dayBadgeElem.textContent = `第 ${day} 天`;
+        if (progressBarElem) progressBarElem.style.width = `${Math.round(progress * 100)}%`;
+
+        if (bioEventElem) {
+          if (layerKey === 'basale') {
+            bioEventElem.textContent = '剛由基底幹細胞有絲分裂誕生，半橋粒錨定基底膜，持續合成角蛋白並接收黑色素小體。';
+          } else if (layerKey === 'spinosum') {
+            bioEventElem.textContent = '推入棘狀層，細胞間以緊密橋粒鉚釘扣合，黑色素小體在核上方形成遮陽傘抵禦紫外線。';
+          } else if (layerKey === 'granulosum') {
+            bioEventElem.textContent = '進入顆粒層，細胞高度扁平化，合成角質透明顆粒與板層小體，細胞核與胞器開始瓦解。';
+          } else if (layerKey === 'lucidum') {
+            bioEventElem.textContent = '抵達透明層，細胞核完全消失，內部充滿緊密交聯的透明蛋白，提供抗磨與屏障作用。';
+          } else {
+            bioEventElem.textContent = '形成成熟無核角質磚塊，嵌入細胞間脂質水泥中；頂部正等待 KLKs 酵素切斷橋粒脫落。';
+          }
+        }
+      } else {
+        if (layerNameElem) layerNameElem.textContent = '角質層 (已脫屑剝離)';
+        if (dayBadgeElem) dayBadgeElem.textContent = '第 28 天 (代謝排出)';
+        if (progressBarElem) progressBarElem.style.width = '100%';
+        if (bioEventElem) {
+          bioEventElem.textContent = '✨ 該細胞已隨老廢角質皮屑自然脫落排出體外，完整走過 28 天代謝生命週期！';
+        }
+      }
+    }
+
+    // --------------------------------------------------------------------------
+    // 12. 主繪製渲染與動畫循環
+    // --------------------------------------------------------------------------
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.save();
+      ctx.translate(view.offsetX, view.offsetY);
+      ctx.scale(view.scale, view.scale);
+
+      drawSunAndUVRays();
+      drawFullSkinSubstrate();
+      drawTightEpithelium();
+
+      ctx.restore();
+    }
+
+    let lastTimestamp = performance.now();
+    function animate(now) {
+      const dt = Math.min((now - lastTimestamp) / 1000, 0.08);
+      lastTimestamp = now;
+
+      updateSimulation(dt);
+      render();
+
+      if (brickLensActive) {
+        updateAndRenderBrickLens(dt);
+      }
+
+      requestAnimationFrame(animate);
+    }
+
+    // --------------------------------------------------------------------------
+    // 13. 磚牆微觀放大鏡模態視窗與 KLKs 脫屑動力學模擬
+    // --------------------------------------------------------------------------
+    const brickCanvas = document.getElementById('brickLensCanvas');
+    const brickCtx = brickCanvas ? brickCanvas.getContext('2d') : null;
+    let brickLensActive = false;
+    let brickExfoliating = false;
+    let brickExfoliateProgress = 0;
+
+    function resizeBrickCanvas() {
+      if (!brickCanvas) return;
+      const rect = brickCanvas.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      brickCanvas.width = Math.floor(rect.width * dpr);
+      brickCanvas.height = Math.floor(rect.height * dpr);
+      if (brickCtx) brickCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    function updateAndRenderBrickLens(dt) {
+      if (!brickCtx || !brickCanvas) return;
+      const w = brickCanvas.clientWidth;
+      const h = brickCanvas.clientHeight;
+      brickCtx.clearRect(0, 0, w, h);
+
+      if (brickExfoliating) {
+        brickExfoliateProgress += dt * 0.8;
+        if (brickExfoliateProgress >= 1.0) {
+          brickExfoliateProgress = 1.0;
+        }
+      }
+
+      const brickRows = 4;
+      const brickCols = 4;
+      const brickW = (w - 40) / brickCols;
+      const brickH = (h - 70) / brickRows;
+
+      brickCtx.save();
+      brickCtx.translate(20, 20);
+
+      for (let r = 0; r < brickRows; r++) {
+        const rowY = r * brickH;
+        const isTop = (r === 0);
+        const shift = (r % 2 === 1) ? (brickW * 0.5) : 0;
+
+        for (let c = -1; c <= brickCols; c++) {
+          const bx = c * brickW + shift;
+          const by = rowY;
+          if (bx + brickW < 0 || bx > w - 40) continue;
+
+          brickCtx.save();
+          if (isTop && c === 1 && brickExfoliateProgress > 0) {
+            const liftY = -brickExfoliateProgress * 45;
+            const tilt = brickExfoliateProgress * 0.15;
+            brickCtx.translate(bx + brickW * 0.5, by + brickH * 0.5);
+            brickCtx.rotate(tilt);
+            brickCtx.translate(-(bx + brickW * 0.5), -(by + brickH * 0.5 - liftY));
+          }
+
+          drawRoundedRect(brickCtx, bx + 2, by + 2, brickW - 4, brickH - 8, 5);
+          brickCtx.fillStyle = '#fef08a';
+          brickCtx.fill();
+          brickCtx.strokeStyle = '#eab308';
+          brickCtx.lineWidth = 1.8;
+          brickCtx.stroke();
+
+          brickCtx.strokeStyle = '#ca8a04';
+          brickCtx.lineWidth = 1;
+          brickCtx.strokeRect(bx + 5, by + 4, brickW - 10, brickH - 12);
+
+          brickCtx.strokeStyle = 'rgba(202, 138, 4, 0.35)';
+          brickCtx.lineWidth = 0.8;
+          brickCtx.beginPath();
+          brickCtx.moveTo(bx + 8, by + brickH * 0.5);
+          brickCtx.lineTo(bx + brickW - 8, by + brickH * 0.5);
+          brickCtx.stroke();
+
+          brickCtx.fillStyle = '#38bdf8';
+          for (let k = 10; k < brickW - 10; k += 16) {
+            brickCtx.beginPath();
+            brickCtx.arc(bx + k, by + brickH * 0.45, 1.8, 0, Math.PI * 2);
+            brickCtx.arc(bx + k + 8, by + brickH * 0.6, 1.8, 0, Math.PI * 2);
+            brickCtx.fill();
+          }
+
+          if (r < brickRows - 1) {
+            const mortarY = by + brickH - 5;
+            brickCtx.fillStyle = '#f97316';
+            brickCtx.fillRect(bx + 4, mortarY, brickW - 8, 2.5);
+            brickCtx.fillStyle = '#38bdf8';
+            brickCtx.fillRect(bx + 4, mortarY - 1.5, brickW - 8, 1.5);
+            brickCtx.fillRect(bx + 4, mortarY + 2.5, brickW - 8, 1.5);
+          }
+
+          if (r < brickRows - 1) {
+            const rivY = by + brickH - 4;
+            const isCut = (isTop && brickExfoliateProgress > 0.35);
+            brickCtx.fillStyle = isCut ? '#ef4444' : '#10b981';
+            brickCtx.fillRect(bx + brickW * 0.25 - 2, rivY - 3, 4, 6);
+            brickCtx.fillRect(bx + brickW * 0.75 - 2, rivY - 3, 4, 6);
+          }
+
+          if (isTop && c === 1) {
+            const scissorAlpha = brickExfoliateProgress > 0.8 ? (1 - (brickExfoliateProgress - 0.8) * 5) : 1;
+            brickCtx.fillStyle = `rgba(34, 197, 94, ${Math.max(0, scissorAlpha)})`;
+            brickCtx.font = 'bold 13px sans-serif';
+            brickCtx.fillText('✂️ KLKs', bx + brickW * 0.38, by + brickH + 2);
+          }
+
+          brickCtx.restore();
+        }
+      }
+
+      brickCtx.restore();
+    }
+
+    // --------------------------------------------------------------------------
+    // 14. 介面控制、按鈕與互動綁定
+    // --------------------------------------------------------------------------
+    function setUVActiveState(active) {
+      state.uvActive = active;
+      const uvBtnIcon = document.getElementById('uvBtnIcon');
+      const uvBtnText = document.getElementById('uvBtnText');
+      const uvBadge = document.getElementById('uvStatusBadge');
+      const uvDot = document.getElementById('uvStatusDot');
+      const uvText = document.getElementById('uvStatusText');
+
+      if (active) {
+        if (uvBtnIcon) uvBtnIcon.textContent = '☀️';
+        if (uvBtnText) uvBtnText.textContent = '關閉 UV 日曬';
+        if (uvBadge) {
+          uvBadge.className = 'glass-panel px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 shadow-lg pointer-events-auto border border-amber-400/40 text-amber-300';
+        }
+        if (uvDot) {
+          uvDot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-ping';
+        }
+        if (uvText) {
+          uvText.textContent = `強烈紫外線（UV ${state.uvIndex} 照射中・黑色素加速合成）`;
+        }
+      } else {
+        if (uvBtnIcon) uvBtnIcon.textContent = '☀️';
+        if (uvBtnText) uvBtnText.textContent = '開啟 UV 日曬';
+        if (uvBadge) {
+          uvBadge.className = 'glass-panel px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 shadow-lg pointer-events-auto border border-slate-600/50 text-slate-300';
+        }
+        if (uvDot) {
+          uvDot.className = 'w-2 h-2 rounded-full bg-slate-400';
+        }
+        if (uvText) {
+          uvText.textContent = '室內低光（UV 關閉・黑色素代謝平衡）';
+        }
+      }
+    }
+
+    function showTopicCard(topicKey) {
+      const data = TOPIC_DATA[topicKey];
+      if (!data) return;
+      const card = document.getElementById('infoCard');
+      document.getElementById('infoCategory').textContent = data.category;
+      document.getElementById('infoTitle').textContent = data.title;
+      document.getElementById('infoDesc').textContent = data.desc;
+      document.getElementById('infoMechanism').textContent = data.mechanism;
+      card.classList.remove('hidden');
+    }
+
+    // 視角控制按鈕
+    document.getElementById('btnViewFull').addEventListener('click', () => {
+      focusWorldRegion(550, 1120);
+    });
+    document.getElementById('btnViewEpidermis').addEventListener('click', () => {
+      focusWorldRegion(410, 560);
+    });
+    document.getElementById('btnViewDermis').addEventListener('click', () => {
+      focusWorldRegion(890, 500);
+    });
+    document.getElementById('btnZoomIn').addEventListener('click', () => {
+      zoomAt(1.2, canvas.clientWidth * 0.5, canvas.clientHeight * 0.5);
+    });
+    document.getElementById('btnZoomOut').addEventListener('click', () => {
+      zoomAt(0.83, canvas.clientWidth * 0.5, canvas.clientHeight * 0.5);
+    });
+
+    // 磚牆模態視窗控制
+    document.getElementById('btnBrickLens').addEventListener('click', () => {
+      const modal = document.getElementById('brickModal');
+      modal.classList.remove('hidden');
+      brickLensActive = true;
+      brickExfoliating = false;
+      brickExfoliateProgress = 0;
+      setTimeout(resizeBrickCanvas, 30);
+    });
+    document.getElementById('btnCloseBrickModal').addEventListener('click', () => {
+      document.getElementById('brickModal').classList.add('hidden');
+      brickLensActive = false;
+    });
+    document.getElementById('btnTriggerExfoliate').addEventListener('click', () => {
+      brickExfoliateProgress = 0;
+      brickExfoliating = true;
+      const legend = document.getElementById('brickLensLegend');
+      if (legend) {
+        legend.textContent = '✂️ KLKs 蛋白酶剪斷角質橋粒，最表層角質磚塊翹起並自然剝離脫屑！';
+        setTimeout(() => {
+          legend.textContent = '黃色磚塊：無核角質細胞 + NMF｜橘藍雙層：細胞間脂質水泥（親水頭/疏水尾）';
+        }, 3500);
+      }
+    });
+
+    // 紫外線按鈕與循環
+    document.getElementById('btnToggleUV').addEventListener('click', () => {
+      state.autoUVCycle = false;
+      document.getElementById('autoCycleText').textContent = '日曬→白回循環';
+      setUVActiveState(!state.uvActive);
+    });
+    document.getElementById('btnAutoUVCycle').addEventListener('click', () => {
+      state.autoUVCycle = !state.autoUVCycle;
+      state.autoCycleTimer = 0;
+      const label = document.getElementById('autoCycleText');
+      if (state.autoUVCycle) {
+        label.textContent = '停止循環';
+        setUVActiveState(true);
+      } else {
+        label.textContent = '日曬→白回循環';
+        setUVActiveState(false);
+      }
+    });
+    document.getElementById('uvIndexSlider').addEventListener('input', (e) => {
+      state.uvIndex = parseInt(e.target.value, 10);
+      const uvLabels = {
+        1: '微弱', 2: '微弱', 3: '低', 4: '中', 5: '中',
+        6: '高', 7: '高', 8: '強日照', 9: '強烈', 10: '極高', 11: '危險暴曬'
+      };
+      document.getElementById('uvIndexLabel').textContent = `UV ${state.uvIndex}（${uvLabels[state.uvIndex] || ''}）`;
+      if (state.uvActive) {
+        document.getElementById('uvStatusText').textContent = `強烈紫外線（UV ${state.uvIndex} 照射中・黑色素加速合成）`;
+      }
+    });
+
+    // 播放/暫停與速度滑桿
+    document.getElementById('btnPlayPause').addEventListener('click', () => {
+      state.paused = !state.paused;
+      document.getElementById('playPauseText').textContent = state.paused ? '繼續模擬' : '暫停模擬';
+    });
+    document.getElementById('speedSlider').addEventListener('input', (e) => {
+      state.timeScale = parseFloat(e.target.value);
+      document.getElementById('speedValueLabel').textContent = `${state.timeScale.toFixed(2)}x 速度`;
+    });
+
+    // 單細胞追蹤按鈕
+    document.getElementById('btnTrackCell').addEventListener('click', () => {
+      basalRow.cells.forEach(c => c.isTracked = false);
+      migratingRows.forEach(r => r.cells.forEach(c => c.isTracked = false));
+      const nonSpecial = basalRow.cells.filter(c => !c.specialType);
+      if (nonSpecial.length > 0) {
+        const picked = nonSpecial[Math.floor(Math.random() * nonSpecial.length)];
+        picked.isTracked = true;
+        state.trackedCellId = picked.id;
+        document.getElementById('trackerHud').classList.remove('hidden');
+      }
+    });
+    document.getElementById('btnCloseTracker').addEventListener('click', () => {
+      state.trackedCellId = null;
+      basalRow.cells.forEach(c => c.isTracked = false);
+      migratingRows.forEach(r => r.cells.forEach(c => c.isTracked = false));
+      document.getElementById('trackerHud').classList.add('hidden');
+    });
+
+    // 結構說明彈跳卡關閉
+    document.getElementById('btnCloseInfo').addEventListener('click', () => {
+      document.getElementById('infoCard').classList.add('hidden');
+    });
+
+    // 快速結構索引按鈕
+    document.querySelectorAll('.topic-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        showTopicCard(btn.dataset.topic);
+      });
+    });
+
+    // 生理模式切換
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.mode-btn').forEach(b => {
+          b.className = 'mode-btn w-full text-left p-2.5 rounded-xl border border-slate-700/80 bg-slate-800/40 hover:bg-slate-800/70 transition';
+        });
+
+        state.mode = btn.dataset.mode;
+        const statusBadge = document.getElementById('statusBadge');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+
+        if (state.mode === 'normal') {
+          btn.className = 'mode-btn w-full text-left p-2.5 rounded-xl border border-emerald-400/60 bg-emerald-500/15 transition';
+          statusBadge.className = 'glass-panel px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 shadow-lg pointer-events-auto border border-emerald-400/30 text-emerald-300';
+          statusDot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+          statusText.textContent = '正常生理平衡（約 28 天週期）';
+        } else if (state.mode === 'dry') {
+          btn.className = 'mode-btn w-full text-left p-2.5 rounded-xl border border-amber-400/60 bg-amber-500/15 transition';
+          statusBadge.className = 'glass-panel px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 shadow-lg pointer-events-auto border border-amber-400/30 text-amber-300';
+          statusDot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-pulse';
+          statusText.textContent = '乾燥缺水 / 老廢角質堆積不脫落';
+        } else if (state.mode === 'damaged') {
+          btn.className = 'mode-btn w-full text-left p-2.5 rounded-xl border border-rose-400/60 bg-rose-500/15 transition';
+          statusBadge.className = 'glass-panel px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-2 shadow-lg pointer-events-auto border border-rose-400/30 text-rose-300';
+          statusDot.className = 'w-2 h-2 rounded-full bg-rose-400 animate-pulse';
+          statusText.textContent = '過度去角質 / 屏障受損（TEWL 劇增）';
+        }
+      });
+    });
+
+    // 視覺圖層開關
+    document.getElementById('chkLabels').addEventListener('change', (e) => {
+      state.showLabels = e.target.checked;
+    });
+    document.getElementById('chkOrganelles').addEventListener('change', (e) => {
+      state.showOrganelles = e.target.checked;
+    });
+    document.getElementById('chkHydration').addEventListener('change', (e) => {
+      state.showHydration = e.target.checked;
+    });
+
+    // 右側控制抽屜收合
+    let drawerOpen = true;
+    document.getElementById('btnTogglePanel').addEventListener('click', () => {
+      drawerOpen = !drawerOpen;
+      const drawer = document.getElementById('controlDrawer');
+      const label = document.getElementById('togglePanelLabel');
+      const icon = document.getElementById('iconPanelToggle');
+      if (drawerOpen) {
+        drawer.classList.remove('translate-x-[calc(100%+16px)]');
+        drawer.classList.add('translate-x-0');
+        if (label) label.textContent = '控制與微觀面板';
+        if (icon) icon.classList.remove('rotate-180');
+      } else {
+        drawer.classList.remove('translate-x-0');
+        drawer.classList.add('translate-x-[calc(100%+16px)]');
+        if (label) label.textContent = '展開控制面板';
+        if (icon) icon.classList.add('rotate-180');
+      }
+    });
+
+    // 視窗縮放事件監聽
+    window.addEventListener('resize', () => {
+      resizeCanvas();
+      if (brickLensActive) resizeBrickCanvas();
+    });
+
+    // 啟動主繪製與動畫循環
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>

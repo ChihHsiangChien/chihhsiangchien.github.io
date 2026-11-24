@@ -1,0 +1,1544 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>咖啡因與腺苷受體競爭機制模擬器</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #060913;
+      font-family: 'Inter', 'Noto Sans TC', sans-serif;
+      color: #e2e8f0;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+    .glass-panel {
+      background: rgba(13, 19, 36, 0.8);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    }
+    .mono-num {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.3);
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="relative w-screen h-screen overflow-hidden">
+
+  <!-- 全螢幕科學視覺化畫布 -->
+  <canvas id="simCanvas"></canvas>
+
+  <!-- 頂部狀態與時鐘導覽列 -->
+  <header class="fixed top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+    <!-- 左上：標題與即時生理事件解說 -->
+    <div class="glass-panel rounded-2xl px-4 py-2.5 pointer-events-auto flex items-center gap-3 max-w-full lg:max-w-2xl">
+      <div class="flex items-center gap-2 shrink-0">
+        <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse"></span>
+        <h1 class="text-sm sm:text-base font-bold tracking-wide text-slate-100">腺苷與咖啡因受體動力學</h1>
+      </div>
+      <div class="h-4 w-[1px] bg-slate-700 hidden sm:block"></div>
+      <p id="liveNarrative" class="text-xs sm:text-sm text-cyan-200/90 font-medium truncate">
+        清晨剛醒時突觸間隙幾乎無腺苷；隨突觸前神經元消耗 ATP，腺苷才經由 ENT 轉運蛋白釋出。
+      </p>
+    </div>
+
+    <!-- 右上：生理時鐘與時間流速控制 -->
+    <div class="glass-panel rounded-2xl px-3.5 py-2 pointer-events-auto flex items-center gap-2 sm:gap-3 ml-auto">
+      <div class="flex items-center gap-2">
+        <span id="phaseIcon" class="text-base">☀️</span>
+        <div>
+          <div class="flex items-baseline gap-1.5">
+            <span id="simClock" class="mono-num text-sm sm:text-base font-bold text-white">08:00</span>
+            <span id="simPhaseLabel" class="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300">日間清醒</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="h-5 w-[1px] bg-slate-700"></div>
+
+      <!-- 倍速按鈕 -->
+      <div class="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-700/60" id="speedControls">
+        <button data-speed="0" class="speed-btn px-2 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition" title="暫停">⏸</button>
+        <button data-speed="1" class="speed-btn px-2 py-1 rounded-lg text-xs font-bold bg-indigo-600 text-white shadow transition" title="正常流速">1x</button>
+        <button data-speed="3" class="speed-btn px-2 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition" title="加速模擬">3x</button>
+        <button data-speed="6" class="speed-btn px-2 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition" title="快轉觀察代謝">6x</button>
+      </div>
+
+      <!-- 分子結構開關與視角重置 -->
+      <button id="toggleStructureBtn" class="px-2.5 py-1.5 rounded-xl text-xs font-medium bg-slate-800/90 hover:bg-slate-700 text-amber-300 border border-amber-500/30 transition flex items-center gap-1 cursor-pointer" title="開啟或關閉分子結構擬態對比視窗">
+        <span>🔬</span><span class="hidden md:inline">分子結構</span>
+      </button>
+      <button id="resetViewBtn" class="px-2.5 py-1.5 rounded-xl text-xs font-medium bg-slate-800/90 hover:bg-slate-700 text-slate-300 border border-slate-600/50 transition cursor-pointer" title="重置縮放與平移視角">
+        ⟲ 視角
+      </button>
+    </div>
+  </header>
+
+  <!-- 左側懸浮：分子結構擬態比較卡片 (預設關閉，點擊「分子結構」開啟) -->
+  <aside id="structureCard" class="hidden fixed top-20 left-3 z-20 glass-panel rounded-2xl p-3.5 w-72 sm:w-80 transition-all duration-300 pointer-events-auto">
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-xs font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+        <span>🧬</span> 結構擬態（分子鑰匙對比）
+      </span>
+      <button id="closeStructureBtn" class="text-slate-400 hover:text-white text-sm px-2 py-0.5 rounded hover:bg-slate-800 transition cursor-pointer" title="關閉視窗">✕</button>
+    </div>
+    <canvas id="structureCanvas" width="290" height="135" class="w-full rounded-xl bg-slate-950/80 border border-slate-800 mb-2"></canvas>
+    <p class="text-[11px] text-slate-300 leading-relaxed">
+      兩者皆具備相似的<span class="text-amber-300 font-semibold">雙環含氮雜環（嘌呤環）</span>。咖啡因能插進腺苷受體鎖孔，卻因缺少核糖尾端而不觸發抑制訊號。
+    </p>
+  </aside>
+
+  <!-- 中央警訊橫幅：咖啡因崩潰 (Caffeine Crash) 提示 -->
+  <div id="crashAlert" class="fixed top-24 left-1/2 -translate-x-1/2 z-30 pointer-events-none opacity-0 transition-all duration-500 transform -translate-y-4">
+    <div class="glass-panel border-rose-500/50 bg-rose-950/85 px-5 py-3 rounded-2xl flex items-center gap-3 shadow-2xl">
+      <span class="text-2xl">⚡</span>
+      <div>
+        <div class="text-sm font-bold text-rose-200">咖啡因崩潰（Caffeine Crash）！</div>
+        <div class="text-xs text-rose-300/90">肝臟已代謝完咖啡因，累積已久的腺苷瞬間湧入受體，引發強烈睡意反撲。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 底部控制與即時生理儀表板 -->
+  <footer class="fixed bottom-3 left-3 right-3 z-20 flex flex-col lg:flex-row items-stretch lg:items-end justify-between gap-2.5 pointer-events-none">
+
+    <!-- 左下：四項核心生化指標儀表板 -->
+    <div class="glass-panel rounded-2xl p-3 pointer-events-auto grid grid-cols-2 sm:grid-cols-4 gap-2.5 lg:max-w-3xl w-full">
+      <!-- 1. 細胞外腺苷濃度 -->
+      <div class="bg-slate-900/65 rounded-xl p-2.5 border border-slate-800/80">
+        <div class="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+          <span>突觸腺苷濃度</span>
+          <span id="valAdenosine" class="mono-num font-bold text-cyan-400">5%</span>
+        </div>
+        <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+          <div id="barAdenosine" class="h-full bg-gradient-to-r from-cyan-500 to-blue-400 transition-all duration-200" style="width: 5%"></div>
+        </div>
+        <div class="text-[10px] text-slate-400 mt-1 flex justify-between">
+          <span>睡眠壓力累積</span>
+          <span class="text-slate-500">ATP 代謝釋放</span>
+        </div>
+      </div>
+
+      <!-- 2. 體內咖啡因濃度 (CYP1A2 代謝) -->
+      <div class="bg-slate-900/65 rounded-xl p-2.5 border border-slate-800/80">
+        <div class="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+          <span>咖啡因濃度</span>
+          <span id="valCaffeine" class="mono-num font-bold text-amber-400">0%</span>
+        </div>
+        <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+          <div id="barCaffeine" class="h-full bg-gradient-to-r from-amber-500 to-orange-400 transition-all duration-200" style="width: 0%"></div>
+        </div>
+        <div class="text-[10px] text-slate-400 mt-1 flex justify-between">
+          <span>CYP1A2 肝代謝</span>
+          <span id="halfLifeText" class="mono-num text-amber-300/80">半衰期 ~4h</span>
+        </div>
+      </div>
+
+      <!-- 3. 受體佔據比例 -->
+      <div class="bg-slate-900/65 rounded-xl p-2.5 border border-slate-800/80">
+        <div class="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+          <span>受體結合狀態</span>
+          <span id="valReceptorSummary" class="mono-num font-bold text-slate-200">0/6 佔用</span>
+        </div>
+        <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden flex">
+          <div id="barRecAdenosine" class="h-full bg-cyan-400 transition-all duration-200" style="width: 0%" title="腺苷結合 (煞車)"></div>
+          <div id="barRecCaffeine" class="h-full bg-amber-400 transition-all duration-200" style="width: 0%" title="咖啡因阻斷 (佔位)"></div>
+        </div>
+        <div class="text-[10px] mt-1 flex items-center justify-between text-slate-400">
+          <span class="text-cyan-300">腺:<b id="pctRecAde" class="mono-num">0%</b></span>
+          <span class="text-amber-300">咖:<b id="pctRecCaf" class="mono-num">0%</b></span>
+          <span>空:<b id="pctRecFree" class="mono-num">100%</b></span>
+        </div>
+      </div>
+
+      <!-- 4. 神經警覺度 / 清醒指數 -->
+      <div class="bg-slate-900/65 rounded-xl p-2.5 border border-slate-800/80">
+        <div class="flex items-center justify-between text-[11px] text-slate-400 mb-1">
+          <span>神經警覺度</span>
+          <span id="valAlertness" class="mono-num font-bold text-emerald-400">92%</span>
+        </div>
+        <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+          <div id="barAlertness" class="h-full bg-gradient-to-r from-emerald-500 to-teal-300 transition-all duration-200" style="width: 92%"></div>
+        </div>
+        <div class="text-[10px] text-slate-400 mt-1 flex justify-between">
+          <span>多巴胺傳導活性</span>
+          <span id="alertStateLabel" class="text-emerald-300">清醒專注</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右下：核心生理操作控制鈕 -->
+    <div class="glass-panel rounded-2xl p-2.5 pointer-events-auto flex flex-wrap items-center justify-between sm:justify-end gap-2">
+      <!-- 喝一杯咖啡 -->
+      <button id="drinkCoffeeBtn" class="flex-1 sm:flex-initial px-3.5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 active:scale-95 text-slate-950 shadow-lg shadow-amber-500/20 transition flex items-center justify-center gap-1.5 cursor-pointer">
+        <span class="text-base">☕</span>
+        <span>喝一杯咖啡</span>
+      </button>
+
+      <!-- 小睡片刻 (20分鐘 Coffee Nap) -->
+      <button id="powerNapBtn" class="flex-1 sm:flex-initial px-3.5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-gradient-to-r from-cyan-600 to-sky-700 hover:from-cyan-500 hover:to-sky-600 active:scale-95 text-white shadow-lg shadow-cyan-500/20 transition flex items-center justify-center gap-1.5 cursor-pointer" title="短暫小睡 20 分鐘：清除部分腺苷，若搭配剛喝下的咖啡因可發揮雙倍提神效果">
+        <span class="text-base">💤</span>
+        <span>小睡片刻 (20m)</span>
+      </button>
+
+      <!-- 進入睡眠 -->
+      <button id="sleepBtn" class="flex-1 sm:flex-initial px-3.5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-gradient-to-r from-indigo-600 to-blue-700 hover:from-indigo-500 hover:to-blue-600 active:scale-95 text-white shadow-lg shadow-indigo-500/20 transition flex items-center justify-center gap-1.5 cursor-pointer">
+        <span class="text-base">🌙</span>
+        <span id="sleepBtnText">夜間長睡</span>
+      </button>
+
+      <!-- 耐受性模式切換 (受體上調 Upregulation) -->
+      <label class="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700/70 cursor-pointer hover:border-purple-400/50 transition select-none" title="長期重度攝取咖啡因時，神經元會代償性增生更多腺苷受體">
+        <input type="checkbox" id="toleranceToggle" class="sr-only peer" />
+        <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all relative peer-checked:bg-purple-600"></div>
+        <div class="flex flex-col">
+          <span class="text-xs font-bold text-purple-200 leading-tight">耐受性模式</span>
+          <span class="text-[10px] text-slate-400 leading-tight">受體上調 (4→7個)</span>
+        </div>
+      </label>
+    </div>
+
+  </footer>
+
+  <script>
+    /**
+     * 咖啡因與腺苷競爭性受體拮抗 - 互動式生理視覺化模擬器
+     */
+    (function () {
+      const canvas = document.getElementById('simCanvas');
+      const ctx = canvas.getContext('2d');
+
+      const structCanvas = document.getElementById('structureCanvas');
+      const sCtx = structCanvas.getContext('2d');
+
+      const ui = {
+        liveNarrative: document.getElementById('liveNarrative'),
+        phaseIcon: document.getElementById('phaseIcon'),
+        simClock: document.getElementById('simClock'),
+        simPhaseLabel: document.getElementById('simPhaseLabel'),
+        valAdenosine: document.getElementById('valAdenosine'),
+        barAdenosine: document.getElementById('barAdenosine'),
+        valCaffeine: document.getElementById('valCaffeine'),
+        barCaffeine: document.getElementById('barCaffeine'),
+        halfLifeText: document.getElementById('halfLifeText'),
+        valReceptorSummary: document.getElementById('valReceptorSummary'),
+        barRecAdenosine: document.getElementById('barRecAdenosine'),
+        barRecCaffeine: document.getElementById('barRecCaffeine'),
+        pctRecAde: document.getElementById('pctRecAde'),
+        pctRecCaf: document.getElementById('pctRecCaf'),
+        pctRecFree: document.getElementById('pctRecFree'),
+        valAlertness: document.getElementById('valAlertness'),
+        barAlertness: document.getElementById('barAlertness'),
+        alertStateLabel: document.getElementById('alertStateLabel'),
+        drinkCoffeeBtn: document.getElementById('drinkCoffeeBtn'),
+        powerNapBtn: document.getElementById('powerNapBtn'),
+        sleepBtn: document.getElementById('sleepBtn'),
+        sleepBtnText: document.getElementById('sleepBtnText'),
+        toleranceToggle: document.getElementById('toleranceToggle'),
+        speedBtns: document.querySelectorAll('.speed-btn'),
+        toggleStructureBtn: document.getElementById('toggleStructureBtn'),
+        closeStructureBtn: document.getElementById('closeStructureBtn'),
+        structureCard: document.getElementById('structureCard'),
+        resetViewBtn: document.getElementById('resetViewBtn'),
+        crashAlert: document.getElementById('crashAlert')
+      };
+
+      // 世界邏輯座標系與解剖邊界定義
+      const WORLD = {
+        width: 1320,
+        height: 760,
+        centerX: 660,
+        bbbLeftX: 115,
+        bbbRightX: 1205,
+        upperMembraneY: 220,
+        lowerMembraneY: 510
+      };
+
+      // 相機縮放與平移視角狀態
+      const camera = {
+        x: 0,
+        y: 0,
+        scale: 1,
+        targetX: 0,
+        targetY: 0,
+        targetScale: 1,
+        isDragging: false,
+        lastX: 0,
+        lastY: 0,
+        pinchDist: 0,
+        isAnimatingView: false
+      };
+
+      function fitWorldToScreen() {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        const scaleX = w / WORLD.width;
+        const scaleY = h / WORLD.height;
+        const fitScale = Math.min(scaleX, scaleY) * 0.96;
+        camera.targetScale = fitScale;
+        camera.targetX = (w - WORLD.width * fitScale) / 2;
+        camera.targetY = (h - WORLD.height * fitScale) / 2;
+        camera.isAnimatingView = true;
+      }
+
+      // 模擬器核心生化狀態
+      const state = {
+        timeMinutes: 8 * 60,
+        speed: 1,
+        isSleeping: false,
+        napTimer: 0,
+        isTolerant: false,
+        caffeineDoseCount: 0,
+        hadHighCaffeine: false,
+        alertness: 92,
+        phospholipidPhase: 0,
+        crashCooldown: 0
+      };
+
+      let receptors = [];
+      let molecules = [];
+      let atpParticles = [];
+      let intracellularAdenosines = [];
+      let entTransporters = [];
+      let bloodCells = [];
+      let dopamineSignals = [];
+      let ripples = [];
+
+      // 幾何輔助函式：管狀微血管中心 X 座標
+      function getVesselCenterX(sideIdx, y) {
+        const wave = Math.sin((y / WORLD.height) * Math.PI * 1.4) * 16;
+        return sideIdx === 0 ? 72 + wave : WORLD.width - 72 - wave;
+      }
+
+      // 幾何輔助函式：突觸前神經元細胞膜 Y 座標 (向下微凸弧線)
+      function getPresynapticMembraneY(x) {
+        const norm = (x - WORLD.centerX) / ((WORLD.width - 460) / 2);
+        const clamped = Math.max(-1, Math.min(1, norm));
+        return WORLD.upperMembraneY - 12 + (1 - clamped * clamped) * 16;
+      }
+
+      // 幾何輔助函式：突觸前神經元胞質左右邊界 X 座標 (依 Y 高度收縮)
+      function getPresynapticBoundsX(y) {
+        if (y < 65) {
+          return { minX: WORLD.centerX - 140, maxX: WORLD.centerX + 140 };
+        }
+        const t = Math.min(1, Math.max(0, (y - 65) / (WORLD.upperMembraneY - 85)));
+        const halfW = 140 + t * (WORLD.centerX - 255 - 140);
+        return { minX: WORLD.centerX - halfW, maxX: WORLD.centerX + halfW };
+      }
+
+      // 幾何輔助函式：突觸後神經元樹突棘細胞膜 Y 座標 (向下微凹杯狀弧線)
+      function getPostsynapticMembraneY(x) {
+        const norm = (x - WORLD.centerX) / ((WORLD.width - 420) / 2);
+        const clamped = Math.max(-1, Math.min(1, norm));
+        return WORLD.lowerMembraneY + (1 - clamped * clamped) * 36;
+      }
+
+      // 建立或重建 A1 / A2A 腺苷受體
+      function rebuildReceptors(count) {
+        const oldBound = receptors
+          .filter(r => r.boundMolecule)
+          .map(r => r.boundMolecule);
+
+        receptors = [];
+        const startX = 330;
+        const endX = WORLD.width - 330;
+        const step = (endX - startX) / (count - 1);
+
+        for (let i = 0; i < count; i++) {
+          const rx = startX + i * step;
+          const ry = getPostsynapticMembraneY(rx);
+          const rec = {
+            x: rx,
+            y: ry,
+            type: i % 2 === 0 ? 'A1' : 'A2A',
+            boundMolecule: null,
+            scaleAnim: 0.2
+          };
+          if (i < oldBound.length) {
+            rec.boundMolecule = oldBound[i];
+            oldBound[i].boundReceptor = rec;
+          }
+          receptors.push(rec);
+        }
+
+        for (let i = count; i < oldBound.length; i++) {
+          oldBound[i].boundReceptor = null;
+          oldBound[i].vy = -1.8;
+        }
+      }
+
+      // 生成腺苷或咖啡因分子
+      function spawnMolecule(type, x, y, vx, vy, inVessel = false) {
+        molecules.push({
+          type,
+          x,
+          y,
+          vx,
+          vy,
+          angle: Math.random() * Math.PI * 2,
+          vAngle: (Math.random() - 0.5) * 0.06,
+          life: 1.0,
+          decayRate: type === 'caffeine' ? 0.00055 : 0.00008,
+          boundReceptor: null,
+          cooldown: 0,
+          inVessel
+        });
+      }
+
+      // 初始化整個微環境
+      function initSimulation() {
+        receptors = [];
+        molecules = [];
+        atpParticles = [];
+        intracellularAdenosines = [];
+        entTransporters = [];
+        bloodCells = [];
+        dopamineSignals = [];
+        ripples = [];
+
+        // 基準 4 個受體
+        rebuildReceptors(4);
+
+        // 突觸前細胞膜上的 3 個 ENT 核苷轉運蛋白通道
+        [WORLD.centerX - 210, WORLD.centerX, WORLD.centerX + 210].forEach(ex => {
+          entTransporters.push({
+            x: ex,
+            y: getPresynapticMembraneY(ex),
+            pulse: 0
+          });
+        });
+
+        // 突觸前神經元細胞內 ATP 能量分子 (嚴格位於細胞內部)
+        for (let i = 0; i < 12; i++) {
+          const py = 95 + (i % 3) * 32;
+          const bounds = getPresynapticBoundsX(py);
+          const px = bounds.minX + 35 + Math.random() * (bounds.maxX - bounds.minX - 70);
+          atpParticles.push({
+            x: px,
+            y: py,
+            vx: (Math.random() - 0.5) * 0.9,
+            vy: (Math.random() - 0.5) * 0.6,
+            hydrolysisProgress: Math.random() * 75
+          });
+        }
+
+        // 清晨剛醒時，突觸間隙僅有極少量基礎腺苷 (2個)
+        for (let i = 0; i < 2; i++) {
+          spawnMolecule(
+            'adenosine',
+            WORLD.centerX - 100 + i * 200,
+            (WORLD.upperMembraneY + WORLD.lowerMembraneY) / 2,
+            (Math.random() - 0.5) * 1.1,
+            (Math.random() - 0.5) * 1.1,
+            false
+          );
+        }
+
+        // 初始化左右兩側管狀微血管內的紅血球 (RBC)
+        [0, 1].forEach(sideIdx => {
+          for (let i = 0; i < 11; i++) {
+            bloodCells.push({
+              side: sideIdx,
+              y: (i / 11) * WORLD.height,
+              offsetX: (Math.random() - 0.5) * 20,
+              vy: sideIdx === 0 ? 1.35 + Math.random() * 0.35 : -(1.35 + Math.random() * 0.35),
+              angle: Math.random() * Math.PI,
+              vAngle: (Math.random() - 0.5) * 0.02
+            });
+          }
+        });
+
+        // 突觸後樹突棘內的多巴胺 / 覺醒訊號粒子
+        for (let i = 0; i < 18; i++) {
+          dopamineSignals.push({
+            x: 300 + Math.random() * (WORLD.width - 600),
+            y: WORLD.lowerMembraneY + 95 + Math.random() * 95,
+            speed: 1.5 + Math.random() * 1.2
+          });
+        }
+
+        drawStructureComparison();
+      }
+
+      // 喝一杯咖啡：咖啡因先隨血流進入微血管，再憑脂溶性直接穿透血腦屏障 (BBB)
+      function drinkCoffee() {
+        if (state.isSleeping) {
+          toggleSleepMode(false);
+        }
+        state.caffeineDoseCount++;
+        state.hadHighCaffeine = true;
+
+        const doseCount = 16;
+        for (let i = 0; i < doseCount; i++) {
+          const sideIdx = i % 2;
+          const startY = 140 + Math.random() * (WORLD.height - 280);
+          const vesselX = getVesselCenterX(sideIdx, startY) + (Math.random() - 0.5) * 20;
+          const dirX = sideIdx === 0 ? 1 : -1;
+          spawnMolecule(
+            'caffeine',
+            vesselX,
+            startY,
+            dirX * (1.2 + Math.random() * 0.9),
+            (Math.random() - 0.5) * 1.1,
+            true
+          );
+        }
+
+        const totalRec = receptors.length;
+        ui.liveNarrative.textContent = state.isTolerant
+          ? `☕ 咖啡因經微血管穿透 BBB 進入腦部！但因受體已上調至 ${totalRec} 個，單杯劑量無法阻斷所有受體。`
+          : '☕ 咖啡因隨血液進入微血管並穿透血腦屏障 (BBB)，搶先佔據 A1/A2A 受體並彈開腺苷！';
+      }
+
+      // 小睡片刻 (20 分鐘 Power Nap / Coffee Nap)：加速清除部分腺苷，並維持正常時間推進
+      function triggerPowerNap() {
+        if (state.isSleeping) {
+          toggleSleepMode(false);
+        }
+        state.napTimer = 110;
+        state.timeMinutes = (state.timeMinutes + 20) % (24 * 60);
+
+        let clearedCount = 0;
+        for (let i = molecules.length - 1; i >= 0; i--) {
+          const m = molecules[i];
+          if (m.type === 'adenosine' && clearedCount < 10) {
+            if (m.boundReceptor) {
+              m.boundReceptor.boundMolecule = null;
+            }
+            ripples.push({
+              x: m.x,
+              y: m.y,
+              r: 4,
+              maxR: 30,
+              color: 'rgba(129, 140, 248, 0.55)',
+              alpha: 0.8
+            });
+            molecules.splice(i, 1);
+            clearedCount++;
+          }
+        }
+
+        const hasCaf = molecules.some(m => m.type === 'caffeine');
+        ui.liveNarrative.textContent = hasCaf
+          ? '☕💤 啟動「咖啡小睡 (Coffee Nap)」！20 分鐘小睡清除了腺苷，剛吸收的咖啡因正好接手佔領受體！'
+          : '💤 小睡片刻（20 分鐘）：大腦快速回收並清除了部分突觸腺苷，暫時舒緩睡眠壓力。';
+      }
+
+      // 切換夜間長睡模式
+      function toggleSleepMode(forceState) {
+        state.isSleeping = typeof forceState === 'boolean' ? forceState : !state.isSleeping;
+        if (state.isSleeping) {
+          ui.sleepBtnText.textContent = '喚醒大腦';
+          ui.sleepBtn.className = 'flex-1 sm:flex-initial px-3.5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 active:scale-95 text-slate-950 shadow-lg shadow-emerald-500/20 transition flex items-center justify-center gap-1.5 cursor-pointer';
+          ui.liveNarrative.textContent = '🌙 進入夜間深層睡眠：ATP 停止大量消耗，腦脊髓液與腺苷激酶正在快速清除突觸腺苷！';
+        } else {
+          ui.sleepBtnText.textContent = '夜間長睡';
+          ui.sleepBtn.className = 'flex-1 sm:flex-initial px-3.5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-gradient-to-r from-indigo-600 to-blue-700 hover:from-indigo-500 hover:to-blue-600 active:scale-95 text-white shadow-lg shadow-indigo-500/20 transition flex items-center justify-center gap-1.5 cursor-pointer';
+          ui.liveNarrative.textContent = '☀️ 清晨醒來：突觸腺苷已被大幅清除，受體恢復空置，神經警覺度回到高點！';
+        }
+      }
+
+      // 觸發咖啡因崩潰 (Caffeine Crash) 橫幅提示
+      function triggerCaffeineCrashAlert() {
+        if (state.crashCooldown > 0) return;
+        state.crashCooldown = 480;
+        ui.crashAlert.classList.remove('opacity-0', '-translate-y-4');
+        ui.crashAlert.classList.add('opacity-100', 'translate-y-0');
+        setTimeout(() => {
+          ui.crashAlert.classList.remove('opacity-100', 'translate-y-0');
+          ui.crashAlert.classList.add('opacity-0', '-translate-y-4');
+        }, 5200);
+      }
+
+      // 繪製分子擬態對比視窗 (腺苷 vs 咖啡因)
+      function drawStructureComparison() {
+        const w = structCanvas.width;
+        const h = structCanvas.height;
+        sCtx.clearRect(0, 0, w, h);
+
+        // 左側：腺苷 (Adenosine)
+        sCtx.save();
+        sCtx.translate(74, 62);
+        drawMoleculeShape(sCtx, 'adenosine', 0, 0, 0, 1.55, 1.0);
+        sCtx.fillStyle = '#38bdf8';
+        sCtx.font = 'bold 11px "Noto Sans TC", sans-serif';
+        sCtx.textAlign = 'center';
+        sCtx.fillText('腺苷 (Adenosine)', 0, 44);
+        sCtx.fillStyle = '#94a3b8';
+        sCtx.font = '10px "Noto Sans TC", sans-serif';
+        sCtx.fillText('嘌呤環 + 核糖尾端', 0, 58);
+        sCtx.restore();
+
+        // 中央對比箭頭
+        sCtx.fillStyle = '#64748b';
+        sCtx.font = 'bold 12px "JetBrains Mono", monospace';
+        sCtx.textAlign = 'center';
+        sCtx.fillText('≈ 擬態', w / 2, 62);
+
+        // 右側：咖啡因 (Caffeine)
+        sCtx.save();
+        sCtx.translate(216, 62);
+        drawMoleculeShape(sCtx, 'caffeine', 0, 0, 0, 1.55, 1.0);
+        sCtx.fillStyle = '#fbbf24';
+        sCtx.font = 'bold 11px "Noto Sans TC", sans-serif';
+        sCtx.textAlign = 'center';
+        sCtx.fillText('咖啡因 (Caffeine)', 0, 44);
+        sCtx.fillStyle = '#94a3b8';
+        sCtx.font = '10px "Noto Sans TC", sans-serif';
+        sCtx.fillText('相似雙環 (無核糖)', 0, 58);
+        sCtx.restore();
+      }
+
+      // 繪製單一分子幾何結構 (雙環嘌呤骨架 + 側鏈差異)
+      function drawMoleculeShape(targetCtx, type, x, y, angle, scale = 1, alpha = 1) {
+        targetCtx.save();
+        targetCtx.translate(x, y);
+        targetCtx.rotate(angle);
+        targetCtx.scale(scale, scale);
+        targetCtx.globalAlpha = alpha;
+
+        const isAde = type === 'adenosine';
+        const mainColor = isAde ? '#0ea5e9' : '#f59e0b';
+        const strokeColor = isAde ? '#7dd3fc' : '#fde68a';
+
+        targetCtx.fillStyle = mainColor;
+        targetCtx.strokeStyle = strokeColor;
+        targetCtx.lineWidth = 1.6;
+
+        // 六元環
+        targetCtx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = (i * Math.PI) / 3;
+          const px = -4 + Math.cos(a) * 8;
+          const py = Math.sin(a) * 8;
+          if (i === 0) targetCtx.moveTo(px, py);
+          else targetCtx.lineTo(px, py);
+        }
+        targetCtx.closePath();
+        targetCtx.fill();
+        targetCtx.stroke();
+
+        // 稠合五元環
+        targetCtx.beginPath();
+        for (let i = 0; i < 5; i++) {
+          const a = (i * 2 * Math.PI) / 5 - Math.PI / 2;
+          const px = 6 + Math.cos(a) * 6.5;
+          const py = Math.sin(a) * 6.5;
+          if (i === 0) targetCtx.moveTo(px, py);
+          else targetCtx.lineTo(px, py);
+        }
+        targetCtx.closePath();
+        targetCtx.fill();
+        targetCtx.stroke();
+
+        if (isAde) {
+          // 腺苷特有的核糖五碳環尾端 (活化受體的關鍵鑰匙齒)
+          targetCtx.fillStyle = '#38bdf8';
+          targetCtx.beginPath();
+          targetCtx.arc(0, 12, 5, 0, Math.PI * 2);
+          targetCtx.fill();
+          targetCtx.stroke();
+        } else {
+          // 咖啡因的三個甲基團 (佔位但無法轉動受體開關)
+          targetCtx.fillStyle = '#fef3c7';
+          [[-12, -6], [-12, 6], [12, -5]].forEach(([mx, my]) => {
+            targetCtx.beginPath();
+            targetCtx.arc(mx, my, 2.5, 0, Math.PI * 2);
+            targetCtx.fill();
+          });
+        }
+
+        targetCtx.restore();
+      }
+
+      // 繪製弧形磷脂質雙分子層細胞膜
+      function drawCurvedLipidBilayer(startX, endX, getYFn) {
+        const spacing = 14;
+        for (let x = startX; x <= endX; x += spacing) {
+          const y = getYFn(x);
+          const wave = Math.sin(x * 0.025 + state.phospholipidPhase) * 1.4;
+
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(x, y - 5 + wave);
+          ctx.lineTo(x, y + 5 + wave);
+          ctx.stroke();
+
+          ctx.fillStyle = 'rgba(148, 163, 184, 0.45)';
+          ctx.beginPath();
+          ctx.arc(x, y - 6 + wave, 3.2, 0, Math.PI * 2);
+          ctx.arc(x, y + 6 + wave, 3.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // 繪製立體圓弧管狀微血管與血腦屏障 (BBB)
+      function drawTubularBloodVessel(sideIdx) {
+        const halfRadius = 28;
+        const step = 20;
+
+        ctx.save();
+        // 1. 血管管腔深紅色血液底層
+        ctx.beginPath();
+        for (let y = -20; y <= WORLD.height + 20; y += step) {
+          const cx = getVesselCenterX(sideIdx, y);
+          if (y === -20) ctx.moveTo(cx - halfRadius, y);
+          else ctx.lineTo(cx - halfRadius, y);
+        }
+        for (let y = WORLD.height + 20; y >= -20; y -= step) {
+          const cx = getVesselCenterX(sideIdx, y);
+          ctx.lineTo(cx + halfRadius, y);
+        }
+        ctx.closePath();
+
+        const lumenGrad = ctx.createLinearGradient(
+          getVesselCenterX(sideIdx, 380) - halfRadius,
+          0,
+          getVesselCenterX(sideIdx, 380) + halfRadius,
+          0
+        );
+        lumenGrad.addColorStop(0, 'rgba(127, 29, 29, 0.72)');
+        lumenGrad.addColorStop(0.5, 'rgba(185, 28, 28, 0.45)');
+        lumenGrad.addColorStop(1, 'rgba(127, 29, 29, 0.72)');
+        ctx.fillStyle = lumenGrad;
+        ctx.fill();
+
+        // 2. 管狀立體高光反光帶
+        ctx.strokeStyle = 'rgba(254, 202, 202, 0.22)';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        for (let y = -20; y <= WORLD.height + 20; y += step) {
+          const cx = getVesselCenterX(sideIdx, y) - 8;
+          if (y === -20) ctx.moveTo(cx, y);
+          else ctx.lineTo(cx, y);
+        }
+        ctx.stroke();
+
+        // 3. 左右兩側內皮細胞血管壁 (BBB 屏障邊界)
+        [-halfRadius, halfRadius].forEach(offset => {
+          ctx.strokeStyle = 'rgba(251, 113, 133, 0.78)';
+          ctx.lineWidth = 3.2;
+          ctx.beginPath();
+          for (let y = -20; y <= WORLD.height + 20; y += step) {
+            const cx = getVesselCenterX(sideIdx, y) + offset;
+            if (y === -20) ctx.moveTo(cx, y);
+            else ctx.lineTo(cx, y);
+          }
+          ctx.stroke();
+        });
+
+        // 4. 內皮細胞核與緊密連接點 (Tight Junctions) 沿管壁分佈
+        for (let y = 55; y < WORLD.height - 40; y += 115) {
+          const cx = getVesselCenterX(sideIdx, y);
+          const wallX = sideIdx === 0 ? cx + halfRadius : cx - halfRadius;
+          // 扁平內皮細胞核
+          ctx.fillStyle = 'rgba(253, 164, 175, 0.75)';
+          ctx.beginPath();
+          ctx.ellipse(wallX, y, 3.2, 11, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          // 血腦屏障緊密連接標記 (Tight Junctions)
+          ctx.strokeStyle = 'rgba(251, 191, 36, 0.8)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(wallX - 4, y + 48);
+          ctx.lineTo(wallX + 4, y + 48);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      // 繪製完整神經元突觸解剖輪廓 (上下皆為開放式管狀延伸，無封閉橫線)
+      function drawCompleteSynapseAnatomy() {
+        const cx = WORLD.centerX;
+
+        // --- 1. 突觸前神經元軸突末梢 (Axon Terminal Bouton - 頂部開放式延伸) ---
+        ctx.save();
+        const preGrad = ctx.createLinearGradient(0, 0, 0, WORLD.upperMembraneY);
+        preGrad.addColorStop(0, 'rgba(30, 58, 138, 0.45)');
+        preGrad.addColorStop(0.6, 'rgba(14, 116, 144, 0.25)');
+        preGrad.addColorStop(1, 'rgba(56, 189, 248, 0.14)');
+
+        // 填充背景區域
+        ctx.fillStyle = preGrad;
+        ctx.beginPath();
+        ctx.moveTo(cx - 170, -20);
+        ctx.lineTo(cx - 170, 42);
+        ctx.bezierCurveTo(cx - 170, 95, 220, 115, 220, WORLD.upperMembraneY - 12);
+        ctx.quadraticCurveTo(cx, WORLD.upperMembraneY + 4, WORLD.width - 220, WORLD.upperMembraneY - 12);
+        ctx.bezierCurveTo(WORLD.width - 220, 115, cx + 170, 95, cx + 170, 42);
+        ctx.lineTo(cx + 170, -20);
+        ctx.fill();
+
+        // 僅描繪連續開放的細胞膜外輪廓線 (頂部開口不封閉)
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.52)';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(cx - 170, -20);
+        ctx.lineTo(cx - 170, 42);
+        ctx.bezierCurveTo(cx - 170, 95, 220, 115, 220, WORLD.upperMembraneY - 12);
+        ctx.quadraticCurveTo(cx, WORLD.upperMembraneY + 4, WORLD.width - 220, WORLD.upperMembraneY - 12);
+        ctx.bezierCurveTo(WORLD.width - 220, 115, cx + 170, 95, cx + 170, 42);
+        ctx.lineTo(cx + 170, -20);
+        ctx.stroke();
+
+        // 突觸前神經元解剖標籤
+        ctx.fillStyle = '#7dd3fc';
+        ctx.font = 'bold 14px "Noto Sans TC", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('突觸前神經元（軸突末梢 Axon Terminal）', cx, 34);
+        ctx.fillStyle = 'rgba(186, 230, 253, 0.8)';
+        ctx.font = '12px "Noto Sans TC", sans-serif';
+        ctx.fillText('細胞內消耗 ATP 產生腺苷 ➔ 經 ENT 轉運蛋白釋出至突觸間隙', cx, 56);
+        ctx.restore();
+
+        // --- 2. 突觸間隙中央微弱解剖標示 ---
+        ctx.save();
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.28)';
+        ctx.font = 'bold 13px "Noto Sans TC", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('— 突 觸 間 隙 （Synaptic Cleft） —', cx, (WORLD.upperMembraneY + WORLD.lowerMembraneY) / 2 + 4);
+        ctx.restore();
+
+        // --- 3. 突觸後神經元樹突棘 (Postsynaptic Dendritic Spine - 底部開放式延伸) ---
+        ctx.save();
+        const postGrad = ctx.createLinearGradient(0, WORLD.lowerMembraneY, 0, WORLD.height);
+        postGrad.addColorStop(0, 'rgba(79, 70, 229, 0.22)');
+        postGrad.addColorStop(0.55, 'rgba(30, 41, 59, 0.35)');
+        postGrad.addColorStop(1, 'rgba(16, 185, 129, 0.16)');
+
+        // 填充背景區域
+        ctx.fillStyle = postGrad;
+        ctx.beginPath();
+        ctx.moveTo(cx - 210, WORLD.height + 20);
+        ctx.lineTo(cx - 210, WORLD.height - 95);
+        ctx.bezierCurveTo(cx - 210, WORLD.height - 155, 200, WORLD.lowerMembraneY + 65, 200, WORLD.lowerMembraneY);
+        ctx.quadraticCurveTo(cx, WORLD.lowerMembraneY + 36, WORLD.width - 200, WORLD.lowerMembraneY);
+        ctx.bezierCurveTo(WORLD.width - 200, WORLD.lowerMembraneY + 65, cx + 210, WORLD.height - 155, cx + 210, WORLD.height - 95);
+        ctx.lineTo(cx + 210, WORLD.height + 20);
+        ctx.fill();
+
+        // 僅描繪連續開放的細胞膜外輪廓線 (底部開口不封閉)
+        ctx.strokeStyle = 'rgba(129, 140, 248, 0.52)';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(cx - 210, WORLD.height + 20);
+        ctx.lineTo(cx - 210, WORLD.height - 95);
+        ctx.bezierCurveTo(cx - 210, WORLD.height - 155, 200, WORLD.lowerMembraneY + 65, 200, WORLD.lowerMembraneY);
+        ctx.quadraticCurveTo(cx, WORLD.lowerMembraneY + 36, WORLD.width - 200, WORLD.lowerMembraneY);
+        ctx.bezierCurveTo(WORLD.width - 200, WORLD.lowerMembraneY + 65, cx + 210, WORLD.height - 155, cx + 210, WORLD.height - 95);
+        ctx.lineTo(cx + 210, WORLD.height + 20);
+        ctx.stroke();
+
+        // 突觸後神經元解剖標籤
+        ctx.fillStyle = '#a5b4fc';
+        ctx.font = 'bold 14px "Noto Sans TC", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('突觸後神經元（樹突棘 Dendritic Spine — 多巴胺 / 覺醒訊號傳導區）', cx, WORLD.lowerMembraneY + 72);
+        ctx.restore();
+      }
+
+      // 繪製跨膜腺苷受體 (A1 / A2A)
+      function drawReceptor(rec) {
+        const { x, y, type, boundMolecule, scaleAnim } = rec;
+        const isAde = boundMolecule && boundMolecule.type === 'adenosine';
+        const isCaf = boundMolecule && boundMolecule.type === 'caffeine';
+
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(scaleAnim, scaleAnim);
+
+        if (isAde) {
+          ctx.fillStyle = 'rgba(14, 165, 233, 0.22)';
+          ctx.beginPath();
+          ctx.arc(0, 0, 34, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (isCaf) {
+          ctx.fillStyle = 'rgba(245, 158, 11, 0.22)';
+          ctx.beginPath();
+          ctx.arc(0, 0, 34, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.fillStyle = isAde ? '#0284c7' : isCaf ? '#d97706' : '#312e81';
+        ctx.strokeStyle = isAde ? '#38bdf8' : isCaf ? '#fbbf24' : '#818cf8';
+        ctx.lineWidth = 2.4;
+
+        ctx.beginPath();
+        ctx.moveTo(-20, -18);
+        ctx.lineTo(-10, -18);
+        ctx.lineTo(-10, -4);
+        ctx.arc(0, -4, 10, Math.PI, 0, true);
+        ctx.lineTo(10, -18);
+        ctx.lineTo(20, -18);
+        ctx.lineTo(18, 22);
+        ctx.lineTo(-18, 22);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = 'bold 10px "JetBrains Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(type, 0, 14);
+
+        if (isAde) {
+          ctx.fillStyle = '#7dd3fc';
+          ctx.font = 'bold 10px "Noto Sans TC", sans-serif';
+          ctx.fillText('抑制訊號 ON', 0, 36);
+        } else if (isCaf) {
+          ctx.fillStyle = '#fde68a';
+          ctx.font = 'bold 10px "Noto Sans TC", sans-serif';
+          ctx.fillText('佔位阻斷', 0, 36);
+        }
+
+        ctx.restore();
+      }
+
+      // 物理與生化動力學步進更新
+      function updateSimulation(dt) {
+        const effectiveDt = dt * state.speed;
+
+        if (camera.isAnimatingView) {
+          camera.x += (camera.targetX - camera.x) * 0.14;
+          camera.y += (camera.targetY - camera.y) * 0.14;
+          camera.scale += (camera.targetScale - camera.scale) * 0.14;
+          if (
+            Math.abs(camera.targetScale - camera.scale) < 0.001 &&
+            Math.abs(camera.targetX - camera.x) < 0.5
+          ) {
+            camera.x = camera.targetX;
+            camera.y = camera.targetY;
+            camera.scale = camera.targetScale;
+            camera.isAnimatingView = false;
+          }
+        }
+
+        if (state.speed === 0) return;
+
+        state.phospholipidPhase += 0.03 * effectiveDt;
+        if (state.crashCooldown > 0) state.crashCooldown -= effectiveDt;
+        if (state.napTimer > 0) state.napTimer = Math.max(0, state.napTimer - effectiveDt);
+        state.timeMinutes = (state.timeMinutes + 0.2 * effectiveDt) % (24 * 60);
+
+        receptors.forEach(r => {
+          if (r.scaleAnim < 1) {
+            r.scaleAnim = Math.min(1, r.scaleAnim + 0.04 * effectiveDt);
+          }
+        });
+
+        entTransporters.forEach(ent => {
+          if (ent.pulse > 0) ent.pulse = Math.max(0, ent.pulse - 0.03 * effectiveDt);
+        });
+
+        // 0. 更新管狀微血管內紅血球沿血管弧度循環流動
+        bloodCells.forEach(rbc => {
+          rbc.y += rbc.vy * effectiveDt;
+          rbc.angle += rbc.vAngle * effectiveDt;
+          if (rbc.side === 0 && rbc.y > WORLD.height + 10) rbc.y = -10;
+          if (rbc.side === 1 && rbc.y < -10) rbc.y = WORLD.height + 10;
+        });
+
+        // 1. 突觸前神經元細胞內：ATP 能量水解 → 產生細胞內腺苷 → 經由 ENT 轉運蛋白排出到突觸間隙
+        const adeCount = molecules.filter(m => m.type === 'adenosine').length;
+        atpParticles.forEach(p => {
+          p.x += p.vx * effectiveDt;
+          p.y += p.vy * effectiveDt;
+
+          // 嚴格將 ATP 限制在突觸前神經元細胞膜內部邊界
+          const minY = 72;
+          const maxY = getPresynapticMembraneY(Math.max(240, Math.min(WORLD.width - 240, p.x))) - 22;
+          if (p.y < minY) { p.y = minY; p.vy = Math.abs(p.vy); }
+          if (p.y > maxY) { p.y = maxY; p.vy = -Math.abs(p.vy); }
+
+          const bounds = getPresynapticBoundsX(p.y);
+          if (p.x < bounds.minX) { p.x = bounds.minX; p.vx = Math.abs(p.vx); }
+          if (p.x > bounds.maxX) { p.x = bounds.maxX; p.vx = -Math.abs(p.vx); }
+
+          if (!state.isSleeping && state.napTimer <= 0 && adeCount + intracellularAdenosines.length < 44) {
+            p.hydrolysisProgress += (0.38 + Math.random() * 0.25) * effectiveDt;
+            if (p.hydrolysisProgress >= 100) {
+              p.hydrolysisProgress = 0;
+              let nearestEnt = entTransporters[0];
+              let minDist = Infinity;
+              entTransporters.forEach(ent => {
+                const d = Math.abs(ent.x - p.x);
+                if (d < minDist) {
+                  minDist = d;
+                  nearestEnt = ent;
+                }
+              });
+              intracellularAdenosines.push({
+                x: p.x,
+                y: p.y,
+                targetEnt: nearestEnt
+              });
+            }
+          }
+        });
+
+        // 更新細胞內腺苷向 ENT 轉運蛋白移動並跨膜釋出至突觸間隙
+        for (let i = intracellularAdenosines.length - 1; i >= 0; i--) {
+          const ia = intracellularAdenosines[i];
+          const tx = ia.targetEnt.x;
+          const ty = ia.targetEnt.y - 6;
+          const dx = tx - ia.x;
+          const dy = ty - ia.y;
+          const dist = Math.hypot(dx, dy);
+
+          if (dist < 10) {
+            ia.targetEnt.pulse = 1.0;
+            spawnMolecule('adenosine', tx, ia.targetEnt.y + 14, (Math.random() - 0.5) * 1.4, 1.0 + Math.random() * 0.8, false);
+            ripples.push({
+              x: tx,
+              y: ia.targetEnt.y + 6,
+              r: 4,
+              maxR: 32,
+              color: 'rgba(56, 189, 248, 0.55)',
+              alpha: 0.75
+            });
+            intracellularAdenosines.splice(i, 1);
+          } else {
+            ia.x += (dx / dist) * 1.8 * effectiveDt;
+            ia.y += (dy / dist) * 1.8 * effectiveDt;
+          }
+        }
+
+        // 2. 更新所有分子運動與受體競爭結合
+        for (let i = molecules.length - 1; i >= 0; i--) {
+          const m = molecules[i];
+          if (m.cooldown > 0) m.cooldown -= effectiveDt;
+
+          if (m.type === 'caffeine') {
+            m.life -= m.decayRate * effectiveDt;
+          } else if (state.isSleeping) {
+            m.life -= 0.0022 * effectiveDt;
+          } else {
+            m.life -= m.decayRate * effectiveDt;
+          }
+
+          if (m.life <= 0) {
+            if (m.boundReceptor) {
+              m.boundReceptor.boundMolecule = null;
+            }
+            molecules.splice(i, 1);
+            continue;
+          }
+
+          if (m.boundReceptor) {
+            const rec = m.boundReceptor;
+            m.x += (rec.x - m.x) * 0.3;
+            m.y += (rec.y - 14 - m.y) * 0.3;
+            // 結合後立即鎖定構象對齊受體口袋 (不再產生視覺翻轉)
+            m.angle = 0;
+
+            const dissociateProb = m.type === 'adenosine' ? 0.0012 : 0.0007;
+            if (Math.random() < dissociateProb * effectiveDt) {
+              rec.boundMolecule = null;
+              m.boundReceptor = null;
+              m.cooldown = 45;
+              m.vy = -1.6 - Math.random();
+              m.vx = (Math.random() - 0.5) * 2;
+            }
+            continue;
+          }
+
+          // 若咖啡因剛在管狀微血管內，向突觸間隙方向穿越血腦屏障 (BBB)
+          if (m.inVessel) {
+            m.x += m.vx * effectiveDt;
+            m.y += m.vy * effectiveDt;
+            m.angle += m.vAngle * effectiveDt;
+            const leftWall = getVesselCenterX(0, m.y) + 34;
+            const rightWall = getVesselCenterX(1, m.y) - 34;
+            if (m.x > leftWall && m.x < rightWall) {
+              m.inVessel = false;
+              ripples.push({
+                x: m.x,
+                y: m.y,
+                r: 3,
+                maxR: 22,
+                color: 'rgba(251, 191, 36, 0.5)',
+                alpha: 0.7
+              });
+            }
+            continue;
+          }
+
+          // 自由布朗運動與速度阻尼
+          m.vx += (Math.random() - 0.5) * 0.18 * effectiveDt;
+          m.vy += (Math.random() - 0.5) * 0.18 * effectiveDt;
+          const maxSpd = 2.8;
+          const spd = Math.hypot(m.vx, m.vy);
+          if (spd > maxSpd) {
+            m.vx = (m.vx / spd) * maxSpd;
+            m.vy = (m.vy / spd) * maxSpd;
+          }
+
+          m.x += m.vx * effectiveDt;
+          m.y += m.vy * effectiveDt;
+          m.angle += m.vAngle * effectiveDt;
+
+          // 突觸間隙邊界反彈 (避開左右微血管與上下突觸膜)
+          const minX = getVesselCenterX(0, m.y) + 42;
+          const maxX = getVesselCenterX(1, m.y) - 42;
+          const minY = getPresynapticMembraneY(Math.max(230, Math.min(WORLD.width - 230, m.x))) + 18;
+          const maxY = getPostsynapticMembraneY(Math.max(210, Math.min(WORLD.width - 210, m.x))) - 20;
+
+          if (m.x < minX) { m.x = minX; m.vx = Math.abs(m.vx); }
+          if (m.x > maxX) { m.x = maxX; m.vx = -Math.abs(m.vx); }
+          if (m.y < minY) { m.y = minY; m.vy = Math.abs(m.vy); }
+          if (m.y > maxY) { m.y = maxY; m.vy = -Math.abs(m.vy); }
+
+          // 檢測與受體結合或競爭性置換
+          if (m.cooldown <= 0 && m.y > WORLD.lowerMembraneY - 45) {
+            for (let j = 0; j < receptors.length; j++) {
+              const rec = receptors[j];
+              const dist = Math.hypot(m.x - rec.x, m.y - (rec.y - 14));
+              if (dist < 26) {
+                if (!rec.boundMolecule) {
+                  rec.boundMolecule = m;
+                  m.boundReceptor = rec;
+                  ripples.push({
+                    x: rec.x,
+                    y: rec.y - 10,
+                    r: 5,
+                    maxR: 42,
+                    color: m.type === 'adenosine' ? 'rgba(56, 189, 248, 0.55)' : 'rgba(251, 191, 36, 0.55)',
+                    alpha: 0.85
+                  });
+                  break;
+                } else if (m.type === 'caffeine' && rec.boundMolecule.type === 'adenosine' && Math.random() < 0.14) {
+                  const displaced = rec.boundMolecule;
+                  displaced.boundReceptor = null;
+                  displaced.cooldown = 50;
+                  displaced.vy = -2.4 - Math.random();
+                  displaced.vx = (Math.random() - 0.5) * 3.2;
+
+                  rec.boundMolecule = m;
+                  m.boundReceptor = rec;
+                  ripples.push({
+                    x: rec.x,
+                    y: rec.y - 10,
+                    r: 6,
+                    maxR: 50,
+                    color: 'rgba(251, 191, 36, 0.7)',
+                    alpha: 0.95
+                  });
+                  break;
+                }
+              }
+            }
+          }
+        }
+
+        // 更新波紋動畫
+        for (let i = ripples.length - 1; i >= 0; i--) {
+          const rp = ripples[i];
+          rp.r += 1.4 * effectiveDt;
+          rp.alpha -= 0.022 * effectiveDt;
+          if (rp.alpha <= 0 || rp.r >= rp.maxR) {
+            ripples.splice(i, 1);
+          }
+        }
+
+        // 計算受體佔用統計與警覺度
+        const totalRec = receptors.length;
+        const adeBound = receptors.filter(r => r.boundMolecule && r.boundMolecule.type === 'adenosine').length;
+        const cafBound = receptors.filter(r => r.boundMolecule && r.boundMolecule.type === 'caffeine').length;
+        const freeRec = totalRec - adeBound - cafBound;
+
+        const adeMolecules = molecules.filter(m => m.type === 'adenosine').length;
+        const cafMolecules = molecules.filter(m => m.type === 'caffeine').length;
+
+        const inhibitionRatio = adeBound / totalRec;
+        const targetAlertness = state.isSleeping
+          ? 20
+          : Math.max(12, Math.min(98, Math.round(92 - inhibitionRatio * 75 + (cafBound / totalRec) * 8)));
+        state.alertness += (targetAlertness - state.alertness) * 0.08;
+
+        if (state.hadHighCaffeine && cafMolecules <= 1 && adeBound >= Math.ceil(totalRec * 0.55) && !state.isSleeping) {
+          state.hadHighCaffeine = false;
+          triggerCaffeineCrashAlert();
+          ui.liveNarrative.textContent = '⚡ 咖啡因已代謝完畢，累積的腺苷大舉佔領受體，產生「咖啡因崩潰」強烈睡意！';
+        }
+
+        const flowMultiplier = Math.max(0.15, state.alertness / 75);
+        dopamineSignals.forEach(d => {
+          d.x += d.speed * flowMultiplier * effectiveDt;
+          if (d.x > WORLD.width - 300) {
+            d.x = 300;
+          }
+        });
+
+        updateDashboardUI(adeMolecules, cafMolecules, adeBound, cafBound, freeRec, totalRec);
+      }
+
+      // 更新頂部與底部 HUD 數據面板
+      function updateDashboardUI(adeCount, cafCount, adeBound, cafBound, freeRec, totalRec) {
+        const hrs = Math.floor(state.timeMinutes / 60);
+        const mins = Math.floor(state.timeMinutes % 60);
+        ui.simClock.textContent = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+
+        if (state.isSleeping) {
+          ui.phaseIcon.textContent = '🌙';
+          ui.simPhaseLabel.textContent = '深層睡眠清除';
+          ui.simPhaseLabel.className = 'text-[11px] font-semibold px-1.5 py-0.5 rounded bg-indigo-500/25 text-indigo-300';
+        } else if (hrs >= 6 && hrs < 18) {
+          ui.phaseIcon.textContent = '☀️';
+          ui.simPhaseLabel.textContent = '日間清醒活動';
+          ui.simPhaseLabel.className = 'text-[11px] font-semibold px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300';
+        } else {
+          ui.phaseIcon.textContent = '🌆';
+          ui.simPhaseLabel.textContent = '夜間睡眠壓力高';
+          ui.simPhaseLabel.className = 'text-[11px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300';
+        }
+
+        const adePct = Math.min(100, Math.round((adeCount / 40) * 100));
+        const cafPct = Math.min(100, Math.round((cafCount / 22) * 100));
+
+        ui.valAdenosine.textContent = `${adePct}%`;
+        ui.barAdenosine.style.width = `${adePct}%`;
+
+        ui.valCaffeine.textContent = `${cafPct}%`;
+        ui.barCaffeine.style.width = `${cafPct}%`;
+
+        const pAde = Math.round((adeBound / totalRec) * 100);
+        const pCaf = Math.round((cafBound / totalRec) * 100);
+        const pFree = Math.max(0, 100 - pAde - pCaf);
+
+        ui.valReceptorSummary.textContent = `${adeBound + cafBound}/${totalRec} 佔用`;
+        ui.barRecAdenosine.style.width = `${pAde}%`;
+        ui.barRecCaffeine.style.width = `${pCaf}%`;
+        ui.pctRecAde.textContent = `${pAde}%`;
+        ui.pctRecCaf.textContent = `${pCaf}%`;
+        ui.pctRecFree.textContent = `${pFree}%`;
+
+        const alertVal = Math.round(state.alertness);
+        ui.valAlertness.textContent = `${alertVal}%`;
+        ui.barAlertness.style.width = `${alertVal}%`;
+
+        if (alertVal >= 70) {
+          ui.alertStateLabel.textContent = '清醒專注';
+          ui.alertStateLabel.className = 'text-emerald-300';
+        } else if (alertVal >= 45) {
+          ui.alertStateLabel.textContent = '輕度疲倦';
+          ui.alertStateLabel.className = 'text-amber-300';
+        } else {
+          ui.alertStateLabel.textContent = '強烈睡意';
+          ui.alertStateLabel.className = 'text-rose-400';
+        }
+      }
+
+      // 主畫布渲染循環
+      function renderScene() {
+        const dpr = window.devicePixelRatio || 1;
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        if (canvas.width !== Math.floor(w * dpr) || canvas.height !== Math.floor(h * dpr)) {
+          canvas.width = Math.floor(w * dpr);
+          canvas.height = Math.floor(h * dpr);
+        }
+
+        ctx.save();
+        ctx.scale(dpr, dpr);
+
+        const bgGrad = ctx.createRadialGradient(w / 2, h / 2, 60, w / 2, h / 2, Math.max(w, h) * 0.75);
+        bgGrad.addColorStop(0, '#0d152a');
+        bgGrad.addColorStop(1, '#050811');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, w, h);
+
+        ctx.save();
+        ctx.translate(camera.x, camera.y);
+        ctx.scale(camera.scale, camera.scale);
+
+        // 1. 繪製完整突觸解剖輪廓 (突觸前軸突末梢 + 突觸間隙 + 突觸後樹突棘)
+        drawCompleteSynapseAnatomy();
+
+        // 2. 繪製突觸前細胞內的 ATP 能量分子與正在前往 ENT 通道的腺苷
+        atpParticles.forEach(p => {
+          const ratio = p.hydrolysisProgress / 100;
+          ctx.fillStyle = `rgba(56, 189, 248, ${0.14 + ratio * 0.22})`;
+          ctx.strokeStyle = ratio > 0.75 ? '#38bdf8' : 'rgba(56, 189, 248, 0.45)';
+          ctx.beginPath();
+          ctx.roundRect(p.x - 26, p.y - 11, 52, 22, 8);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = '#bae6fd';
+          ctx.font = 'bold 10px "JetBrains Mono", monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(ratio > 0.75 ? 'ATP→AMP' : 'ATP⚡', p.x, p.y + 3);
+        });
+
+        intracellularAdenosines.forEach(ia => {
+          drawMoleculeShape(ctx, 'adenosine', ia.x, ia.y, 0, 0.95, 0.9);
+        });
+
+        // 3. 繪製左右兩側立體管狀微血管與流動紅血球 (RBC)
+        drawTubularBloodVessel(0);
+        drawTubularBloodVessel(1);
+
+        bloodCells.forEach(rbc => {
+          const cx = getVesselCenterX(rbc.side, rbc.y) + rbc.offsetX;
+          ctx.save();
+          ctx.translate(cx, rbc.y);
+          ctx.rotate(rbc.angle);
+          ctx.fillStyle = 'rgba(225, 29, 72, 0.82)';
+          ctx.strokeStyle = 'rgba(253, 164, 175, 0.9)';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.ellipse(0, 0, 10, 6, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = 'rgba(136, 19, 55, 0.7)';
+          ctx.beginPath();
+          ctx.ellipse(0, 0, 5, 2.6, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        });
+
+        // 標註管狀微血管與血腦屏障 (BBB)
+        [0, 1].forEach(sideIdx => {
+          const midY = (WORLD.upperMembraneY + WORLD.lowerMembraneY) / 2;
+          const cx = getVesselCenterX(sideIdx, midY);
+          ctx.save();
+          ctx.translate(cx, midY);
+          ctx.rotate(sideIdx === 0 ? -Math.PI / 2 : Math.PI / 2);
+          ctx.fillStyle = 'rgba(254, 205, 211, 0.95)';
+          ctx.font = 'bold 11px "Noto Sans TC", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('管狀微血管 ➔ 血腦屏障 (BBB)', 0, -39);
+          ctx.restore();
+        });
+
+        // 4. 繪製突觸後多巴胺神經訊號流
+        dopamineSignals.forEach(d => {
+          const alpha = Math.max(0.2, state.alertness / 100);
+          ctx.fillStyle = `rgba(52, 211, 153, ${alpha})`;
+          ctx.beginPath();
+          ctx.arc(d.x, d.y, 4.2, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.strokeStyle = `rgba(52, 211, 153, ${alpha * 0.45})`;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(d.x - 16, d.y);
+          ctx.lineTo(d.x, d.y);
+          ctx.stroke();
+        });
+
+        // 5. 繪製弧形磷脂質雙分子層細胞膜
+        drawCurvedLipidBilayer(230, WORLD.width - 230, getPresynapticMembraneY);
+        drawCurvedLipidBilayer(210, WORLD.width - 210, getPostsynapticMembraneY);
+
+        // 6. 繪製突觸前細胞膜上的 ENT 核苷轉運蛋白通道
+        entTransporters.forEach(ent => {
+          ctx.save();
+          ctx.translate(ent.x, ent.y);
+          const glow = ent.pulse;
+          ctx.fillStyle = glow > 0.1 ? `rgba(56, 189, 248, ${0.45 + glow * 0.5})` : '#1e3a8a';
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          ctx.roundRect(-14, -12, 8, 24, 3);
+          ctx.fill();
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.roundRect(6, -12, 8, 24, 3);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = '#bae6fd';
+          ctx.font = 'bold 9px "JetBrains Mono", monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('ENT通道', 0, -16);
+          ctx.restore();
+        });
+
+        // 7. 繪製擴散波紋
+        ripples.forEach(rp => {
+          ctx.save();
+          ctx.strokeStyle = rp.color;
+          ctx.globalAlpha = Math.max(0, rp.alpha);
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        });
+
+        // 8. 繪製 A1 / A2A 腺苷受體
+        receptors.forEach(rec => drawReceptor(rec));
+
+        // 9. 繪製所有腺苷與咖啡因分子
+        molecules.forEach(m => {
+          const alpha = Math.min(1, Math.max(0.25, m.life * 2));
+          drawMoleculeShape(ctx, m.type, m.x, m.y, m.angle, 1.15, alpha);
+        });
+
+        ctx.restore();
+        ctx.restore();
+      }
+
+      // 主動畫迴圈
+      let lastTimestamp = 0;
+      function mainLoop(timestamp) {
+        if (!lastTimestamp) lastTimestamp = timestamp;
+        const dt = Math.min(2.5, (timestamp - lastTimestamp) / 16.67);
+        lastTimestamp = timestamp;
+
+        updateSimulation(dt);
+        renderScene();
+        requestAnimationFrame(mainLoop);
+      }
+
+      // 互動事件綁定：控制按鈕
+      ui.drinkCoffeeBtn.addEventListener('click', drinkCoffee);
+      ui.powerNapBtn.addEventListener('click', triggerPowerNap);
+      ui.sleepBtn.addEventListener('click', () => toggleSleepMode());
+
+      ui.toleranceToggle.addEventListener('change', (e) => {
+        state.isTolerant = e.target.checked;
+        rebuildReceptors(state.isTolerant ? 7 : 4);
+        ui.liveNarrative.textContent = state.isTolerant
+          ? '🧬 耐受性模式開啟：長期攝取咖啡因使細胞膜代償性增生至 7 個腺苷受體，單杯咖啡已難以完全阻斷！'
+          : '🔄 恢復正常受體密度：細胞膜恢復為基準 4 個腺苷受體。';
+      });
+
+      ui.speedBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.speed = Number(btn.dataset.speed);
+          ui.speedBtns.forEach(b => {
+            if (b === btn) {
+              b.className = 'speed-btn px-2 py-1 rounded-lg text-xs font-bold bg-indigo-600 text-white shadow transition';
+            } else {
+              b.className = 'speed-btn px-2 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition';
+            }
+          });
+        });
+      });
+
+      // 分子結構視窗開關
+      ui.toggleStructureBtn.addEventListener('click', () => {
+        ui.structureCard.classList.toggle('hidden');
+      });
+      ui.closeStructureBtn.addEventListener('click', () => {
+        ui.structureCard.classList.add('hidden');
+      });
+
+      ui.resetViewBtn.addEventListener('click', () => {
+        fitWorldToScreen();
+      });
+
+      // 畫布平移與滾輪 / 雙指縮放支援
+      canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        camera.isAnimatingView = false;
+        const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+        const newScale = Math.max(0.45, Math.min(2.4, camera.scale * zoomFactor));
+        const mouseX = e.clientX;
+        const mouseY = e.clientY;
+        camera.x = mouseX - (mouseX - camera.x) * (newScale / camera.scale);
+        camera.y = mouseY - (mouseY - camera.y) * (newScale / camera.scale);
+        camera.scale = newScale;
+      }, { passive: false });
+
+      canvas.addEventListener('mousedown', (e) => {
+        camera.isDragging = true;
+        camera.isAnimatingView = false;
+        camera.lastX = e.clientX;
+        camera.lastY = e.clientY;
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!camera.isDragging) return;
+        camera.x += e.clientX - camera.lastX;
+        camera.y += e.clientY - camera.lastY;
+        camera.lastX = e.clientX;
+        camera.lastY = e.clientY;
+      });
+
+      window.addEventListener('mouseup', () => {
+        camera.isDragging = false;
+      });
+
+      canvas.addEventListener('touchstart', (e) => {
+        camera.isAnimatingView = false;
+        if (e.touches.length === 1) {
+          camera.isDragging = true;
+          camera.lastX = e.touches[0].clientX;
+          camera.lastY = e.touches[0].clientY;
+        } else if (e.touches.length === 2) {
+          camera.isDragging = false;
+          camera.pinchDist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+          );
+        }
+      }, { passive: true });
+
+      canvas.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 1 && camera.isDragging) {
+          camera.x += e.touches[0].clientX - camera.lastX;
+          camera.y += e.touches[0].clientY - camera.lastY;
+          camera.lastX = e.touches[0].clientX;
+          camera.lastY = e.touches[0].clientY;
+        } else if (e.touches.length === 2 && camera.pinchDist > 0) {
+          const newDist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+          );
+          const zoomFactor = newDist / camera.pinchDist;
+          const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+          const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+          const newScale = Math.max(0.45, Math.min(2.4, camera.scale * zoomFactor));
+          camera.x = midX - (midX - camera.x) * (newScale / camera.scale);
+          camera.y = midY - (midY - camera.y) * (newScale / camera.scale);
+          camera.scale = newScale;
+          camera.pinchDist = newDist;
+        }
+      }, { passive: true });
+
+      canvas.addEventListener('touchend', () => {
+        camera.isDragging = false;
+        camera.pinchDist = 0;
+      });
+
+      window.addEventListener('resize', fitWorldToScreen);
+
+      window.onload = function () {
+        fitWorldToScreen();
+        initSimulation();
+        requestAnimationFrame(mainLoop);
+      };
+    })();
+  </script>
+</body>
+</html>
