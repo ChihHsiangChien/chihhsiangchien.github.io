@@ -1,0 +1,1990 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>大腦冠狀切面多尺度探索模擬器 (1x–500x)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #0d1117; color: #e6edf3;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif;
+  }
+  canvas {
+    display: block; width: 100%; height: 100%;
+    touch-action: none; cursor: grab;
+  }
+  canvas:active { cursor: grabbing; }
+
+  /* 頂部標題與縮放倍率資訊 */
+  #hud-top {
+    position: fixed; top: 12px; left: 12px; right: 12px;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    pointer-events: none; z-index: 10; gap: 10px;
+  }
+  .panel-glass {
+    background: rgba(18, 24, 33, 0.84);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px; padding: 10px 14px;
+    pointer-events: auto;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  }
+  #title-box h1 { font-size: 16px; font-weight: 700; color: #f0f6fc; letter-spacing: 0.5px; }
+  #title-box p { font-size: 12px; color: #8b949e; margin-top: 2px; }
+
+  #zoom-badge {
+    display: flex; flex-direction: column; align-items: flex-end; min-width: 165px;
+  }
+  #zoom-val { font-size: 20px; font-weight: 800; color: #58a6ff; font-variant-numeric: tabular-nums; }
+  #scale-level { font-size: 12px; color: #7ee787; font-weight: 600; margin-top: 2px; }
+  #region-name { font-size: 12px; color: #d2a8ff; margin-top: 2px; }
+
+  /* 左側可收合控制與圖例面板 */
+  #controls-wrapper {
+    position: fixed; top: 82px; left: 12px; z-index: 10;
+    display: flex; flex-direction: column; gap: 8px; max-width: 285px;
+  }
+  #toggle-panel-btn {
+    align-self: flex-start;
+    background: rgba(24, 32, 44, 0.9); color: #e6edf3;
+    border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 10px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  }
+  #controls-panel {
+    display: flex; flex-direction: column; gap: 10px;
+    max-height: calc(100vh - 185px); overflow-y: auto;
+  }
+  #controls-panel.collapsed { display: none; }
+  .sec-title { font-size: 11px; font-weight: 700; color: #8b949e; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 5px; }
+
+  .btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .btn-opt {
+    background: rgba(255, 255, 255, 0.06); color: #c9d1d9;
+    border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 8px;
+    padding: 8px 8px; font-size: 12px; font-weight: 600; cursor: pointer;
+    transition: all 0.15s; text-align: center;
+  }
+  .btn-opt:hover { background: rgba(255, 255, 255, 0.12); }
+  .btn-opt.active {
+    background: rgba(56, 139, 253, 0.25); color: #58a6ff;
+    border-color: #58a6ff;
+  }
+
+  .sec-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+  .sec-header .sec-title { margin-bottom: 0; }
+  .clear-hl-btn {
+    background: rgba(255, 255, 255, 0.08); color: #8b949e;
+    border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 6px;
+    padding: 2px 7px; font-size: 11px; font-weight: 600; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .clear-hl-btn:hover { background: rgba(255, 255, 255, 0.16); color: #f0f6fc; }
+  .clear-hl-btn:disabled { opacity: 0.4; cursor: default; }
+
+  .legend-list { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+  .legend-item {
+    display: flex; align-items: center; gap: 8px; color: #c9d1d9;
+    padding: 4px 6px; border-radius: 7px; cursor: pointer;
+    border: 1px solid transparent; transition: all 0.15s;
+  }
+  .legend-item:hover { background: rgba(255, 255, 255, 0.07); }
+  .legend-item.selected {
+    background: rgba(56, 139, 253, 0.2);
+    border-color: rgba(88, 166, 255, 0.65);
+    color: #f0f6fc;
+  }
+  .legend-item input[type="checkbox"] {
+    accent-color: #58a6ff; width: 13px; height: 13px; cursor: pointer; flex-shrink: 0;
+  }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.25); }
+
+  /* 底部快速跳轉與滑桿列 */
+  #hud-bottom {
+    position: fixed; bottom: 42px; left: 12px; right: 12px;
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px;
+    pointer-events: none; z-index: 10;
+  }
+  .preset-bar {
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    padding: 8px 12px;
+  }
+  .preset-btn {
+    background: rgba(255, 255, 255, 0.08); color: #f0f6fc;
+    border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 8px;
+    padding: 7px 11px; font-size: 12px; font-weight: 600; cursor: pointer;
+    transition: 0.15s;
+  }
+  .preset-btn:hover { background: rgba(88, 166, 255, 0.25); border-color: #58a6ff; }
+  #zoom-slider { width: 130px; accent-color: #58a6ff; cursor: pointer; }
+
+  /* 固定高度底部狀態列 */
+  #status-bar {
+    position: fixed; bottom: 0; left: 0; right: 0; height: 30px;
+    background: #090c10; border-top: 1px solid rgba(255,255,255,0.1);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 14px; font-size: 12px; color: #8b949e; z-index: 15;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #status-msg { color: #c9d1d9; overflow: hidden; text-overflow: ellipsis; }
+
+  /* 點選細胞資訊浮動卡片 */
+  #cell-inspector {
+    position: fixed; z-index: 20; display: none;
+    width: 265px; pointer-events: auto;
+    background: rgba(16, 22, 31, 0.94);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(88, 166, 255, 0.55);
+    border-radius: 12px; padding: 10px 12px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.6);
+  }
+  #cell-inspector.visible { display: block; }
+  .ci-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+  .ci-title-wrap { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; color: #f0f6fc; }
+  .ci-close {
+    background: rgba(255,255,255,0.08); color: #8b949e; border: none;
+    border-radius: 6px; width: 22px; height: 22px; cursor: pointer;
+    font-size: 14px; line-height: 1; flex-shrink: 0;
+  }
+  .ci-close:hover { background: rgba(255,255,255,0.18); color: #fff; }
+  .ci-region { font-size: 11px; color: #d2a8ff; margin-bottom: 5px; font-weight: 600; }
+  .ci-desc { font-size: 12px; color: #c9d1d9; line-height: 1.45; }
+  .signal-legend {
+    display: flex; align-items: center; gap: 8px; padding: 4px 6px 0;
+    font-size: 11px; color: #72efdd; border-top: 1px solid rgba(255,255,255,0.08); margin-top: 4px;
+  }
+  .signal-dot-icon {
+    width: 14px; height: 4px; border-radius: 99px; flex-shrink: 0;
+    background: linear-gradient(90deg, rgba(0,245,212,0.15), #00f5d4 65%, #ffffff);
+    box-shadow: 0 0 6px #00f5d4;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="brainCanvas"></canvas>
+
+<div id="hud-top">
+  <div id="title-box" class="panel-glass">
+    <h1>大腦冠狀切面多尺度探索模擬器</h1>
+    <p>支援全區域任意平移與 1x–500x 連續縮放至神經元、膠細胞、髓鞘纖維與微血管網</p>
+  </div>
+  <div id="zoom-badge" class="panel-glass">
+    <div id="zoom-val">1.0x</div>
+    <div id="scale-level">巨觀解剖視野</div>
+    <div id="region-name">全腦冠狀切面</div>
+  </div>
+</div>
+
+<div id="controls-wrapper">
+  <button id="toggle-panel-btn">☰ 切面與顯微圖例</button>
+  <div id="controls-panel" class="panel-glass">
+    <div>
+      <div class="sec-title">冠狀切面層位 (Anteroposterior)</div>
+      <div class="btn-group">
+        <button class="btn-opt active" data-plane="anterior">前連合層面</button>
+        <button class="btn-opt" data-plane="hippocampus">視丘與海馬迴層面</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="sec-title">組織呈現模式 (Staining)</div>
+      <div class="btn-group">
+        <button class="btn-opt active" data-stain="natural">自然新鮮組織</button>
+        <button class="btn-opt" data-stain="nissl">Nissl + LFB 染色</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="sec-header">
+        <div class="sec-title">細胞高光強調 (複選 · ≥18x)</div>
+        <button id="clear-highlight-btn" class="clear-hl-btn" disabled>清除</button>
+      </div>
+      <div class="legend-list" id="highlight-list">
+        <label class="legend-item"><input type="checkbox" data-highlight="neuron"><span class="swatch" style="background:#e89b93;"></span><span>錐體 / 星狀神經元與樹突棘</span></label>
+        <label class="legend-item"><input type="checkbox" data-highlight="myelin"><span class="swatch" style="background:#fff6e5;"></span><span>有髓鞘神經纖維與蘭氏結</span></label>
+        <label class="legend-item"><input type="checkbox" data-highlight="astrocyte"><span class="swatch" style="background:#56d364;"></span><span>星形膠質細胞 (血管終足包覆)</span></label>
+        <label class="legend-item"><input type="checkbox" data-highlight="oligodendrocyte"><span class="swatch" style="background:#79c0ff;"></span><span>寡突膠質細胞 (包覆髓鞘節段)</span></label>
+        <label class="legend-item"><input type="checkbox" data-highlight="microglia"><span class="swatch" style="background:#d2a8ff;"></span><span>微膠細胞 (免疫分枝巡邏)</span></label>
+        <label class="legend-item"><input type="checkbox" data-highlight="ependyma"><span class="swatch" style="background:#f2cc60;"></span><span>室管膜細胞與纖毛 (腦室壁)</span></label>
+        <label class="legend-item"><input type="checkbox" data-highlight="capillary"><span class="swatch" style="background:#ff5555;"></span><span>微血管與流動紅血球</span></label>
+      </div>
+      <div class="signal-legend"><span class="signal-dot-icon"></span><span>青白色脈衝波：動作電位神經訊號</span></div>
+    </div>
+  </div>
+</div>
+
+<div id="hud-bottom">
+  <div class="panel-glass preset-bar">
+    <button class="preset-btn" data-preset="macro">1x 全腦切面</button>
+    <button class="preset-btn" data-preset="cortex">140x 皮質神經元</button>
+    <button class="preset-btn" data-preset="striatum">160x 基底核纖維橋</button>
+    <button class="preset-btn" data-preset="callosum">240x 胼胝體髓鞘與膠細胞</button>
+    <button class="preset-btn" data-preset="ventricle">220x 側腦室室管膜</button>
+    <button class="preset-btn" data-preset="hippo">180x 海馬迴錐體層</button>
+    <input type="range" id="zoom-slider" min="0" max="100" value="0" title="縮放倍率">
+  </div>
+</div>
+
+<div id="cell-inspector">
+  <div class="ci-header">
+    <div class="ci-title-wrap"><span id="ci-swatch" class="swatch"></span><span id="ci-title"></span></div>
+    <button id="ci-close" class="ci-close" title="關閉">×</button>
+  </div>
+  <div id="ci-region" class="ci-region"></div>
+  <div id="ci-desc" class="ci-desc"></div>
+</div>
+
+<div id="status-bar">
+  <span id="status-msg">提示：滾輪或雙指縮放可放大至任意位置；高倍率下點選細胞可查看種類與功能，並激發動作電位。</span>
+  <span>Coronal Section Multiscale LOD</span>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('brainCanvas');
+  const ctx = canvas.getContext('2d');
+
+  // UI 元素
+  const zoomValEl = document.getElementById('zoom-val');
+  const scaleLevelEl = document.getElementById('scale-level');
+  const regionNameEl = document.getElementById('region-name');
+  const statusMsgEl = document.getElementById('status-msg');
+  const zoomSlider = document.getElementById('zoom-slider');
+  const toggleBtn = document.getElementById('toggle-panel-btn');
+  const controlsPanel = document.getElementById('controls-panel');
+
+  toggleBtn.addEventListener('click', () => {
+    controlsPanel.classList.toggle('collapsed');
+  });
+
+  // 狀態變數
+  let width = 0, height = 0, dpr = 1;
+  let planeMode = 'anterior'; // 'anterior' | 'hippocampus'
+  let stainMode = 'natural';  // 'natural' | 'nissl'
+  const highlightedTypes = new Set();
+
+  function isHighlighted(type) {
+    return highlightedTypes.has(type);
+  }
+
+  function applyTypeAlpha(baseAlpha, type) {
+    if (highlightedTypes.size === 0) return baseAlpha;
+    return isHighlighted(type) ? baseAlpha : baseAlpha * 0.16;
+  }
+
+  function isGrayMatterRegion(reg) {
+    return reg === 1 || reg === 2 || reg === 6 || reg === 8;
+  }
+
+  // 攝影機（世界座標以大腦半寬約 360 單位為基準）
+  const cam = {
+    x: 0, y: 10, zoom: 1.0,
+    targetX: 0, targetY: 10, targetZoom: 1.0
+  };
+  const MIN_ZOOM = 0.85;
+  const MAX_ZOOM = 500;
+
+  // 點擊激發動作電位與點選細胞資訊
+  const activePulses = []; // { wx, wy, startTime }
+  let selectedCell = null; // { x, y, radius, typeKey, reg }
+
+  const cellInspectorEl = document.getElementById('cell-inspector');
+  const ciSwatchEl = document.getElementById('ci-swatch');
+  const ciTitleEl = document.getElementById('ci-title');
+  const ciRegionEl = document.getElementById('ci-region');
+  const ciDescEl = document.getElementById('ci-desc');
+  document.getElementById('ci-close').addEventListener('click', () => {
+    selectedCell = null;
+    cellInspectorEl.classList.remove('visible');
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && selectedCell) {
+      selectedCell = null;
+      cellInspectorEl.classList.remove('visible');
+    }
+  });
+
+  const CELL_INFO = {
+    pyramidal: {
+      title: '錐體神經元 (Pyramidal Neuron)',
+      color: '#e89b93',
+      isNeuron: true,
+      desc: '大腦皮質與海馬迴的主要投射神經元，具頂端與基底樹突接收突觸訊號，並經長軸突輸出動作電位。'
+    },
+    stellate: {
+      title: '多極星狀神經元 (Stellate Neuron)',
+      color: '#e89b93',
+      isNeuron: true,
+      desc: '分布於皮質淺層與深部灰質核團的聯絡神經元，具多方向放射狀樹突以整合局部神經迴路。'
+    },
+    oligodendrocyte: {
+      title: '寡突膠質細胞 (Oligodendrocyte)',
+      color: '#79c0ff',
+      desc: '中樞神經系統的髓鞘形成細胞，伸出突起包覆多條神經軸突以形成絕緣髓鞘、加速電訊號傳導。'
+    },
+    astrocyte: {
+      title: '星形膠質細胞 (Astrocyte)',
+      color: '#56d364',
+      desc: '具星狀放射突起與血管終足，負責維持血腦障壁、調節離子與神經傳導物質平衡並提供代謝支持。'
+    },
+    microglia: {
+      title: '微膠細胞 (Microglia)',
+      color: '#d2a8ff',
+      desc: '中樞神經系統的常駐免疫細胞，以細長分枝持續巡邏微環境，負責清除細胞碎片與病原體。'
+    },
+    ependyma: {
+      title: '室管膜細胞 (Ependymal Cell)',
+      color: '#f2cc60',
+      desc: '襯於腦室壁的單層立方上皮細胞，表面具擺動纖毛可推動腦脊髓液 (CSF) 循環。'
+    },
+    capillary: {
+      title: '微血管與紅血球 (Capillary & RBCs)',
+      color: '#ff5555',
+      desc: '由扁平內皮細胞構成的微血管網，攜帶紅血球輸送氧氣與葡萄糖至神經組織。'
+    },
+    myelin_fiber: {
+      title: '有髓鞘神經纖維 (Myelinated Fiber)',
+      color: '#fff6e5',
+      desc: '軸突外包覆脂質髓鞘節段與蘭氏結，實現動作電位沿軸突的高速跳躍傳導。'
+    },
+    myelin_cross: {
+      title: '有髓鞘軸突橫切面 (內囊纖維束)',
+      color: '#fff6e5',
+      desc: '內囊垂直下行皮質脊髓束的橫切面，可見外圍同心圓髓鞘環與中央軸突核心。'
+    }
+  };
+
+  function distToQuadBezier(px, py, x0, y0, cx, cy, x1, y1) {
+    let minD = Infinity;
+    for (let i = 0; i <= 6; i++) {
+      const t = i / 6;
+      const it = 1 - t;
+      const x = it * it * x0 + 2 * it * t * cx + t * t * x1;
+      const y = it * it * y0 + 2 * it * t * cy + t * t * y1;
+      const d = Math.hypot(px - x, py - y);
+      if (d < minD) minD = d;
+    }
+    return minD;
+  }
+
+  function pickCellAtWorld(wx, wy, hitRadius) {
+    const TILE = 16;
+    const gx0 = Math.floor(wx / TILE);
+    const gy0 = Math.floor(wy / TILE);
+    let best = null;
+    let bestScore = Infinity;
+
+    const consider = (x, y, radius, typeKey, reg, penalty = 0) => {
+      const d = Math.hypot(wx - x, wy - y);
+      if (d <= hitRadius + radius && d + penalty < bestScore) {
+        bestScore = d + penalty;
+        best = { x, y, radius, typeKey, reg };
+      }
+    };
+
+    for (let gx = gx0 - 1; gx <= gx0 + 1; gx++) {
+      for (let gy = gy0 - 1; gy <= gy0 + 1; gy++) {
+        const cx = (gx + 0.5) * TILE;
+        const cy = (gy + 0.5) * TILE;
+        let reg = getRegionAt(cx, cy);
+        if (reg === 0) {
+          const corners = [
+            getRegionAt(gx * TILE, gy * TILE),
+            getRegionAt((gx + 1) * TILE, gy * TILE),
+            getRegionAt(gx * TILE, (gy + 1) * TILE),
+            getRegionAt((gx + 1) * TILE, (gy + 1) * TILE)
+          ];
+          reg = corners.find(r => r !== 0) || 0;
+        }
+        if (reg === 0 || reg === 5) continue;
+
+        // 1. 室管膜細胞
+        const neighbors = [
+          { dx: 0, dy: -1, nx: 0, ny: -1 },
+          { dx: 0, dy: 1, nx: 0, ny: 1 },
+          { dx: -1, dy: 0, nx: -1, ny: 0 },
+          { dx: 1, dy: 0, nx: 1, ny: 0 }
+        ];
+        for (const nb of neighbors) {
+          if (getRegionAt(cx + nb.dx * TILE, cy + nb.dy * TILE) === 5) {
+            const count = 5, step = TILE / count;
+            for (let i = 0; i < count; i++) {
+              const bx = gx * TILE + (nb.nx === 0 ? (i + 0.5) * step : (nb.nx === 1 ? TILE - 1.4 : 1.4));
+              const by = gy * TILE + (nb.ny === 0 ? (i + 0.5) * step : (nb.ny === 1 ? TILE - 1.4 : 1.4));
+              consider(bx, by, 1.5, 'ependyma', reg);
+            }
+          }
+        }
+
+        // 2. 神經元
+        const isWhiteMatter = (reg === 3 || reg === 4 || reg === 7);
+        const neuronCount = isWhiteMatter ? (hash2(gx, gy, 101) > 0.78 ? 1 : 0) : (reg === 2 || reg === 8 ? 3 : 2);
+        for (let n = 0; n < neuronCount; n++) {
+          const nx = (gx + 0.22 + hash2(gx, gy, 110 + n) * 0.56) * TILE;
+          const ny = (gy + 0.22 + hash2(gx, gy, 120 + n) * 0.56) * TILE;
+          const cellReg = getRegionAt(nx, ny);
+          if (cellReg === 0 || cellReg === 5) continue;
+          if (!isWhiteMatter && !isGrayMatterRegion(cellReg)) continue;
+          const isPyramidal = (reg === 2 || reg === 8 || (reg === 1 && n === 0));
+          const somaRadius = reg === 2 ? 2.1 : 1.75;
+          consider(nx, ny, somaRadius * 1.2, isPyramidal ? 'pyramidal' : 'stellate', cellReg);
+        }
+
+        // 3. 寡突膠質細胞
+        const oligoX = (gx + 0.28 + hash2(gx, gy, 71) * 0.44) * TILE;
+        const oligoY = (gy + 0.28 + hash2(gx, gy, 72) * 0.44) * TILE;
+        const oligoReg = getRegionAt(oligoX, oligoY);
+        if (oligoReg !== 0 && oligoReg !== 5) {
+          consider(oligoX, oligoY, 1.3, 'oligodendrocyte', oligoReg);
+        }
+
+        // 4. 星形膠質細胞
+        const astroX = (gx + 0.22 + hash2(gx, gy, 81) * 0.56) * TILE;
+        const astroY = (gy + 0.22 + hash2(gx, gy, 82) * 0.56) * TILE;
+        const astroReg = getRegionAt(astroX, astroY);
+        if (astroReg !== 0 && astroReg !== 5) {
+          consider(astroX, astroY, 1.4, 'astrocyte', astroReg);
+        }
+
+        // 5. 微膠細胞
+        if (hash2(gx, gy, 91) > 0.35) {
+          const micX = (gx + 0.18 + hash2(gx, gy, 92) * 0.64) * TILE;
+          const micY = (gy + 0.18 + hash2(gx, gy, 93) * 0.64) * TILE;
+          const micReg = getRegionAt(micX, micY);
+          if (micReg !== 0 && micReg !== 5) {
+            consider(micX, micY, 1.3, 'microglia', micReg);
+          }
+        }
+
+        // 6. 內囊軸突橫切面
+        if (reg === 7) {
+          for (let i = 0; i < 4; i++) {
+            for (let j = 0; j < 4; j++) {
+              const jx = gx * TILE + (i + 0.5) * (TILE / 4) + (hash2(gx * 7 + i, gy * 7 + j, 31) - 0.5) * 1.4;
+              const jy = gy * TILE + (j + 0.5) * (TILE / 4) + (hash2(gx * 7 + i, gy * 7 + j, 32) - 0.5) * 1.4;
+              if (getRegionAt(jx, jy) === 7) {
+                const rad = 0.75 + hash2(gx + i, gy + j, 33) * 0.65;
+                consider(jx, jy, rad, 'myelin_cross', 7, 0.8);
+              }
+            }
+          }
+        } else {
+          // 7. 縱切有髓鞘神經纖維
+          const fiberCount = reg === 4 ? 6 : 4;
+          for (let f = 0; f < fiberCount; f++) {
+            const h = hash2(gx, gy, 40 + f);
+            let x0, y0, x1, y1, fcx, fcy;
+            if (reg === 4) {
+              const baseY = gy * TILE + ((f + 0.5) / fiberCount) * TILE;
+              x0 = gx * TILE;
+              y0 = baseY + (h - 0.5) * 1.2;
+              x1 = (gx + 1) * TILE;
+              y1 = baseY + (hash2(gx + 1, gy, 40 + f) - 0.5) * 1.2;
+              fcx = (x0 + x1) * 0.5;
+              fcy = (y0 + y1) * 0.5;
+            } else {
+              const ang = Math.atan2(cy, cx) + (h - 0.5) * 0.75;
+              const midX = cx + (hash2(gx, gy, 50 + f) - 0.5) * TILE * 0.65;
+              const midY = cy + (hash2(gx, gy, 60 + f) - 0.5) * TILE * 0.65;
+              const len = TILE * 0.72;
+              x0 = midX - Math.cos(ang) * len;
+              y0 = midY - Math.sin(ang) * len;
+              x1 = midX + Math.cos(ang) * len;
+              y1 = midY + Math.sin(ang) * len;
+              fcx = midX + Math.sin(ang) * (h - 0.5) * 3.5;
+              fcy = midY - Math.cos(ang) * (h - 0.5) * 3.5;
+            }
+            const d = distToQuadBezier(wx, wy, x0, y0, fcx, fcy, x1, y1);
+            if (d <= hitRadius + 0.8 && d + 1.4 < bestScore) {
+              bestScore = d + 1.4;
+              best = { x: wx, y: wy, radius: 1.2, typeKey: 'myelin_fiber', reg };
+            }
+          }
+        }
+
+        // 8. 微血管
+        if (hash2(gx, gy, 11) > 0.28) {
+          const h1 = hash2(gx, gy, 21);
+          const h2 = hash2(gx, gy, 22);
+          const vx0 = gx * TILE, vy0 = gy * TILE + h1 * TILE;
+          const vx1 = (gx + 1) * TILE, vy1 = gy * TILE + h2 * TILE;
+          const vcx = (vx0 + vx1) * 0.5;
+          const vcy = (vy0 + vy1) * 0.5 + (hash2(gx, gy, 23) - 0.5) * 6;
+          const d = distToQuadBezier(wx, wy, vx0, vy0, vcx, vcy, vx1, vy1);
+          if (d <= hitRadius + 1.1 && d + 1.1 < bestScore) {
+            bestScore = d + 1.1;
+            best = { x: wx, y: wy, radius: 1.4, typeKey: 'capillary', reg };
+          }
+        }
+      }
+    }
+    return best;
+  }
+
+  // 確定性偽隨機雜湊函式
+  function hash2(x, y, seed = 0) {
+    let n = Math.sin(x * 127.1 + y * 311.7 + seed * 74.7) * 43758.5453123;
+    return n - Math.floor(n);
+  }
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    width = window.innerWidth;
+    height = window.innerHeight;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // 座標轉換
+  function worldToScreen(wx, wy) {
+    const baseScale = Math.min(width, height) / 760;
+    const s = baseScale * cam.zoom;
+    return {
+      x: width * 0.5 + (wx - cam.x) * s,
+      y: height * 0.5 + (wy - cam.y) * s,
+      scale: s
+    };
+  }
+
+  function screenToWorld(sx, sy) {
+    const baseScale = Math.min(width, height) / 760;
+    const s = baseScale * cam.zoom;
+    return {
+      x: cam.x + (sx - width * 0.5) / s,
+      y: cam.y + (sy - height * 0.5) / s
+    };
+  }
+
+  // 生成大腦外輪廓（包含腦迴與腦溝的平滑多邊形點集）
+  function buildCortexOutline(isInnerWhiteMatter = false) {
+    const pts = [];
+    const steps = 260;
+    const thickness = isInnerWhiteMatter ? 24 : 0;
+
+    for (let i = 0; i <= steps; i++) {
+      const t = (i / steps) * Math.PI * 2;
+      const sx = Math.sin(t);
+      const cy = -Math.cos(t); // 0 在頂部縱裂，PI 在底部
+
+      // 基礎雙半球輪廓
+      let rx = 335 * sx;
+      let ry = 255 * cy;
+
+      // 頂部大腦縱裂 (Interhemispheric fissure)
+      const topIndent = Math.exp(-Math.pow(sx * 7.5, 2)) * (cy < 0 ? 1 : 0);
+      ry += topIndent * 108;
+
+      // 外側裂 (Lateral / Sylvian fissure)
+      const sylvianAngle = Math.abs(Math.abs(sx) - 0.92) + Math.abs(cy - 0.16);
+      const sylvianIndent = Math.exp(-Math.pow(sylvianAngle * 6.5, 2));
+      rx -= Math.sign(sx) * sylvianIndent * 58;
+      ry += sylvianIndent * 14;
+
+      // 顳葉底部圓弧與海馬旁回內凹
+      if (cy > 0.35) {
+        const bottomCleft = Math.exp(-Math.pow(sx * 4.5, 2));
+        ry -= bottomCleft * 68;
+        rx += Math.sign(sx) * Math.sin((cy - 0.35) * 3.0) * 18;
+      }
+
+      // 腦迴與腦溝波浪 (Gyri & Sulci)
+      const gyriWave =
+        Math.sin(t * 22 + 0.4) * 7.5 +
+        Math.sin(t * 37 - 1.1) * 4.2 +
+        Math.cos(t * 13) * 5.0;
+
+      // 避免縱裂深處過度交疊
+      const waveMask = (1 - topIndent * 0.85) * (1 - sylvianIndent * 0.6);
+      const radialOffset = gyriWave * waveMask - thickness;
+
+      const len = Math.hypot(rx, ry) || 1;
+      rx += (rx / len) * radialOffset;
+      ry += (ry / len) * radialOffset;
+
+      pts.push({ x: rx, y: ry });
+    }
+    return pts;
+  }
+
+  const outerBrainPts = buildCortexOutline(false);
+  const innerWhitePts = buildCortexOutline(true);
+
+  function tracePolygon(ctx, pts) {
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      if (i === 0) ctx.moveTo(pts[i].x, pts[i].y);
+      else ctx.lineTo(pts[i].x, pts[i].y);
+    }
+    ctx.closePath();
+  }
+
+  // 離屏低解析度碰撞遮罩，用於毫秒級精準判別任意世界座標所屬解剖區域
+  const MASK_W = 400, MASK_H = 320;
+  const maskCanvas = document.createElement('canvas');
+  maskCanvas.width = MASK_W;
+  maskCanvas.height = MASK_H;
+  const mctx = maskCanvas.getContext('2d');
+  let maskDataAnterior = null;
+  let maskDataHippo = null;
+
+  // 區域編碼：
+  // 0: 外部空白 (CSF / 背景)
+  // 1: 大腦皮質灰質外層 (Layers I-III)
+  // 2: 大腦皮質灰質深層 (Layers IV-VI)
+  // 3: 中央白質 (輻射冠 Corona radiata)
+  // 4: 胼胝體 / 前連合 (橫向白質纖維束)
+  // 5: 側腦室 / 第三腦室 (腦脊髓液腔)
+  // 6: 基底核與視丘 (深部灰質核團)
+  // 7: 內囊 (垂直走行白質纖維束)
+  // 8: 海馬迴結構 (Hippocampal formation)
+  function bakeRegionMask(mode) {
+    mctx.clearRect(0, 0, MASK_W, MASK_H);
+    mctx.save();
+    mctx.translate(MASK_W / 2, MASK_H / 2);
+    const s = 0.5;
+    mctx.scale(s, s);
+
+    // 1. 皮質外層 (編碼 R=10)
+    mctx.fillStyle = 'rgb(10,0,0)';
+    tracePolygon(mctx, outerBrainPts);
+    mctx.fill();
+
+    // 2. 皮質深層 (編碼 R=20)
+    const midCortexPts = buildCortexOutline(11);
+    mctx.fillStyle = 'rgb(20,0,0)';
+    tracePolygon(mctx, midCortexPts);
+    mctx.fill();
+
+    // 3. 中央白質 (編碼 R=30)
+    mctx.fillStyle = 'rgb(30,0,0)';
+    tracePolygon(mctx, innerWhitePts);
+    mctx.fill();
+
+    // 4. 胼胝體 (Corpus callosum, R=40)
+    mctx.fillStyle = 'rgb(40,0,0)';
+    mctx.beginPath();
+    mctx.moveTo(-115, -62);
+    mctx.bezierCurveTo(-65, -88, 65, -88, 115, -62);
+    mctx.bezierCurveTo(95, -45, 55, -56, 0, -56);
+    mctx.bezierCurveTo(-55, -56, -95, -45, -115, -62);
+    mctx.fill();
+
+    if (mode === 'anterior') {
+      // 前連合 (R=40)
+      mctx.beginPath();
+      mctx.ellipse(0, 26, 98, 7, 0, 0, Math.PI * 2);
+      mctx.fill();
+    }
+
+    // 5. 側腦室 (Lateral ventricles, R=50)
+    mctx.fillStyle = 'rgb(50,0,0)';
+    for (const dir of [-1, 1]) {
+      mctx.beginPath();
+      mctx.moveTo(dir * 3, -55);
+      mctx.bezierCurveTo(dir * 42, -55, dir * 56, -38, dir * 48, -16);
+      mctx.bezierCurveTo(dir * 34, -8, dir * 12, -12, dir * 3, -24);
+      mctx.closePath();
+      mctx.fill();
+    }
+
+    // 6. 基底核與視丘 (R=60)
+    mctx.fillStyle = 'rgb(60,0,0)';
+    for (const dir of [-1, 1]) {
+      // 尾狀核頭 (Caudate)
+      mctx.beginPath();
+      mctx.ellipse(dir * 54, -22, 16, 24, dir * -0.25, 0, Math.PI * 2);
+      mctx.fill();
+
+      // 豆狀核 (Putamen + Globus pallidus)
+      mctx.beginPath();
+      mctx.ellipse(dir * 122, 12, 32, 46, dir * 0.15, 0, Math.PI * 2);
+      mctx.fill();
+
+      if (mode === 'hippocampus') {
+        // 視丘 (Thalamus)
+        mctx.beginPath();
+        mctx.ellipse(dir * 34, 22, 28, 38, dir * -0.1, 0, Math.PI * 2);
+        mctx.fill();
+      }
+    }
+
+    // 7. 內囊白質通道 (Internal capsule, R=70)
+    mctx.fillStyle = 'rgb(70,0,0)';
+    for (const dir of [-1, 1]) {
+      mctx.beginPath();
+      mctx.moveTo(dir * 66, -42);
+      mctx.lineTo(dir * 86, -34);
+      mctx.lineTo(dir * 96, 62);
+      mctx.lineTo(dir * 74, 58);
+      mctx.closePath();
+      mctx.fill();
+    }
+
+    // 8. 海馬迴 (Hippocampus, R=80)
+    if (mode === 'hippocampus') {
+      mctx.fillStyle = 'rgb(80,0,0)';
+      for (const dir of [-1, 1]) {
+        mctx.beginPath();
+        mctx.ellipse(dir * 108, 108, 30, 22, dir * 0.25, 0, Math.PI * 2);
+        mctx.fill();
+      }
+    }
+
+    mctx.restore();
+    return mctx.getImageData(0, 0, MASK_W, MASK_H).data;
+  }
+
+  maskDataAnterior = bakeRegionMask('anterior');
+  maskDataHippo = bakeRegionMask('hippocampus');
+
+  function getRegionAt(wx, wy) {
+    const px = Math.round(wx * 0.5 + MASK_W / 2);
+    const py = Math.round(wy * 0.5 + MASK_H / 2);
+    if (px < 0 || px >= MASK_W || py < 0 || py >= MASK_H) return 0;
+    const data = planeMode === 'anterior' ? maskDataAnterior : maskDataHippo;
+    const r = data[(py * MASK_W + px) * 4];
+    return Math.round(r / 10);
+  }
+
+  const REGION_LABELS = {
+    0: '蛛網膜下腔 / 外部背景',
+    1: '大腦皮質灰質（第 I–III 層：分子層與外錐體層）',
+    2: '大腦皮質灰質（第 IV–VI 層：內顆粒層與大錐體層）',
+    3: '中央白質（輻射冠有髓鞘投射纖維）',
+    4: '胼胝體 / 連合白質（橫向有髓鞘神經纖維束）',
+    5: '側腦室腔室（腦脊髓液與室管膜邊界）',
+    6: '深部灰質核團（基底核／視丘神經元群）',
+    7: '內囊白質通道（垂直下行皮質脊髓束橫切面）',
+    8: '海馬迴結構（阿蒙角錐體層與齒狀回）'
+  };
+
+  // 配色方案（自然新鮮組織 vs Nissl+LFB 染色）
+  function getPalette() {
+    if (stainMode === 'natural') {
+      return {
+        bg: '#0d1117',
+        cortexOuter: '#c59b8e',
+        cortexInner: '#b8897b',
+        whiteMatter: '#f4ebe1',
+        callosum: '#fbf5ee',
+        ventricle: '#1c2532',
+        nuclei: '#be8f82',
+        internalCap: '#efe4d7',
+        hippocampus: '#c49384',
+        microBgGrey: 'rgba(188, 142, 130, 0.25)',
+        microBgWhite: 'rgba(246, 238, 228, 0.22)',
+        neuronFill: '#e89b93',
+        neuronStroke: '#8f4b43',
+        nucleusFill: '#b5655c',
+        myelinFill: '#fff7eb',
+        myelinStroke: '#d6c3ad',
+        axonCore: '#d98a5f',
+        astroColor: '#56d364',
+        oligoColor: '#79c0ff',
+        microgliaColor: '#d2a8ff',
+        ependymaColor: '#f2cc60',
+        vesselWall: 'rgba(220, 68, 68, 0.42)',
+        vesselLumen: 'rgba(140, 22, 28, 0.35)',
+        rbcColor: '#ff4d4d'
+      };
+    } else {
+      return {
+        bg: '#0c0f18',
+        cortexOuter: '#8d79b8',
+        cortexInner: '#7862a8',
+        whiteMatter: '#5299c7',
+        callosum: '#4389b8',
+        ventricle: '#181e2c',
+        nuclei: '#7b64a6',
+        internalCap: '#4c92bf',
+        hippocampus: '#836cb2',
+        microBgGrey: 'rgba(128, 104, 178, 0.22)',
+        microBgWhite: 'rgba(72, 145, 196, 0.22)',
+        neuronFill: '#7c52b5',
+        neuronStroke: '#3b1d6e',
+        nucleusFill: '#2c1259',
+        myelinFill: '#3b8ec2',
+        myelinStroke: '#1e5780',
+        axonCore: '#a6d8f5',
+        astroColor: '#3fb950',
+        oligoColor: '#2f81f7',
+        microgliaColor: '#bc8cff',
+        ependymaColor: '#d29922',
+        vesselWall: 'rgba(235, 87, 87, 0.45)',
+        vesselLumen: 'rgba(160, 30, 45, 0.38)',
+        rbcColor: '#ff5c5c'
+      };
+    }
+  }
+
+  // 繪製巨觀大腦解剖底圖（1x ~ 60x 漸隱過渡）
+  function drawMacroAnatomy(pal, time) {
+    const macroAlpha = cam.zoom < 25 ? 1 : Math.max(0, 1 - (cam.zoom - 25) / 45);
+    if (macroAlpha <= 0.01) return;
+
+    ctx.save();
+    ctx.globalAlpha = macroAlpha;
+
+    // 軟腦膜陰影與外輪廓（大腦皮質灰質）
+    ctx.shadowColor = 'rgba(0,0,0,0.65)';
+    ctx.shadowBlur = 24 / cam.zoom;
+    ctx.fillStyle = pal.cortexOuter;
+    tracePolygon(ctx, outerBrainPts);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // 皮質內層過渡
+    ctx.fillStyle = pal.cortexInner;
+    tracePolygon(ctx, buildCortexOutline(11));
+    ctx.fill();
+
+    // 中央白質 (White Matter)
+    ctx.fillStyle = pal.whiteMatter;
+    tracePolygon(ctx, innerWhitePts);
+    ctx.fill();
+
+    // 放射狀白質纖維紋理（中低倍率可見細微纖維走向）
+    if (cam.zoom > 2.5) {
+      ctx.save();
+      tracePolygon(ctx, innerWhitePts);
+      ctx.clip();
+      ctx.strokeStyle = stainMode === 'natural' ? 'rgba(215, 196, 176, 0.35)' : 'rgba(32, 95, 142, 0.35)';
+      ctx.lineWidth = 0.8;
+      for (let i = 0; i < 90; i++) {
+        const ang = (i / 90) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(ang) * 40, Math.sin(ang) * 30);
+        ctx.quadraticCurveTo(Math.cos(ang + 0.12) * 180, Math.sin(ang - 0.1) * 140, Math.cos(ang) * 330, Math.sin(ang) * 250);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // 胼胝體 (Corpus callosum)
+    ctx.fillStyle = pal.callosum;
+    ctx.beginPath();
+    mCallosumPath(ctx);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // 前連合（僅前連合層面）
+    if (planeMode === 'anterior') {
+      ctx.fillStyle = pal.callosum;
+      ctx.beginPath();
+      ctx.ellipse(0, 26, 98, 6.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 基底核、內囊與視丘
+    for (const dir of [-1, 1]) {
+      // 尾狀核頭
+      ctx.fillStyle = pal.nuclei;
+      ctx.beginPath();
+      ctx.ellipse(dir * 54, -22, 16, 24, dir * -0.25, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 內囊白質帶
+      ctx.fillStyle = pal.internalCap;
+      ctx.beginPath();
+      ctx.moveTo(dir * 66, -42);
+      mInternalCapPath(ctx, dir);
+      ctx.fill();
+
+      // 橫跨內囊的紋狀體灰質橋樑 (Striatum bridges)
+      ctx.strokeStyle = pal.nuclei;
+      ctx.lineWidth = 2.6;
+      for (let b = -22; b <= 32; b += 11) {
+        ctx.beginPath();
+        ctx.moveTo(dir * 66, b);
+        ctx.lineTo(dir * 96, b + 8);
+        ctx.stroke();
+      }
+
+      // 殼核 (Putamen) 與蒼白球 (Globus pallidus)
+      ctx.fillStyle = pal.nuclei;
+      ctx.beginPath();
+      ctx.ellipse(dir * 124, 12, 30, 44, dir * 0.15, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = stainMode === 'natural' ? '#d4aea2' : '#937ec2';
+      ctx.beginPath();
+      ctx.ellipse(dir * 107, 16, 15, 28, dir * 0.12, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 屏狀核 (Claustrum)
+      ctx.strokeStyle = pal.nuclei;
+      ctx.lineWidth = 3.2;
+      ctx.beginPath();
+      ctx.arc(dir * 138, 12, 34, dir === 1 ? -0.6 : Math.PI - 0.6, dir === 1 ? 0.6 : Math.PI + 0.6);
+      ctx.stroke();
+
+      if (planeMode === 'hippocampus') {
+        // 視丘 (Thalamus)
+        ctx.fillStyle = pal.nuclei;
+        ctx.beginPath();
+        ctx.ellipse(dir * 34, 22, 27, 37, dir * -0.1, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 海馬迴雙 C 捲曲 (Hippocampus & Dentate gyrus)
+        ctx.save();
+        ctx.translate(dir * 108, 108);
+        ctx.scale(dir, 1);
+        ctx.fillStyle = pal.hippocampus;
+        ctx.beginPath();
+        ctx.arc(0, 0, 22, 0.2, Math.PI * 1.75);
+        ctx.arc(4, 2, 12, Math.PI * 1.75, 0.2, true);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // 側腦室與透明隔
+    for (const dir of [-1, 1]) {
+      ctx.fillStyle = pal.ventricle;
+      ctx.beginPath();
+      ctx.moveTo(dir * 2.5, -55);
+      ctx.bezierCurveTo(dir * 42, -55, dir * 56, -38, dir * 48, -16);
+      ctx.bezierCurveTo(dir * 34, -8, dir * 12, -12, dir * 2.5, -24);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+
+      // 脈絡叢 (Choroid plexus)
+      ctx.fillStyle = 'rgba(218, 82, 82, 0.75)';
+      ctx.beginPath();
+      ctx.arc(dir * 24, -22, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 巨觀標示文字 (1x ~ 10x 顯示)
+    if (cam.zoom < 12) {
+      const labelAlpha = Math.max(0, 1 - (cam.zoom - 4) / 8);
+      ctx.save();
+      ctx.globalAlpha = macroAlpha * labelAlpha;
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `600 ${11 / Math.sqrt(cam.zoom)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.shadowColor = 'rgba(0,0,0,0.85)';
+      ctx.shadowBlur = 4;
+
+      ctx.fillText('大腦皮質 (灰質)', -195, -155);
+      ctx.fillText('中央白質', 185, -110);
+      ctx.fillText('胼胝體', 0, -68);
+      ctx.fillText('側腦室', -28, -34);
+      ctx.fillText('尾狀核', 54, -48);
+      ctx.fillText('內囊', 82, 15);
+      ctx.fillText('豆狀核 (殼核/蒼白球)', 142, 62);
+      if (planeMode === 'anterior') {
+        ctx.fillText('前連合', 0, 42);
+      } else {
+        ctx.fillText('視丘', -34, 26);
+        ctx.fillText('海馬迴', 110, 142);
+      }
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
+  function mCallosumPath(ctx) {
+    ctx.moveTo(-115, -62);
+    ctx.bezierCurveTo(-65, -88, 65, -88, 115, -62);
+    ctx.bezierCurveTo(95, -45, 55, -56, 0, -56);
+    ctx.bezierCurveTo(-55, -56, -95, -45, -115, -62);
+  }
+
+  function mInternalCapPath(ctx, dir) {
+    ctx.lineTo(dir * 86, -34);
+    ctx.lineTo(dir * 96, 62);
+    ctx.lineTo(dir * 74, 58);
+    ctx.closePath();
+  }
+
+  // =========================================================================
+  // 全域空間雜湊微觀細胞、有髓鞘纖維、膠細胞與微血管網引擎（任意地點 zoom >= 16x 啟動）
+  // =========================================================================
+  function drawMicroUniverse(pal, time) {
+    if (cam.zoom < 14) return;
+    const microAlpha = Math.min(1, (cam.zoom - 14) / 22);
+
+    // 計算目前螢幕可視的世界座標範圍
+    const topLeft = screenToWorld(0, 0);
+    const botRight = screenToWorld(width, height);
+
+    // 動態決定世界空間網格大小（Tile Size），確保螢幕上永遠維持適中且流暢的細胞與纖維密度
+    const TILE = 16; // 世界單位（在 150x 下約等於 240px 螢幕區塊）
+    const minGX = Math.floor(topLeft.x / TILE) - 1;
+    const maxGX = Math.ceil(botRight.x / TILE) + 1;
+    const minGY = Math.floor(topLeft.y / TILE) - 1;
+    const maxGY = Math.ceil(botRight.y / TILE) + 1;
+
+    // 防止極端縮小下網格過多
+    if ((maxGX - minGX) * (maxGY - minGY) > 360) return;
+
+    ctx.save();
+    tracePolygon(ctx, outerBrainPts);
+    ctx.clip();
+    ctx.globalAlpha = microAlpha;
+
+    const getTileRegion = (gx, gy) => {
+      const cx = (gx + 0.5) * TILE;
+      const cy = (gy + 0.5) * TILE;
+      let reg = getRegionAt(cx, cy);
+      if (reg === 0) {
+        const corners = [
+          getRegionAt(gx * TILE, gy * TILE),
+          getRegionAt((gx + 1) * TILE, gy * TILE),
+          getRegionAt(gx * TILE, (gy + 1) * TILE),
+          getRegionAt((gx + 1) * TILE, (gy + 1) * TILE)
+        ];
+        reg = corners.find(r => r !== 0) || 0;
+      }
+      return reg;
+    };
+
+    // 第一層：微觀組織基質底色與連續微血管網絡 (Capillaries + Red Blood Cells)
+    for (let gx = minGX; gx <= maxGX; gx++) {
+      for (let gy = minGY; gy <= maxGY; gy++) {
+        const cx = (gx + 0.5) * TILE;
+        const cy = (gy + 0.5) * TILE;
+        const reg = getTileRegion(gx, gy);
+        if (reg === 0) continue;
+
+        ctx.globalAlpha = microAlpha;
+        // 組織基質淡色底
+        if (reg !== 5) {
+          ctx.fillStyle = (reg === 3 || reg === 4 || reg === 7) ? pal.microBgWhite : pal.microBgGrey;
+          ctx.fillRect(gx * TILE, gy * TILE, TILE + 0.2, TILE + 0.2);
+        } else {
+          ctx.fillStyle = pal.ventricle;
+          ctx.fillRect(gx * TILE, gy * TILE, TILE + 0.2, TILE + 0.2);
+        }
+
+        // 腦室與實質組織交界：繪製室管膜細胞 (Ependymal cells) 與纖毛
+        if (reg !== 5) {
+          const neighbors = [
+            { dx: 0, dy: -1, nx: 0, ny: -1 },
+            { dx: 0, dy: 1, nx: 0, ny: 1 },
+            { dx: -1, dy: 0, nx: -1, ny: 0 },
+            { dx: 1, dy: 0, nx: 1, ny: 0 }
+          ];
+          for (const nb of neighbors) {
+            if (getRegionAt(cx + nb.dx * TILE, cy + nb.dy * TILE) === 5) {
+              drawEpendymalBorder(gx, gy, TILE, nb.nx, nb.ny, pal, time, microAlpha);
+            }
+          }
+        }
+
+        // 微血管網（非腦室腔內皆有豐富微血管貫穿）
+        if (reg !== 5 && hash2(gx, gy, 11) > 0.28) {
+          drawCapillaryInTile(gx, gy, TILE, pal, time, microAlpha);
+        }
+      }
+    }
+
+    // 第二層：神經纖維束與髓鞘節段（連接神經元與跨區傳導）
+    for (let gx = minGX; gx <= maxGX; gx++) {
+      for (let gy = minGY; gy <= maxGY; gy++) {
+        const reg = getTileRegion(gx, gy);
+        if (reg === 0 || reg === 5) continue;
+
+        drawFibersAndMyelinInTile(gx, gy, TILE, reg, pal, time, microAlpha);
+      }
+    }
+
+    // 第三層：各類神經元（錐體細胞、星狀細胞、海馬錐體細胞）與神經膠細胞（星形、寡突、微膠）
+    for (let gx = minGX; gx <= maxGX; gx++) {
+      for (let gy = minGY; gy <= maxGY; gy++) {
+        const reg = getTileRegion(gx, gy);
+        if (reg === 0 || reg === 5) continue;
+
+        drawGlialCellsInTile(gx, gy, TILE, reg, pal, time, microAlpha);
+        drawNeuronsInTile(gx, gy, TILE, reg, pal, time, microAlpha);
+      }
+    }
+
+    // 第四層：高倍率結構標註浮標（在視窗中央最近的核心細胞旁顯示清晰名稱）
+    ctx.globalAlpha = microAlpha;
+    if (cam.zoom >= 95) {
+      drawCenterAnnotations(pal);
+    }
+
+    ctx.restore();
+  }
+
+  // 繪製室管膜細胞與擺動纖毛 (Ependymal Cells + Cilia)
+  function drawEpendymalBorder(gx, gy, TILE, nx, ny, pal, time, microAlpha) {
+    ctx.globalAlpha = applyTypeAlpha(microAlpha, 'ependyma');
+    const hl = isHighlighted('ependyma');
+    const count = 5;
+    const step = TILE / count;
+    for (let i = 0; i < count; i++) {
+      let bx = gx * TILE + (nx === 0 ? (i + 0.5) * step : (nx === 1 ? TILE - 1.4 : 1.4));
+      let by = gy * TILE + (ny === 0 ? (i + 0.5) * step : (ny === 1 ? TILE - 1.4 : 1.4));
+
+      if (hl) {
+        ctx.fillStyle = 'rgba(242, 204, 96, 0.38)';
+        ctx.beginPath();
+        ctx.arc(bx, by, 2.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = pal.ependymaColor;
+      ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+      ctx.lineWidth = 0.25;
+      ctx.beginPath();
+      ctx.roundRect(bx - 1.3, by - 1.3, 2.6, 2.6, 0.5);
+      ctx.fill();
+      ctx.stroke();
+
+      // 細胞核
+      ctx.fillStyle = '#5c4308';
+      ctx.beginPath();
+      ctx.arc(bx, by, 0.55, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 伸入側腦室腦脊髓液的纖毛 (Cilia)
+      ctx.strokeStyle = 'rgba(242, 204, 96, 0.85)';
+      ctx.lineWidth = 0.22;
+      for (let c = -1; c <= 1; c++) {
+        const wave = Math.sin(time * 4 + i + c) * 0.55;
+        ctx.beginPath();
+        ctx.moveTo(bx + (ny !== 0 ? c * 0.5 : nx * 1.3), by + (nx !== 0 ? c * 0.5 : ny * 1.3));
+        ctx.quadraticCurveTo(
+          bx + nx * 2.4 + (ny !== 0 ? wave : 0),
+          by + ny * 2.4 + (nx !== 0 ? wave : 0),
+          bx + nx * 3.8 + (ny !== 0 ? wave * 1.5 : 0),
+          by + ny * 3.8 + (nx !== 0 ? wave * 1.5 : 0)
+        );
+        ctx.stroke();
+      }
+    }
+  }
+
+  // 繪製微血管與流動紅血球 (Capillary + Red Blood Cells)
+  function drawCapillaryInTile(gx, gy, TILE, pal, time, microAlpha) {
+    ctx.globalAlpha = applyTypeAlpha(microAlpha, 'capillary');
+    const hl = isHighlighted('capillary');
+    const h1 = hash2(gx, gy, 21);
+    const h2 = hash2(gx, gy, 22);
+    const x0 = gx * TILE;
+    const y0 = gy * TILE + h1 * TILE;
+    const x1 = (gx + 1) * TILE;
+    const y1 = gy * TILE + h2 * TILE;
+    const cx = (x0 + x1) * 0.5;
+    const cy = (y0 + y1) * 0.5 + (hash2(gx, gy, 23) - 0.5) * 6;
+
+    // 血管內腔與內皮管壁
+    ctx.lineCap = 'round';
+    if (hl) {
+      ctx.strokeStyle = 'rgba(255, 92, 92, 0.38)';
+      ctx.lineWidth = 4.2;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.quadraticCurveTo(cx, cy, x1, y1);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = pal.vesselWall;
+    ctx.lineWidth = 2.1;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.quadraticCurveTo(cx, cy, x1, y1);
+    ctx.stroke();
+
+    ctx.strokeStyle = pal.vesselLumen;
+    ctx.lineWidth = 1.35;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.quadraticCurveTo(cx, cy, x1, y1);
+    ctx.stroke();
+
+    // 內皮細胞扁平核
+    ctx.fillStyle = '#ff8585';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy - 0.85, 0.9, 0.25, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 流動紅血球 (Red Blood Cells)
+    const speed = 0.28 + h1 * 0.2;
+    for (let r = 0; r < 2; r++) {
+      const t = (time * speed + h2 + r * 0.5) % 1;
+      const it = 1 - t;
+      const rx = it * it * x0 + 2 * it * t * cx + t * t * x1;
+      const ry = it * it * y0 + 2 * it * t * cy + t * t * y1;
+
+      ctx.fillStyle = pal.rbcColor;
+      ctx.beginPath();
+      ctx.ellipse(rx, ry, 0.72, 0.45, (y1 - y0) / TILE, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // 繪製神經纖維束、髓鞘節段與蘭氏結 (Myelinated Fibers & Nodes of Ranvier)
+  function drawFibersAndMyelinInTile(gx, gy, TILE, reg, pal, time, microAlpha) {
+    ctx.globalAlpha = applyTypeAlpha(microAlpha, 'myelin');
+    const hl = isHighlighted('myelin');
+    // 依據不同腦區決定纖維走向：
+    // 4 (胼胝體): 水平橫向縱切
+    // 7 (內囊): 垂直上下行纖維的「斜切/橫切圓點束」＋部分斜行纖維
+    // 1,2,3,6,8: 放射狀／網狀有髓鞘軸突與無髓鞘側支連接神經元
+    if (reg === 7) {
+      // 內囊皮質脊髓束：密集有髓鞘軸突橫切面（雙層同心圓髓鞘環）
+      const cols = 4, rows = 4;
+      for (let i = 0; i < cols; i++) {
+        for (let j = 0; j < rows; j++) {
+          const jx = gx * TILE + (i + 0.5) * (TILE / cols) + (hash2(gx * 7 + i, gy * 7 + j, 31) - 0.5) * 1.4;
+          const jy = gy * TILE + (j + 0.5) * (TILE / rows) + (hash2(gx * 7 + i, gy * 7 + j, 32) - 0.5) * 1.4;
+          if (getRegionAt(jx, jy) !== 7) continue;
+          const rad = 0.75 + hash2(gx + i, gy + j, 33) * 0.65;
+
+          if (hl) {
+            ctx.fillStyle = 'rgba(255, 246, 229, 0.36)';
+            ctx.beginPath();
+            ctx.arc(jx, jy, rad + 0.65, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          // 外圈髓鞘環
+          ctx.fillStyle = pal.myelinFill;
+          ctx.strokeStyle = pal.myelinStroke;
+          ctx.lineWidth = 0.25;
+          ctx.beginPath();
+          ctx.arc(jx, jy, rad, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          // 中央軸突核心
+          ctx.fillStyle = pal.axonCore;
+          ctx.beginPath();
+          ctx.arc(jx, jy, rad * 0.42, 0, Math.PI * 2);
+          ctx.fill();
+
+          // 動作電位橫切脈衝環（青白色電訊號，與細胞本體區別）
+          const pulsePhase = (time * 2.5 + hash2(i, j, 34) * 6) % 6;
+          if (pulsePhase < 0.55) {
+            const pRatio = pulsePhase / 0.55;
+            ctx.strokeStyle = `rgba(0, 245, 212, ${1 - pRatio * 0.65})`;
+            ctx.lineWidth = 0.28;
+            ctx.beginPath();
+            ctx.arc(jx, jy, rad * (0.65 + pRatio * 0.75), 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(jx, jy, rad * 0.28, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+      return;
+    }
+
+    // 縱切有髓鞘神經纖維（胼胝體為密集水平平行束；皮質與白質為連接神經元的投射纖維）
+    const fiberCount = reg === 4 ? 6 : 4;
+    for (let f = 0; f < fiberCount; f++) {
+      const h = hash2(gx, gy, 40 + f);
+      let x0, y0, x1, y1, cx, cy;
+
+      if (reg === 4) {
+        // 胼胝體：水平橫向平行束
+        const baseY = gy * TILE + ((f + 0.5) / fiberCount) * TILE;
+        x0 = gx * TILE;
+        y0 = baseY + (h - 0.5) * 1.2;
+        x1 = (gx + 1) * TILE;
+        y1 = baseY + (hash2(gx + 1, gy, 40 + f) - 0.5) * 1.2;
+        cx = (x0 + x1) * 0.5;
+        cy = (y0 + y1) * 0.5;
+      } else {
+        // 皮質、白質、基底核與海馬迴：沿放射方向延伸並分出突觸側支
+        const ang = Math.atan2((gy + 0.5) * TILE, (gx + 0.5) * TILE) + (h - 0.5) * 0.75;
+        const midX = (gx + 0.5) * TILE + (hash2(gx, gy, 50 + f) - 0.5) * TILE * 0.65;
+        const midY = (gy + 0.5) * TILE + (hash2(gx, gy, 60 + f) - 0.5) * TILE * 0.65;
+        const len = TILE * 0.72;
+        x0 = midX - Math.cos(ang) * len;
+        y0 = midY - Math.sin(ang) * len;
+        x1 = midX + Math.cos(ang) * len;
+        y1 = midY + Math.sin(ang) * len;
+        cx = midX + Math.sin(ang) * (h - 0.5) * 3.5;
+        cy = midY - Math.cos(ang) * (h - 0.5) * 3.5;
+      }
+
+      // 1. 連續細軸突核心 (Axon Core)
+      ctx.strokeStyle = pal.axonCore;
+      ctx.lineWidth = 0.34;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.quadraticCurveTo(cx, cy, x1, y1);
+      ctx.stroke();
+
+      // 2. 分段髓鞘節段 (Myelin Sheath Internodes) 與 蘭氏結 (Nodes of Ranvier)
+      const segs = 3;
+      for (let s = 0; s < segs; s++) {
+        const tStart = s / segs + 0.045;
+        const tEnd = (s + 1) / segs - 0.045;
+        if (hl) {
+          drawQuadraticSegment(ctx, x0, y0, cx, cy, x1, y1, tStart, tEnd, 1.85, 'rgba(255, 246, 229, 0.35)');
+        }
+        drawQuadraticSegment(ctx, x0, y0, cx, cy, x1, y1, tStart, tEnd, 0.95, pal.myelinStroke);
+        drawQuadraticSegment(ctx, x0, y0, cx, cy, x1, y1, tStart, tEnd, 0.68, pal.myelinFill);
+      }
+
+      // 3. 動作電位跳躍傳導脈衝波 (Saltatory Conduction：青白色電弧拖尾與核心，與細胞區別)
+      const pulseT = (time * 0.75 + h * 3.0) % 1;
+      const it = 1 - pulseT;
+      const px = it * it * x0 + 2 * it * pulseT * cx + pulseT * pulseT * x1;
+      const py = it * it * y0 + 2 * it * pulseT * cy + pulseT * pulseT * y1;
+      const tx = 2 * it * (cx - x0) + 2 * pulseT * (x1 - cx);
+      const ty = 2 * it * (cy - y0) + 2 * pulseT * (y1 - cy);
+      const tLen = Math.hypot(tx, ty) || 1;
+      const ux = tx / tLen;
+      const uy = ty / tLen;
+
+      ctx.strokeStyle = 'rgba(0, 245, 212, 0.72)';
+      ctx.lineWidth = 0.65;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(px - ux * 1.9, py - uy * 1.9);
+      ctx.lineTo(px, py);
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(0, 245, 212, 0.34)';
+      ctx.beginPath();
+      ctx.arc(px, py, 1.05, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(px, py, 0.42, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawQuadraticSegment(ctx, x0, y0, cx, cy, x1, y1, t0, t1, lw, strokeStyle) {
+    const steps = 6;
+    ctx.strokeStyle = strokeStyle;
+    ctx.lineWidth = lw;
+    ctx.lineCap = 'butt';
+    ctx.beginPath();
+    for (let i = 0; i <= steps; i++) {
+      const t = t0 + (t1 - t0) * (i / steps);
+      const it = 1 - t;
+      const x = it * it * x0 + 2 * it * t * cx + t * t * x1;
+      const y = it * it * y0 + 2 * it * t * cy + t * t * y1;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  // 繪製三類實質神經膠細胞：星形膠質細胞、寡突膠質細胞、微膠細胞
+  function drawGlialCellsInTile(gx, gy, TILE, reg, pal, time, microAlpha) {
+    // 1. 寡突膠質細胞 (Oligodendrocyte)：伸出突起包裹鄰近神經纖維形成髓鞘
+    const oligoX = (gx + 0.28 + hash2(gx, gy, 71) * 0.44) * TILE;
+    const oligoY = (gy + 0.28 + hash2(gx, gy, 72) * 0.44) * TILE;
+    const oligoReg = getRegionAt(oligoX, oligoY);
+    if (oligoReg !== 0 && oligoReg !== 5) {
+      ctx.globalAlpha = applyTypeAlpha(microAlpha, 'oligodendrocyte');
+      if (isHighlighted('oligodendrocyte')) {
+        ctx.fillStyle = 'rgba(121, 192, 255, 0.35)';
+        ctx.beginPath();
+        ctx.arc(oligoX, oligoY, 2.7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.strokeStyle = pal.oligoColor;
+      ctx.lineWidth = 0.28;
+      for (let p = 0; p < 3; p++) {
+        const ang = (p / 3) * Math.PI * 2 + hash2(gx, gy, 73);
+        const tx = oligoX + Math.cos(ang) * 3.4;
+        const ty = oligoY + Math.sin(ang) * 3.4;
+        ctx.beginPath();
+        ctx.moveTo(oligoX, oligoY);
+        ctx.lineTo(tx, ty);
+        ctx.stroke();
+
+        // 包裹髓鞘袖套
+        ctx.fillStyle = pal.oligoColor;
+        ctx.beginPath();
+        ctx.arc(tx, ty, 0.55, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = pal.oligoColor;
+      ctx.beginPath();
+      ctx.arc(oligoX, oligoY, 1.05, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 2. 星形膠質細胞 (Astrocyte)：星狀放射突起並伸出血管終足 (Endfeet)
+    const astroX = (gx + 0.22 + hash2(gx, gy, 81) * 0.56) * TILE;
+    const astroY = (gy + 0.22 + hash2(gx, gy, 82) * 0.56) * TILE;
+    const astroReg = getRegionAt(astroX, astroY);
+    if (astroReg !== 0 && astroReg !== 5) {
+      ctx.globalAlpha = applyTypeAlpha(microAlpha, 'astrocyte');
+      if (isHighlighted('astrocyte')) {
+        ctx.fillStyle = 'rgba(86, 211, 100, 0.35)';
+        ctx.beginPath();
+        ctx.arc(astroX, astroY, 2.9, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.strokeStyle = pal.astroColor;
+      ctx.lineWidth = 0.26;
+      for (let b = 0; b < 7; b++) {
+        const ang = (b / 7) * Math.PI * 2 + hash2(gx, gy, 83);
+        const len = 2.6 + hash2(gx, gy, 84 + b) * 2.2;
+        const ex = astroX + Math.cos(ang) * len;
+        const ey = astroY + Math.sin(ang) * len;
+        ctx.beginPath();
+        ctx.moveTo(astroX, astroY);
+        ctx.lineTo(ex, ey);
+        ctx.stroke();
+
+        // 血管終足小盤 (Perivascular endfoot)
+        if (b % 3 === 0) {
+          ctx.fillStyle = pal.astroColor;
+          ctx.beginPath();
+          ctx.arc(ex, ey, 0.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.fillStyle = pal.astroColor;
+      ctx.beginPath();
+      ctx.arc(astroX, astroY, 1.15, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 3. 微膠細胞 (Microglia)：細長分枝狀免疫監視細胞
+    if (hash2(gx, gy, 91) > 0.35) {
+      const micX = (gx + 0.18 + hash2(gx, gy, 92) * 0.64) * TILE;
+      const micY = (gy + 0.18 + hash2(gx, gy, 93) * 0.64) * TILE;
+      const micReg = getRegionAt(micX, micY);
+      if (micReg !== 0 && micReg !== 5) {
+        ctx.globalAlpha = applyTypeAlpha(microAlpha, 'microglia');
+        if (isHighlighted('microglia')) {
+          ctx.fillStyle = 'rgba(210, 168, 255, 0.35)';
+          ctx.beginPath();
+          ctx.arc(micX, micY, 2.7, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        const sway = Math.sin(time * 2 + gx + gy) * 0.25;
+
+        ctx.strokeStyle = pal.microgliaColor;
+        ctx.lineWidth = 0.22;
+        for (let m = 0; m < 4; m++) {
+          const ang = (m / 4) * Math.PI * 2 + 0.4;
+          const mx1 = micX + Math.cos(ang) * 2.0;
+          const my1 = micY + Math.sin(ang) * 2.0;
+          ctx.beginPath();
+          ctx.moveTo(micX, micY);
+          ctx.lineTo(mx1, my1);
+          ctx.lineTo(mx1 + Math.cos(ang + 0.6 + sway) * 1.3, my1 + Math.sin(ang + 0.6 + sway) * 1.3);
+          ctx.moveTo(mx1, my1);
+          ctx.lineTo(mx1 + Math.cos(ang - 0.6 - sway) * 1.3, my1 + Math.sin(ang - 0.6 - sway) * 1.3);
+          ctx.stroke();
+        }
+        ctx.fillStyle = pal.microgliaColor;
+        ctx.beginPath();
+        ctx.ellipse(micX, micY, 1.1, 0.55, 0.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  // 繪製神經元細胞本體、樹突、樹突棘，以及纖維末端與細胞體／樹突的突觸連接
+  function drawNeuronsInTile(gx, gy, TILE, reg, pal, time, microAlpha) {
+    ctx.globalAlpha = applyTypeAlpha(microAlpha, 'neuron');
+    const hl = isHighlighted('neuron');
+    // 純白質區（3, 4, 7）以纖維與膠細胞為主，僅偶見間質神經元；灰質區（1, 2, 6, 8）有高密度神經元
+    const isWhiteMatter = (reg === 3 || reg === 4 || reg === 7);
+    const neuronCount = isWhiteMatter ? (hash2(gx, gy, 101) > 0.78 ? 1 : 0) : (reg === 2 || reg === 8 ? 3 : 2);
+
+    for (let n = 0; n < neuronCount; n++) {
+      const nx = (gx + 0.22 + hash2(gx, gy, 110 + n) * 0.56) * TILE;
+      const ny = (gy + 0.22 + hash2(gx, gy, 120 + n) * 0.56) * TILE;
+      const cellReg = getRegionAt(nx, ny);
+      if (cellReg === 0 || cellReg === 5) continue;
+      if (!isWhiteMatter && !isGrayMatterRegion(cellReg)) continue;
+
+      // 檢查是否剛被使用者點擊激發
+      let excited = 0;
+      for (const p of activePulses) {
+        const dist = Math.hypot(p.wx - nx, p.wy - ny);
+        const dt = time - p.startTime;
+        if (dist < 18 && dt >= 0 && dt < 1.6) {
+          excited = Math.max(excited, Math.sin((1 - dt / 1.6) * Math.PI));
+        }
+      }
+      // 自然節律自發放電
+      const autoFire = Math.max(0, Math.sin(time * 2.2 + hash2(gx, gy, 130 + n) * 12) - 0.85) * 6;
+      const glow = Math.min(1, excited + autoFire);
+
+      // 皮質第 IV-VI 層與海馬迴以大型「錐體神經元 (Pyramidal Neuron)」為主；基底核與第 I-III 層含「多極星狀神經元」
+      const isPyramidal = (reg === 2 || reg === 8 || (reg === 1 && n === 0));
+      const somaRadius = reg === 2 ? 2.1 : 1.75;
+
+      // 計算頂端朝向（皮質朝向軟腦膜外表面）
+      const outAng = Math.atan2(ny, nx);
+
+      // 1. 繪製樹突分支與樹突棘 (Dendrites & Dendritic Spines)
+      ctx.strokeStyle = glow > 0.2 ? '#00f5d4' : pal.neuronStroke;
+      ctx.lineWidth = 0.42;
+
+      const dendriteEnds = [];
+      if (isPyramidal) {
+        // 頂端樹突 (Apical dendrite) 朝皮質表面延伸並分叉
+        const apX = nx + Math.cos(outAng) * 6.8;
+        const apY = ny + Math.sin(outAng) * 6.8;
+        ctx.beginPath();
+        ctx.moveTo(nx, ny);
+        ctx.lineTo(apX, apY);
+        ctx.stroke();
+        dendriteEnds.push({ x: apX, y: apY });
+
+        // 頂端樹突簇分叉
+        for (const side of [-0.55, 0.55]) {
+          const bx = apX + Math.cos(outAng + side) * 3.2;
+          const by = apY + Math.sin(outAng + side) * 3.2;
+          ctx.beginPath();
+          ctx.moveTo(apX, apY);
+          ctx.lineTo(bx, by);
+          ctx.stroke();
+          dendriteEnds.push({ x: bx, y: by });
+        }
+
+        // 基底樹突 (Basal dendrites)
+        for (const bAng of [outAng + 2.2, outAng - 2.2, outAng + 2.7, outAng - 2.7]) {
+          const bx = nx + Math.cos(bAng) * 4.5;
+          const by = ny + Math.sin(bAng) * 4.5;
+          ctx.beginPath();
+          ctx.moveTo(nx, ny);
+          ctx.lineTo(bx, by);
+          ctx.stroke();
+          dendriteEnds.push({ x: bx, y: by });
+        }
+      } else {
+        // 多極星狀神經元 (Stellate / Multipolar Neuron)
+        for (let d = 0; d < 6; d++) {
+          const dAng = (d / 6) * Math.PI * 2 + hash2(gx, gy, 140 + n);
+          const dx = nx + Math.cos(dAng) * 4.8;
+          const dy = ny + Math.sin(dAng) * 4.8;
+          ctx.beginPath();
+          ctx.moveTo(nx, ny);
+          ctx.lineTo(dx, dy);
+          ctx.stroke();
+          dendriteEnds.push({ x: dx, y: dy });
+        }
+      }
+
+      // 2. 傳入神經纖維直接連接到樹突終端與細胞本體的「突觸終扣 (Synaptic Boutons)」
+      for (let s = 0; s < Math.min(3, dendriteEnds.length); s++) {
+        const target = dendriteEnds[s];
+        const incAng = Math.atan2(target.y - ny, target.x - nx) + 0.5;
+        const srcX = target.x + Math.cos(incAng) * 4.5;
+        const srcY = target.y + Math.sin(incAng) * 4.5;
+
+        // 傳入軸突末梢
+        ctx.strokeStyle = pal.axonCore;
+        ctx.lineWidth = 0.3;
+        ctx.beginPath();
+        ctx.moveTo(srcX, srcY);
+        ctx.lineTo(target.x, target.y);
+        ctx.stroke();
+
+        // 膨大的突觸終扣緊貼樹突棘
+        ctx.fillStyle = glow > 0.2 ? '#72efdd' : '#ff922b';
+        ctx.beginPath();
+        ctx.arc(target.x, target.y, 0.52, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 3. 傳出軸突 (Efferent Axon) 從軸突丘向下延伸並接上髓鞘節段
+      const axAng = outAng + Math.PI;
+      const axEndX = nx + Math.cos(axAng) * 7.5;
+      const axEndY = ny + Math.sin(axAng) * 7.5;
+      ctx.strokeStyle = glow > 0.2 ? '#00f5d4' : pal.axonCore;
+      ctx.lineWidth = 0.38;
+      ctx.beginPath();
+      ctx.moveTo(nx, ny);
+      ctx.lineTo(axEndX, axEndY);
+      ctx.stroke();
+
+      // 傳出軸突上的第一段髓鞘
+      drawQuadraticSegment(
+        ctx, nx, ny, (nx + axEndX) * 0.5, (ny + axEndY) * 0.5, axEndX, axEndY,
+        0.35, 0.85, 0.72, pal.myelinFill
+      );
+
+      // 4. 神經元細胞本體 (Soma) 與細胞核、核仁
+      if (hl) {
+        ctx.fillStyle = 'rgba(255, 214, 153, 0.38)';
+        ctx.beginPath();
+        ctx.arc(nx, ny, somaRadius * 2.1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = glow > 0.2 ? '#a8ffef' : pal.neuronFill;
+      ctx.strokeStyle = pal.neuronStroke;
+      ctx.lineWidth = 0.35;
+
+      if (isPyramidal) {
+        // 三角錐形細胞本體
+        ctx.beginPath();
+        ctx.moveTo(nx + Math.cos(outAng) * somaRadius * 1.45, ny + Math.sin(outAng) * somaRadius * 1.45);
+        ctx.lineTo(nx + Math.cos(outAng + 2.35) * somaRadius * 1.15, ny + Math.sin(outAng + 2.35) * somaRadius * 1.15);
+        ctx.lineTo(nx + Math.cos(outAng - 2.35) * somaRadius * 1.15, ny + Math.sin(outAng - 2.35) * somaRadius * 1.15);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        // 多邊星狀細胞本體
+        ctx.beginPath();
+        ctx.arc(nx, ny, somaRadius * 0.9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      // 細胞核與深色核仁
+      ctx.fillStyle = pal.nucleusFill;
+      ctx.beginPath();
+      ctx.arc(nx, ny, somaRadius * 0.45, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(nx + 0.25, ny - 0.2, somaRadius * 0.16, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // 高倍率下在螢幕中央附近顯示微型構造指示標籤
+  function drawCenterAnnotations(pal) {
+    const reg = getRegionAt(cam.x, cam.y);
+    if (reg === 0) return;
+
+    ctx.save();
+    ctx.font = `600 ${11 / cam.zoom * (Math.min(width, height) / 760) > 0 ? 11 / (Math.min(width, height) / 760 * cam.zoom) : 0.1}px sans-serif`;
+    const fontSize = 11 / ((Math.min(width, height) / 760) * cam.zoom);
+    ctx.font = `600 ${fontSize}px sans-serif`;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.shadowColor = 'rgba(0,0,0,0.9)';
+    ctx.shadowBlur = fontSize * 0.35;
+
+    const TILE = 16;
+    const gx = Math.floor(cam.x / TILE);
+    const gy = Math.floor(cam.y / TILE);
+
+    if (reg === 5) {
+      ctx.fillText('← 側腦室腦脊髓液 (CSF)', cam.x, cam.y);
+    } else if (reg === 7) {
+      ctx.fillText('有髓鞘軸突橫切面 (內囊纖維束)', gx * TILE + 2, gy * TILE + 4);
+      ctx.fillText('寡突膠質細胞 / 星形膠質細胞', gx * TILE + 2, gy * TILE + 11);
+    } else if (reg === 3 || reg === 4) {
+      ctx.fillText('有髓鞘神經纖維與蘭氏結', gx * TILE + 2, gy * TILE + 3.5);
+      ctx.fillText('寡突膠質細胞包覆髓鞘', gx * TILE + 2, gy * TILE + 8.5);
+      ctx.fillText('微血管與星形膠質細胞終足', gx * TILE + 2, gy * TILE + 13.5);
+    } else {
+      ctx.fillText('神經元細胞體與樹突棘', gx * TILE + 2, gy * TILE + 3.5);
+      ctx.fillText('傳入纖維突觸終扣連接', gx * TILE + 2, gy * TILE + 8.5);
+      ctx.fillText('微血管網與三類神經膠細胞', gx * TILE + 2, gy * TILE + 13.5);
+    }
+    ctx.restore();
+  }
+
+  // 主渲染迴圈
+  function render(now) {
+    const time = now * 0.001;
+
+    // 平滑攝影機插值
+    cam.x += (cam.targetX - cam.x) * 0.16;
+    cam.y += (cam.targetY - cam.y) * 0.16;
+    cam.zoom += (cam.targetZoom - cam.zoom) * 0.16;
+
+    const pal = getPalette();
+
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    ctx.fillStyle = pal.bg;
+    ctx.fillRect(0, 0, width, height);
+
+    // 套用世界座標攝影機變換
+    const baseScale = Math.min(width, height) / 760;
+    const totalScale = baseScale * cam.zoom;
+    ctx.translate(width * 0.5, height * 0.5);
+    ctx.scale(totalScale, totalScale);
+    ctx.translate(-cam.x, -cam.y);
+
+    drawMacroAnatomy(pal, time);
+    drawMicroUniverse(pal, time);
+
+    // 繪製點選細胞的鎖定光環
+    if (selectedCell && cam.zoom >= 14) {
+      const pulse = 1 + Math.sin(time * 5) * 0.14;
+      ctx.save();
+      ctx.strokeStyle = '#58a6ff';
+      ctx.lineWidth = Math.max(0.25, 2.2 / totalScale);
+      ctx.beginPath();
+      ctx.arc(selectedCell.x, selectedCell.y, (selectedCell.radius + 1.2) * pulse, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.lineWidth = Math.max(0.15, 1.0 / totalScale);
+      ctx.setLineDash([1.2, 0.9]);
+      ctx.beginPath();
+      ctx.arc(selectedCell.x, selectedCell.y, selectedCell.radius + 2.1, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.restore();
+
+    // 更新浮動細胞資訊卡片位置
+    if (selectedCell && cam.zoom >= 14) {
+      const sp = worldToScreen(selectedCell.x, selectedCell.y);
+      const cardW = 265;
+      const cardH = cellInspectorEl.offsetHeight || 115;
+      const left = Math.min(width - cardW - 12, Math.max(12, sp.x + 18));
+      const top = Math.min(height - cardH - 42, Math.max(76, sp.y - cardH * 0.5));
+      cellInspectorEl.style.left = `${left}px`;
+      cellInspectorEl.style.top = `${top}px`;
+      cellInspectorEl.classList.add('visible');
+    } else {
+      cellInspectorEl.classList.remove('visible');
+    }
+
+    // 更新頂部 HUD 狀態
+    zoomValEl.textContent = `${cam.zoom.toFixed(1)}x`;
+    if (cam.zoom < 5) scaleLevelEl.textContent = '巨觀全腦解剖視野';
+    else if (cam.zoom < 18) scaleLevelEl.textContent = '中階深部核團與纖維束';
+    else if (cam.zoom < 95) scaleLevelEl.textContent = '組織學細胞層次與微血管網';
+    else scaleLevelEl.textContent = '超微神經元、突觸與髓鞘纖維';
+
+    const centerReg = getRegionAt(cam.x, cam.y);
+    regionNameEl.textContent = REGION_LABELS[centerReg] || '大腦組織';
+
+    // 同步滑桿位置（對數刻度）
+    const sliderRatio = Math.log(cam.zoom / MIN_ZOOM) / Math.log(MAX_ZOOM / MIN_ZOOM);
+    zoomSlider.value = Math.round(sliderRatio * 100);
+
+    requestAnimationFrame(render);
+  }
+  requestAnimationFrame(render);
+
+  // =========================================================================
+  // 互動控制：滑鼠拖曳、滾輪中心縮放、雙指觸控縮放、點擊激發神經元
+  // =========================================================================
+  let isDragging = false;
+  let dragStartX = 0, dragStartY = 0;
+  let movedDist = 0;
+  const pointers = new Map();
+  let lastPinchDist = 0;
+
+  canvas.addEventListener('pointerdown', (e) => {
+    canvas.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 1) {
+      isDragging = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      movedDist = 0;
+    } else if (pointers.size === 2) {
+      isDragging = false;
+      const pts = Array.from(pointers.values());
+      lastPinchDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+    }
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    const prev = pointers.get(e.pointerId);
+    const dx = e.clientX - prev.x;
+    const dy = e.clientY - prev.y;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (pointers.size === 1 && isDragging) {
+      movedDist += Math.hypot(dx, dy);
+      const baseScale = Math.min(width, height) / 760;
+      const s = baseScale * cam.targetZoom;
+      cam.targetX -= dx / s;
+      cam.targetY -= dy / s;
+    } else if (pointers.size === 2) {
+      const pts = Array.from(pointers.values());
+      const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+      if (lastPinchDist > 0) {
+        const factor = dist / lastPinchDist;
+        const midX = (pts[0].x + pts[1].x) * 0.5;
+        const midY = (pts[0].y + pts[1].y) * 0.5;
+        zoomAtScreenPoint(midX, midY, factor);
+      }
+      lastPinchDist = dist;
+    }
+  });
+
+  canvas.addEventListener('pointerup', (e) => {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) lastPinchDist = 0;
+    if (pointers.size === 0) {
+      if (isDragging && movedDist < 6) {
+        // 點擊事件：高倍率下辨識點選的細胞／構造並激發神經元動作電位
+        const wPos = screenToWorld(e.clientX, e.clientY);
+        const reg = getRegionAt(wPos.x, wPos.y);
+        if (cam.zoom >= 14) {
+          const baseScale = Math.min(width, height) / 760;
+          const totalScale = baseScale * cam.zoom;
+          const hitRadius = Math.max(2.2, 16 / totalScale);
+          const picked = pickCellAtWorld(wPos.x, wPos.y, hitRadius);
+          if (picked) {
+            selectedCell = picked;
+            const info = CELL_INFO[picked.typeKey];
+            ciSwatchEl.style.background = info.color;
+            ciTitleEl.textContent = info.title;
+            ciRegionEl.textContent = `所在區域：${REGION_LABELS[picked.reg] || '大腦組織'}`;
+            ciDescEl.textContent = info.desc;
+            if (info.isNeuron) {
+              activePulses.push({ wx: picked.x, wy: picked.y, startTime: performance.now() * 0.001 });
+              if (activePulses.length > 15) activePulses.shift();
+              statusMsgEl.textContent = `已點選「${info.title}」並激發動作電位！`;
+            } else {
+              statusMsgEl.textContent = `已點選「${info.title}」— ${info.desc}`;
+            }
+          } else {
+            selectedCell = null;
+            cellInspectorEl.classList.remove('visible');
+            if (reg !== 0 && reg !== 5) {
+              activePulses.push({ wx: wPos.x, wy: wPos.y, startTime: performance.now() * 0.001 });
+              if (activePulses.length > 15) activePulses.shift();
+              statusMsgEl.textContent = `已激發神經衝動！動作電位正沿有髓鞘纖維傳遞（${REGION_LABELS[reg]}）。`;
+            }
+          }
+        }
+      }
+      isDragging = false;
+    }
+  });
+
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.18 : 1 / 1.18;
+    zoomAtScreenPoint(e.clientX, e.clientY, factor);
+  }, { passive: false });
+
+  function zoomAtScreenPoint(sx, sy, factor) {
+    const before = screenToWorld(sx, sy);
+    const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, cam.targetZoom * factor));
+    const actualFactor = newZoom / cam.targetZoom;
+    cam.targetZoom = newZoom;
+
+    const baseScale = Math.min(width, height) / 760;
+    const newS = baseScale * newZoom;
+    cam.targetX = before.x - (sx - width * 0.5) / newS;
+    cam.targetY = before.y - (sy - height * 0.5) / newS;
+  }
+
+  // 滑桿控制
+  zoomSlider.addEventListener('input', () => {
+    const ratio = parseFloat(zoomSlider.value) / 100;
+    cam.targetZoom = MIN_ZOOM * Math.pow(MAX_ZOOM / MIN_ZOOM, ratio);
+  });
+
+  // 切換切面層位與組織染色按鈕
+  document.querySelectorAll('[data-plane]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-plane]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      planeMode = btn.dataset.plane;
+      statusMsgEl.textContent = planeMode === 'anterior'
+        ? '已切換至「前連合層面」：可觀察左右半球前連合橫向纖維與紋狀體灰質橋樑。'
+        : '已切換至「視丘與海馬迴層面」：可放大觀察深部視丘核團與顳葉內側海馬迴雙 C 結構。';
+    });
+  });
+
+  document.querySelectorAll('[data-stain]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-stain]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      stainMode = btn.dataset.stain;
+      statusMsgEl.textContent = stainMode === 'natural'
+        ? '已切換為「自然新鮮組織」：呈現活體灰質粉褐細胞本體、乳白脂質髓鞘與鮮紅微血管。'
+        : '已切換為「Nissl + LFB 染色」：尼氏體呈紫藍色，髓鞘脂質呈亮藍色對比。';
+    });
+  });
+
+  // 細胞高光複選控制
+  const highlightCheckboxes = document.querySelectorAll('[data-highlight]');
+  const clearHighlightBtn = document.getElementById('clear-highlight-btn');
+  const HIGHLIGHT_LABELS = {
+    neuron: '神經元',
+    myelin: '有髓鞘纖維',
+    astrocyte: '星形膠質細胞',
+    oligodendrocyte: '寡突膠質細胞',
+    microglia: '微膠細胞',
+    ependyma: '室管膜細胞',
+    capillary: '微血管'
+  };
+
+  function syncHighlightUI() {
+    highlightCheckboxes.forEach(cb => {
+      cb.checked = highlightedTypes.has(cb.dataset.highlight);
+      cb.closest('.legend-item').classList.toggle('selected', cb.checked);
+    });
+    clearHighlightBtn.disabled = highlightedTypes.size === 0;
+    if (highlightedTypes.size === 0) {
+      statusMsgEl.textContent = '已取消所有細胞高光，恢復完整顯微組織視野。';
+    } else {
+      const names = Array.from(highlightedTypes).map(k => HIGHLIGHT_LABELS[k] || k).join('、');
+      const zoomHint = cam.zoom < 18 ? '（請放大至 ≥18x 或點擊下方預設區域觀察）' : '';
+      statusMsgEl.textContent = `已高光強調：${names}${zoomHint}`;
+    }
+  }
+
+  highlightCheckboxes.forEach(cb => {
+    cb.addEventListener('change', () => {
+      const key = cb.dataset.highlight;
+      if (cb.checked) highlightedTypes.add(key);
+      else highlightedTypes.delete(key);
+      syncHighlightUI();
+    });
+  });
+
+  clearHighlightBtn.addEventListener('click', () => {
+    highlightedTypes.clear();
+    syncHighlightUI();
+  });
+
+  // 預設區域快速飛行跳轉
+  const PRESETS = {
+    macro:     { x: 0,    y: 10,  zoom: 1.0,   msg: '已返回 1x 全腦冠狀切面巨觀視野。' },
+    cortex:    { x: -195, y: -155, zoom: 140,  msg: '已放大至大腦皮質灰質：可觀察錐體神經元、樹突棘、傳入纖維突觸與微血管。' },
+    striatum:  { x: 82,   y: 15,  zoom: 160,   msg: '已放大至內囊與紋狀體交界：可對比橫切同心圓髓鞘軸突與灰質核團神經元。' },
+    callosum:  { x: 0,    y: -66, zoom: 240,   msg: '已放大至胼胝體白質：可見密集水平有髓鞘神經纖維、蘭氏結與寡突膠質細胞。' },
+    ventricle: { x: -34,  y: -14, zoom: 220,   msg: '已放大至側腦室邊界：可見整齊排列的室管膜立方細胞與伸入腦脊髓液的擺動纖毛。' },
+    hippo:     { x: 108,  y: 108, zoom: 180,   plane: 'hippocampus', msg: '已切換至視丘與海馬迴層面並放大海馬迴錐體細胞層。' }
+  };
+
+  document.querySelectorAll('[data-preset]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const p = PRESETS[btn.dataset.preset];
+      if (!p) return;
+      if (p.plane && planeMode !== p.plane) {
+        planeMode = p.plane;
+        document.querySelectorAll('[data-plane]').forEach(b => {
+          b.classList.toggle('active', b.dataset.plane === p.plane);
+        });
+      }
+      cam.targetX = p.x;
+      cam.targetY = p.y;
+      cam.targetZoom = p.zoom;
+      statusMsgEl.textContent = p.msg;
+    });
+  });
+})();
+</script>
+</body>
+</html>

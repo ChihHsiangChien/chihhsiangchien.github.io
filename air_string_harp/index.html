@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>空間虛擬光束豎琴 (Air-String Harp)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      background: #090b10;
+      color: #f1f5f9;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+    }
+    #stage {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    video { display: none; }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+    }
+    .hud-top {
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      right: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .panel {
+      pointer-events: auto;
+      background: rgba(15, 23, 42, 0.78);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 12px;
+      padding: 8px 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    }
+    button, select {
+      background: #1e293b;
+      color: #f8fafc;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 8px;
+      padding: 7px 12px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    button:hover, select:hover { background: #334155; }
+    button.primary {
+      background: #6366f1;
+      border-color: #818cf8;
+      font-weight: 600;
+    }
+    button.primary:hover { background: #4f46e5; }
+    button.danger {
+      background: rgba(220, 38, 38, 0.25);
+      border-color: rgba(248, 113, 113, 0.45);
+      color: #fecaca;
+    }
+    button.danger:hover { background: rgba(220, 38, 38, 0.45); }
+    .status-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 44px;
+      background: rgba(9, 11, 16, 0.86);
+      border-top: 1px solid rgba(148, 163, 184, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      font-size: 14px;
+      color: #cbd5e1;
+      z-index: 10;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: rgba(99, 102, 241, 0.25);
+      color: #c7d2fe;
+      border: 1px solid rgba(129, 140, 248, 0.4);
+    }
+    .badge.paused {
+      background: rgba(245, 158, 11, 0.25);
+      color: #fde68a;
+      border-color: rgba(251, 191, 36, 0.5);
+    }
+    .badge.drawing {
+      background: rgba(16, 185, 129, 0.25);
+      color: #a7f3d0;
+      border-color: rgba(52, 211, 153, 0.5);
+    }
+    button.accent {
+      background: rgba(16, 185, 129, 0.25);
+      border-color: rgba(52, 211, 153, 0.5);
+      color: #a7f3d0;
+      font-weight: 600;
+    }
+    button.accent:hover { background: rgba(16, 185, 129, 0.42); }
+
+    /* 可縮放參數控制面板 */
+    .control-drawer {
+      position: fixed;
+      top: 70px;
+      right: 14px;
+      width: 310px;
+      max-height: calc(100vh - 130px);
+      background: rgba(15, 23, 42, 0.86);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      border-radius: 14px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+      z-index: 15;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: width 0.22s ease, opacity 0.2s ease, transform 0.22s ease;
+    }
+    .control-drawer.collapsed {
+      width: auto;
+      max-height: none;
+    }
+    .control-drawer.collapsed .drawer-body {
+      display: none;
+    }
+    .drawer-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 14px;
+      background: rgba(30, 41, 59, 0.65);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+      font-size: 13px;
+      font-weight: 600;
+      color: #e2e8f0;
+    }
+    .control-drawer.collapsed .drawer-header {
+      border-bottom: none;
+      padding: 8px 12px;
+    }
+    .drawer-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .drawer-actions button {
+      padding: 4px 8px;
+      font-size: 12px;
+      border-radius: 6px;
+    }
+    .drawer-body {
+      padding: 12px 14px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .drawer-body::-webkit-scrollbar { width: 6px; }
+    .drawer-body::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.3);
+      border-radius: 999px;
+    }
+    .ctrl-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+    }
+    .ctrl-group:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .ctrl-group-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #94a3b8;
+    }
+    .ctrl-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .ctrl-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12.5px;
+      color: #cbd5e1;
+    }
+    .ctrl-val {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      color: #a5b4fc;
+      font-weight: 600;
+    }
+    .ctrl-row input[type="range"] {
+      width: 100%;
+      accent-color: #818cf8;
+      cursor: pointer;
+      height: 5px;
+    }
+    .harp-preset-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .harp-preset-row select {
+      flex: 1;
+      font-size: 12.5px;
+      padding: 5px 8px;
+    }
+    .harp-preset-row button {
+      font-size: 12.5px;
+      padding: 5px 10px;
+    }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <video id="webcam" autoplay playsinline></video>
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <div class="hud-top">
+    <div class="panel">
+      <button id="btnStartCam" class="primary">啟動攝影機與音效</button>
+      <button id="btnSimMode">滑鼠模擬模式：關</button>
+      <select id="scaleSelect" title="音階調律">
+        <option value="pentatonic" selected>五聲音階 (C D E G A)</option>
+        <option value="major">自然大調 (C D E F G A B)</option>
+        <option value="continuous">連續頻率 (無段音高)</option>
+      </select>
+    </div>
+    <div class="panel">
+      <button id="btnGenerateHarp" class="accent">✨ 直接產生豎琴</button>
+      <button id="btnUndo">刪除最後一條弦</button>
+      <button id="btnClear" class="danger">清空全部弦</button>
+    </div>
+  </div>
+
+  <!-- 可縮放閾值控制面板 -->
+  <aside id="controlDrawer" class="control-drawer collapsed" aria-label="參數控制面板">
+    <div class="drawer-header">
+      <span>⚙️ 參數與閾值控制</span>
+      <div class="drawer-actions">
+        <button id="btnResetParams" title="恢復預設參數">重置</button>
+        <button id="btnToggleDrawer">展開</button>
+      </div>
+    </div>
+    <div class="drawer-body">
+      <div class="ctrl-group">
+        <div class="ctrl-group-title">豎琴快速生成</div>
+        <div class="harp-preset-row">
+          <select id="harpLayoutSelect" title="豎琴排列樣式">
+            <option value="arch" selected>經典弧形豎琴</option>
+            <option value="parallel">平行豎琴</option>
+            <option value="fan">扇形展開豎琴</option>
+          </select>
+          <button id="btnPanelGenHarp" class="accent">生成</button>
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label"><span>琴弦數量</span><span class="ctrl-val" id="valHarpCount">10 條</span></div>
+          <input type="range" id="rngHarpCount" min="5" max="16" step="1" value="10" />
+        </div>
+      </div>
+
+      <div class="ctrl-group">
+        <div class="ctrl-group-title">捏合與拉弦判定</div>
+        <div class="ctrl-row">
+          <div class="ctrl-label"><span>進入捏合距離 (Enter)</span><span class="ctrl-val" id="valPinchEnter">45 px</span></div>
+          <input type="range" id="rngPinchEnter" min="18" max="90" step="1" value="45" />
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label"><span>放開捏合距離 (Exit)</span><span class="ctrl-val" id="valPinchExit">60 px</span></div>
+          <input type="range" id="rngPinchExit" min="20" max="100" step="1" value="60" />
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label"><span>手部掉幀容錯幀數</span><span class="ctrl-val" id="valMissFrameGrace">4 幀</span></div>
+          <input type="range" id="rngMissFrameGrace" min="0" max="15" step="1" value="4" />
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label"><span>最小定稿弦長</span><span class="ctrl-val" id="valMinStringLen">65 px</span></div>
+          <input type="range" id="rngMinStringLen" min="30" max="200" step="5" value="65" />
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label"><span>單手放開寬限期</span><span class="ctrl-val" id="valPauseGrace">900 ms</span></div>
+          <input type="range" id="rngPauseGrace" min="300" max="2000" step="50" value="900" />
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label"><span>單手停滯逾時取消</span><span class="ctrl-val" id="valPauseTimeout">1300 ms</span></div>
+          <input type="range" id="rngPauseTimeout" min="500" max="3000" step="50" value="1300" />
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label"><span>定稿鎖定冷卻</span><span class="ctrl-val" id="valCooldown">260 ms</span></div>
+          <input type="range" id="rngCooldown" min="100" max="1000" step="20" value="260" />
+        </div>
+      </div>
+
+      <div class="ctrl-group">
+        <div class="ctrl-group-title">撥弦靈敏度</div>
+        <div class="ctrl-row">
+          <div class="ctrl-label"><span>最小撥弦速度</span><span class="ctrl-val" id="valMinPluckSpeed">2.5 px</span></div>
+          <input type="range" id="rngMinPluckSpeed" min="0.5" max="15" step="0.5" value="2.5" />
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label"><span>最大撥弦速度 (防瞬移)</span><span class="ctrl-val" id="valMaxPluckSpeed">220 px</span></div>
+          <input type="range" id="rngMaxPluckSpeed" min="80" max="400" step="10" value="220" />
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label"><span>單弦連撥冷卻</span><span class="ctrl-val" id="valPluckCooldown">130 ms</span></div>
+          <input type="range" id="rngPluckCooldown" min="40" max="400" step="10" value="130" />
+        </div>
+      </div>
+
+      <div class="ctrl-group">
+        <div class="ctrl-group-title">追蹤平滑與視聽</div>
+        <div class="ctrl-row">
+          <div class="ctrl-label"><span>手部平滑係數 (EMA α)</span><span class="ctrl-val" id="valEmaAlpha">0.55</span></div>
+          <input type="range" id="rngEmaAlpha" min="0.15" max="1.0" step="0.05" value="0.55" />
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label"><span>攝影機背景透明度</span><span class="ctrl-val" id="valCamAlpha">0.72</span></div>
+          <input type="range" id="rngCamAlpha" min="0" max="1.0" step="0.04" value="0.72" />
+        </div>
+        <div class="ctrl-row">
+          <div class="ctrl-label"><span>琴弦延音衰減 (Decay)</span><span class="ctrl-val" id="valDecay">0.9945</span></div>
+          <input type="range" id="rngDecay" min="0.980" max="0.999" step="0.0005" value="0.9945" />
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="status-bar">
+    <div>
+      狀態：<span id="stateBadge" class="badge">IDLE 待機中</span>
+      <span id="stateHint" style="margin-left:10px;">雙手拇指與食指同時捏合可拉弦，雙手皆放開才固定</span>
+    </div>
+    <div>已固定弦數：<strong id="stringCount">0</strong></div>
+  </div>
+
+  <script type="module">
+    import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+
+    const video = document.getElementById("webcam");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const btnStartCam = document.getElementById("btnStartCam");
+    const btnSimMode = document.getElementById("btnSimMode");
+    const scaleSelect = document.getElementById("scaleSelect");
+    const btnUndo = document.getElementById("btnUndo");
+    const btnClear = document.getElementById("btnClear");
+    const btnGenerateHarp = document.getElementById("btnGenerateHarp");
+    const btnPanelGenHarp = document.getElementById("btnPanelGenHarp");
+    const harpLayoutSelect = document.getElementById("harpLayoutSelect");
+    const controlDrawer = document.getElementById("controlDrawer");
+    const btnToggleDrawer = document.getElementById("btnToggleDrawer");
+    const btnResetParams = document.getElementById("btnResetParams");
+    const stateBadge = document.getElementById("stateBadge");
+    const stateHint = document.getElementById("stateHint");
+    const stringCountEl = document.getElementById("stringCount");
+
+    // ================= 0. 可調參數與縮放面板 =================
+    const STORAGE_KEY = "airStringHarpSettings_v1";
+    const DEFAULT_PARAMS = {
+      harpCount: 10,
+      pinchEnter: 45,
+      pinchExit: 60,
+      missFrameGrace: 4,
+      minStringLen: 65,
+      pauseGraceMs: 900,
+      pauseTimeoutMs: 1300,
+      cooldownMs: 260,
+      minPluckSpeed: 2.5,
+      maxPluckSpeed: 220,
+      pluckCooldownMs: 130,
+      emaAlpha: 0.55,
+      camAlpha: 0.72,
+      decay: 0.9945
+    };
+    const params = { ...DEFAULT_PARAMS };
+
+    const SLIDER_BINDINGS = [
+      { key: "harpCount", inputId: "rngHarpCount", valId: "valHarpCount", fmt: (v) => `${v} 條` },
+      { key: "pinchEnter", inputId: "rngPinchEnter", valId: "valPinchEnter", fmt: (v) => `${v} px` },
+      { key: "pinchExit", inputId: "rngPinchExit", valId: "valPinchExit", fmt: (v) => `${v} px` },
+      { key: "missFrameGrace", inputId: "rngMissFrameGrace", valId: "valMissFrameGrace", fmt: (v) => `${v} 幀` },
+      { key: "minStringLen", inputId: "rngMinStringLen", valId: "valMinStringLen", fmt: (v) => `${v} px` },
+      { key: "pauseGraceMs", inputId: "rngPauseGrace", valId: "valPauseGrace", fmt: (v) => `${v} ms` },
+      { key: "pauseTimeoutMs", inputId: "rngPauseTimeout", valId: "valPauseTimeout", fmt: (v) => `${v} ms` },
+      { key: "cooldownMs", inputId: "rngCooldown", valId: "valCooldown", fmt: (v) => `${v} ms` },
+      { key: "minPluckSpeed", inputId: "rngMinPluckSpeed", valId: "valMinPluckSpeed", fmt: (v) => `${v} px` },
+      { key: "maxPluckSpeed", inputId: "rngMaxPluckSpeed", valId: "valMaxPluckSpeed", fmt: (v) => `${v} px` },
+      { key: "pluckCooldownMs", inputId: "rngPluckCooldown", valId: "valPluckCooldown", fmt: (v) => `${v} ms` },
+      { key: "emaAlpha", inputId: "rngEmaAlpha", valId: "valEmaAlpha", fmt: (v) => Number(v).toFixed(2) },
+      { key: "camAlpha", inputId: "rngCamAlpha", valId: "valCamAlpha", fmt: (v) => Number(v).toFixed(2) },
+      { key: "decay", inputId: "rngDecay", valId: "valDecay", fmt: (v) => Number(v).toFixed(4) }
+    ];
+
+    function saveSettings() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          params,
+          scale: scaleSelect.value,
+          layout: harpLayoutSelect.value
+        }));
+      } catch (_) {}
+    }
+
+    function loadSettings() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (parsed.params && typeof parsed.params === "object") {
+          for (const k of Object.keys(DEFAULT_PARAMS)) {
+            if (typeof parsed.params[k] === "number" && Number.isFinite(parsed.params[k])) {
+              params[k] = parsed.params[k];
+            }
+          }
+        }
+        if (parsed.scale) scaleSelect.value = parsed.scale;
+        if (parsed.layout) harpLayoutSelect.value = parsed.layout;
+      } catch (_) {}
+    }
+
+    function syncSlidersFromParams() {
+      for (const b of SLIDER_BINDINGS) {
+        const input = document.getElementById(b.inputId);
+        const valEl = document.getElementById(b.valId);
+        if (input && valEl) {
+          input.value = params[b.key];
+          valEl.textContent = b.fmt(params[b.key]);
+        }
+      }
+    }
+
+    loadSettings();
+
+    for (const b of SLIDER_BINDINGS) {
+      const input = document.getElementById(b.inputId);
+      const valEl = document.getElementById(b.valId);
+      input.addEventListener("input", () => {
+        const num = parseFloat(input.value);
+        params[b.key] = num;
+        valEl.textContent = b.fmt(num);
+        saveSettings();
+      });
+    }
+
+    scaleSelect.addEventListener("change", saveSettings);
+    harpLayoutSelect.addEventListener("change", saveSettings);
+
+    btnToggleDrawer.addEventListener("click", () => {
+      const collapsed = controlDrawer.classList.toggle("collapsed");
+      btnToggleDrawer.textContent = collapsed ? "展開" : "收合";
+    });
+
+    btnResetParams.addEventListener("click", () => {
+      Object.assign(params, DEFAULT_PARAMS);
+      syncSlidersFromParams();
+      saveSettings();
+    });
+    syncSlidersFromParams();
+
+    // 畫布尺寸自適應
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener("resize", resize);
+    resize();
+
+    // ================= 1. Web Audio Karplus-Strong 撥弦合成器 =================
+    let audioCtx = null;
+    function ensureAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === "suspended") {
+        audioCtx.resume();
+      }
+    }
+
+    function playPluck(freq, velocity = 0.8, pan = 0) {
+      ensureAudio();
+      const sampleRate = audioCtx.sampleRate;
+      const duration = 2.4;
+      const totalSamples = Math.floor(sampleRate * duration);
+      const buffer = audioCtx.createBuffer(1, totalSamples, sampleRate);
+      const data = buffer.getChannelData(0);
+
+      const delayLength = Math.max(2, Math.round(sampleRate / freq));
+      const ring = new Float32Array(delayLength);
+      for (let i = 0; i < delayLength; i++) {
+        ring[i] = (Math.random() * 2 - 1) * velocity;
+      }
+
+      const decay = params.decay;
+      let ptr = 0;
+      for (let i = 0; i < totalSamples; i++) {
+        const nextPtr = (ptr + 1) % delayLength;
+        const avg = 0.5 * (ring[ptr] + ring[nextPtr]) * decay;
+        data[i] = ring[ptr];
+        ring[ptr] = avg;
+        ptr = nextPtr;
+      }
+
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+
+      const gainNode = audioCtx.createGain();
+      gainNode.gain.setValueAtTime(Math.min(1.0, 0.35 + velocity * 0.65), audioCtx.currentTime);
+
+      const panner = audioCtx.createStereoPanner();
+      panner.pan.setValueAtTime(Math.max(-1, Math.min(1, pan)), audioCtx.currentTime);
+
+      source.connect(gainNode);
+      gainNode.connect(panner);
+      panner.connect(audioCtx.destination);
+      source.start();
+    }
+
+    // ================= 2. 音高與音階吸附計算 =================
+    const SCALES = {
+      pentatonic: [0, 2, 4, 7, 9],
+      major: [0, 2, 4, 5, 7, 9, 11]
+    };
+
+    function lengthToFrequency(lenPx) {
+      // 弦越長音越低，範圍約 80px ~ 950px 對應 C5 (523Hz) ~ C3 (130.8Hz)
+      const clamped = Math.max(80, Math.min(950, lenPx));
+      const t = (clamped - 80) / (950 - 80); // 0(短/高音) -> 1(長/低音)
+      const midiFloat = 76 - t * 28; // E5(76) 到 E3(48)
+
+      const mode = scaleSelect.value;
+      if (mode === "continuous") {
+        return 440 * Math.pow(2, (midiFloat - 69) / 12);
+      }
+
+      const intervals = SCALES[mode];
+      const baseNote = Math.round(midiFloat);
+      let bestMidi = baseNote;
+      let minDiff = Infinity;
+      for (let m = 45; m <= 80; m++) {
+        const semitone = ((m % 12) + 12) % 12;
+        if (intervals.includes(semitone)) {
+          const diff = Math.abs(m - midiFloat);
+          if (diff < minDiff) {
+            minDiff = diff;
+            bestMidi = m;
+          }
+        }
+      }
+      return 440 * Math.pow(2, (bestMidi - 69) / 12);
+    }
+
+    function freqToNoteName(freq) {
+      const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+      const midi = Math.round(69 + 12 * Math.log2(freq / 440));
+      const name = names[((midi % 12) + 12) % 12];
+      const octave = Math.floor(midi / 12) - 1;
+      return `${name}${octave}`;
+    }
+
+    // ================= 3. 四段式防抖狀態機與琴弦資料 =================
+    const STATE = {
+      IDLE: "IDLE",
+      DRAWING: "DRAWING",
+      PAUSED: "PAUSED",
+      COOLDOWN: "COOLDOWN"
+    };
+
+    let stringState = STATE.IDLE;
+    let draftString = null;
+    let pauseStartTime = 0;
+    let cooldownEndTime = 0;
+
+    const strings = [];
+    const particles = [];
+
+    // 雙閾值遲滯判定（防止臨界距離抖動造成重複生弦）
+    let leftPinchState = false;
+    let rightPinchState = false;
+    let leftMissFrames = 0;
+    let rightMissFrames = 0;
+
+    function updatePinchHysteresis(prevState, distPx) {
+      const ENTER_THRESH = params.pinchEnter;
+      const EXIT_THRESH = Math.max(params.pinchEnter, params.pinchExit);
+      if (!prevState && distPx < ENTER_THRESH) return true;
+      if (prevState && distPx > EXIT_THRESH) return false;
+      return prevState;
+    }
+
+    function updateStateUI(statusText, hintText, badgeClass = "") {
+      stateBadge.textContent = statusText;
+      stateBadge.className = "badge " + badgeClass;
+      stateHint.textContent = hintText;
+      stringCountEl.textContent = strings.length;
+    }
+
+    function createPermanentString(x1, y1, x2, y2, customFreq = null) {
+      const len = Math.hypot(x2 - x1, y2 - y1);
+      const freq = customFreq ?? lengthToFrequency(len);
+      const hue = Math.round(((freq - 130) / 450) * 140 + 200) % 360;
+      return {
+        id: Date.now() + Math.random(),
+        x1, y1, x2, y2,
+        length: len,
+        frequency: freq,
+        note: freqToNoteName(freq),
+        amplitude: 14, // 剛建立時微幅共鳴
+        phase: 0,
+        lastPluckTime: performance.now(),
+        hue
+      };
+    }
+
+    function commitDraftString(now) {
+      if (draftString) {
+        const len = Math.hypot(draftString.x2 - draftString.x1, draftString.y2 - draftString.y1);
+        if (len >= params.minStringLen) {
+          const newStr = createPermanentString(draftString.x1, draftString.y1, draftString.x2, draftString.y2);
+          strings.push(newStr);
+          const pan = ((newStr.x1 + newStr.x2) * 0.5 / canvas.width) * 2 - 1;
+          playPluck(newStr.frequency, 0.55, pan);
+          spawnPluckParticles((newStr.x1 + newStr.x2) * 0.5, (newStr.y1 + newStr.y2) * 0.5, newStr.hue, 18);
+        }
+      }
+      draftString = null;
+      cooldownEndTime = now + params.cooldownMs;
+      stringState = STATE.COOLDOWN;
+      updateStateUI("COOLDOWN 鎖定冷卻", "琴弦已固定！張開手掌揮動指尖即可個別彈奏");
+    }
+
+    function cancelDraftString(now, reason = "已取消拉弦") {
+      draftString = null;
+      cooldownEndTime = now + Math.min(params.cooldownMs, 220);
+      stringState = STATE.COOLDOWN;
+      updateStateUI("IDLE 待機中", reason);
+    }
+
+    function processStringStateMachine(now, leftPinch, rightPinch, leftPos, rightPos) {
+      switch (stringState) {
+        case STATE.COOLDOWN:
+          if (now >= cooldownEndTime && !leftPinch && !rightPinch) {
+            stringState = STATE.IDLE;
+            updateStateUI("IDLE 待機中", "雙手拇指與食指同時捏合可拉弦，雙手皆放開才固定");
+          }
+          break;
+
+        case STATE.IDLE:
+          if (leftPinch && rightPinch && leftPos && rightPos) {
+            draftString = {
+              x1: leftPos.x,
+              y1: leftPos.y,
+              x2: rightPos.x,
+              y2: rightPos.y,
+              status: "drawing"
+            };
+            stringState = STATE.DRAWING;
+            updateStateUI("DRAWING 雙手拉弦中", "調整兩手距離決定音高，雙手放開即可將弦固定在畫面上", "drawing");
+          }
+          break;
+
+        case STATE.DRAWING:
+          if (leftPinch && rightPinch) {
+            if (leftPos) { draftString.x1 = leftPos.x; draftString.y1 = leftPos.y; }
+            if (rightPos) { draftString.x2 = rightPos.x; draftString.y2 = rightPos.y; }
+          } else if (!leftPinch && !rightPinch) {
+            commitDraftString(now);
+          } else {
+            // 單手先放開 -> 進入凍結暫停狀態，絕不在此時生成新弦
+            draftString.status = "paused";
+            pauseStartTime = now;
+            stringState = STATE.PAUSED;
+            updateStateUI("PAUSED 單手鬆開・凍結中", "請放開另一隻手以固定琴弦（或重新捏合繼續調整）", "paused");
+          }
+          break;
+
+        case STATE.PAUSED:
+          if (leftPinch && rightPinch) {
+            // 先放開的手重新捏合，恢復拉弦
+            draftString.status = "drawing";
+            stringState = STATE.DRAWING;
+            updateStateUI("DRAWING 雙手拉弦中", "已恢復雙手拉弦，雙手全放開即可定稿", "drawing");
+          } else if (!leftPinch && !rightPinch) {
+            // 另一隻手也放開了！檢查是否在寬限期內
+            if (now - pauseStartTime <= params.pauseGraceMs) {
+              commitDraftString(now);
+            } else {
+              cancelDraftString(now, "放開間隔過久，已取消該條預覽弦");
+            }
+          } else {
+            // 單手持續捏住超過逾時時間未放開，自動取消
+            if (now - pauseStartTime > params.pauseTimeoutMs) {
+              cancelDraftString(now, "單手停滯逾時，已自動取消");
+            }
+          }
+          break;
+      }
+    }
+
+    // ================= 4. 撥弦線段交叉偵測 =================
+    const prevFingerTips = new Map();
+
+    function ccw(ax, ay, bx, by, cx, cy) {
+      return (cy - ay) * (bx - ax) > (by - ay) * (cx - ax);
+    }
+
+    function segmentsIntersect(ax, ay, bx, by, cx, cy, dx, dy) {
+      return (
+        ccw(ax, ay, cx, cy, dx, dy) !== ccw(bx, by, cx, cy, dx, dy) &&
+        ccw(ax, ay, bx, by, cx, cy) !== ccw(ax, ay, bx, by, dx, dy)
+      );
+    }
+
+    function checkPluckCrossing(fingerKey, currX, currY, now) {
+      const prev = prevFingerTips.get(fingerKey);
+      prevFingerTips.set(fingerKey, { x: currX, y: currY });
+      if (!prev) return;
+
+      const speed = Math.hypot(currX - prev.x, currY - prev.y);
+      if (speed < params.minPluckSpeed || speed > params.maxPluckSpeed) return;
+
+      for (const s of strings) {
+        if (now - s.lastPluckTime < params.pluckCooldownMs) continue;
+        if (segmentsIntersect(prev.x, prev.y, currX, currY, s.x1, s.y1, s.x2, s.y2)) {
+          s.lastPluckTime = now;
+          const velocity = Math.min(1.0, Math.max(0.25, speed / 38));
+          s.amplitude = Math.min(34, 10 + velocity * 26);
+          s.phase = 0;
+
+          const pan = (currX / canvas.width) * 2 - 1;
+          playPluck(s.frequency, velocity, pan);
+          spawnPluckParticles(currX, currY, s.hue, Math.round(10 + velocity * 14));
+        }
+      }
+    }
+
+    function spawnPluckParticles(x, y, hue, count) {
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const spd = 1.2 + Math.random() * 4.2;
+        particles.push({
+          x, y,
+          vx: Math.cos(angle) * spd,
+          vy: Math.sin(angle) * spd,
+          life: 1.0,
+          hue
+        });
+      }
+    }
+
+    // ================= 5. MediaPipe HandLandmarker 與 EMA 平滑 =================
+    let handLandmarker = null;
+    let cameraRunning = false;
+    let lastVideoTime = -1;
+    const smoothedLandmarks = { Left: null, Right: null };
+
+    async function initMediaPipe() {
+      btnStartCam.textContent = "載入模型中...";
+      btnStartCam.disabled = true;
+      ensureAudio();
+
+      const vision = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+      );
+      handLandmarker = await HandLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath:
+            "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+          delegate: "GPU"
+        },
+        runningMode: "VIDEO",
+        numHands: 2,
+        minHandDetectionConfidence: 0.6,
+        minHandPresenceConfidence: 0.6,
+        minTrackingConfidence: 0.6
+      });
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 1280, height: 720, facingMode: "user" },
+        audio: false
+      });
+      video.srcObject = stream;
+      await video.play();
+      cameraRunning = true;
+      btnStartCam.textContent = "攝影機運作中";
+    }
+
+    btnStartCam.addEventListener("click", () => {
+      initMediaPipe().catch((err) => {
+        console.error(err);
+        btnStartCam.textContent = "啟動失敗（可改用模擬模式）";
+        btnStartCam.disabled = false;
+      });
+    });
+
+    function smoothHand(handKey, rawPoints) {
+      const alpha = params.emaAlpha;
+      if (!smoothedLandmarks[handKey]) {
+        smoothedLandmarks[handKey] = rawPoints.map((p) => ({ x: p.x, y: p.y }));
+        return smoothedLandmarks[handKey];
+      }
+      const prev = smoothedLandmarks[handKey];
+      for (let i = 0; i < rawPoints.length; i++) {
+        prev[i].x = prev[i].x * (1 - alpha) + rawPoints[i].x * alpha;
+        prev[i].y = prev[i].y * (1 - alpha) + rawPoints[i].y * alpha;
+      }
+      return prev;
+    }
+
+    // ================= 6. 無鏡頭滑鼠模擬模式 =================
+    let simMode = false;
+    let simLeftPinch = false;
+    let simRightPinch = false;
+    let simLeftPos = { x: canvas.width * 0.35, y: canvas.height * 0.5 };
+    let simRightPos = { x: canvas.width * 0.65, y: canvas.height * 0.5 };
+    let simDragging = false;
+
+    btnSimMode.addEventListener("click", () => {
+      simMode = !simMode;
+      ensureAudio();
+      btnSimMode.textContent = `滑鼠模擬模式：${simMode ? "開" : "關"}`;
+      if (simMode) {
+        updateStateUI("SIM 模擬模式", "按住滑鼠左鍵拖曳拉弦、放開即定稿；未按鍵直接揮過琴弦即可彈奏");
+      }
+    });
+
+    canvas.addEventListener("pointerdown", (e) => {
+      if (!simMode) return;
+      ensureAudio();
+      simDragging = true;
+      simLeftPos = { x: e.clientX, y: e.clientY };
+      simRightPos = { x: e.clientX + 5, y: e.clientY };
+      simLeftPinch = true;
+      simRightPinch = true;
+    });
+
+    canvas.addEventListener("pointermove", (e) => {
+      if (!simMode) return;
+      const now = performance.now();
+      if (simDragging) {
+        simRightPos = { x: e.clientX, y: e.clientY };
+      } else {
+        checkPluckCrossing("sim_cursor", e.clientX, e.clientY, now);
+      }
+    });
+
+    window.addEventListener("pointerup", () => {
+      if (!simMode || !simDragging) return;
+      simDragging = false;
+      simLeftPinch = false;
+      simRightPinch = false;
+    });
+
+    btnUndo.addEventListener("click", () => {
+      if (strings.length > 0) {
+        strings.pop();
+        stringCountEl.textContent = strings.length;
+      }
+    });
+
+    btnClear.addEventListener("click", () => {
+      strings.length = 0;
+      draftString = null;
+      stringState = STATE.IDLE;
+      updateStateUI("IDLE 待機中", "已清空所有琴弦");
+    });
+
+    // ================= 6.5 直接產生豎琴功能 =================
+    function getScaleFrequencies(count) {
+      const mode = scaleSelect.value;
+      if (mode === "continuous") {
+        // 連續頻率模式下，平均分佈於 C3 (48) ~ E5 (76)
+        const freqs = [];
+        for (let i = 0; i < count; i++) {
+          const t = count === 1 ? 0.5 : i / (count - 1);
+          const midi = 48 + t * 28;
+          freqs.push(440 * Math.pow(2, (midi - 69) / 12));
+        }
+        return freqs;
+      }
+
+      const intervals = SCALES[mode];
+      const scaleMidis = [];
+      for (let m = 48; m <= 84; m++) {
+        if (intervals.includes(((m % 12) + 12) % 12)) {
+          scaleMidis.push(m);
+        }
+      }
+      // 從低音到高音取連續 count 個音符
+      const startIdx = Math.max(0, Math.floor((scaleMidis.length - count) / 2));
+      const picked = scaleMidis.slice(startIdx, startIdx + count);
+      return picked.map((m) => 440 * Math.pow(2, (m - 69) / 12));
+    }
+
+    function generateHarp() {
+      ensureAudio();
+      strings.length = 0;
+      draftString = null;
+      stringState = STATE.IDLE;
+
+      const count = Math.round(params.harpCount);
+      const layout = harpLayoutSelect.value;
+      const freqs = getScaleFrequencies(count);
+
+      const w = canvas.width;
+      const h = canvas.height;
+      const safeTop = Math.max(96, h * 0.16);
+      const safeBottom = Math.min(h - 70, h * 0.86);
+      const maxLen = Math.max(160, safeBottom - safeTop);
+      const spanW = Math.min(w * 0.72, Math.max(360, count * 68));
+      const leftX = (w - spanW) * 0.5;
+
+      for (let i = 0; i < count; i++) {
+        const t = count === 1 ? 0.5 : i / (count - 1); // 0(左/低音長弦) -> 1(右/高音短弦)
+        const freq = freqs[i];
+        let x1, y1, x2, y2;
+
+        if (layout === "parallel") {
+          const x = leftX + t * spanW;
+          const len = maxLen * (0.95 - t * 0.42);
+          const cy = (safeTop + safeBottom) * 0.5;
+          x1 = x;
+          y1 = cy - len * 0.5;
+          x2 = x;
+          y2 = cy + len * 0.5;
+        } else if (layout === "fan") {
+          const anchorX = w * 0.5;
+          const anchorY = safeBottom + 40;
+          const angle = -Math.PI / 2 + (t - 0.5) * 0.85;
+          const len = maxLen * (1.0 - t * 0.45);
+          x1 = anchorX + Math.cos(angle) * 60;
+          y1 = anchorY + Math.sin(angle) * 60;
+          x2 = anchorX + Math.cos(angle) * (60 + len);
+          y2 = anchorY + Math.sin(angle) * (60 + len);
+        } else {
+          // 經典弧形豎琴：底部微斜、頂部呈現優美 S/弧形曲線
+          const x = leftX + t * spanW;
+          const bottomY = safeBottom - t * (maxLen * 0.14);
+          const archCurve = Math.sin(t * Math.PI) * (maxLen * 0.08);
+          const topY = safeTop + t * (maxLen * 0.36) - archCurve;
+          x1 = x;
+          y1 = topY;
+          x2 = x;
+          y2 = bottomY;
+        }
+
+        const newStr = createPermanentString(x1, y1, x2, y2, freq);
+        newStr.amplitude = 10 + (1 - t) * 8;
+        strings.push(newStr);
+        spawnPluckParticles((x1 + x2) * 0.5, (y1 + y2) * 0.5, newStr.hue, 6);
+      }
+
+      // 輕輕撥動第一與最後一條弦作為完成提示
+      if (strings.length > 0) {
+        playPluck(strings[0].frequency, 0.38, -0.5);
+        if (strings.length > 1) {
+          setTimeout(() => {
+            if (strings.length > 1) {
+              playPluck(strings[strings.length - 1].frequency, 0.38, 0.5);
+            }
+          }, 90);
+        }
+      }
+
+      updateStateUI("HARP 豎琴已生成", `已生成 ${count} 條${harpLayoutSelect.options[harpLayoutSelect.selectedIndex].text}，直接揮動手指即可彈奏！`);
+    }
+
+    btnGenerateHarp.addEventListener("click", generateHarp);
+    btnPanelGenHarp.addEventListener("click", generateHarp);
+
+    // ================= 7. 渲染迴圈 =================
+    const HAND_CONNECTIONS = [
+      [0,1],[1,2],[2,3],[3,4],
+      [0,5],[5,6],[6,7],[7,8],
+      [5,9],[9,10],[10,11],[11,12],
+      [9,13],[13,14],[14,15],[15,16],
+      [13,17],[17,18],[18,19],[19,20],[0,17]
+    ];
+
+    function drawHandSkeleton(pts, isPinching, pinchPoint) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(34, 197, 94, 0.85)";
+      ctx.lineWidth = 2.5;
+      for (const [a, b] of HAND_CONNECTIONS) {
+        ctx.beginPath();
+        ctx.moveTo(pts[a].x, pts[a].y);
+        ctx.lineTo(pts[b].x, pts[b].y);
+        ctx.stroke();
+      }
+      for (let i = 0; i < pts.length; i++) {
+        ctx.beginPath();
+        ctx.arc(pts[i].x, pts[i].y, i === 4 || i === 8 ? 5.5 : 3.8, 0, Math.PI * 2);
+        ctx.fillStyle = "#ef4444";
+        ctx.fill();
+      }
+      if (isPinching && pinchPoint) {
+        ctx.beginPath();
+        ctx.arc(pinchPoint.x, pinchPoint.y, 12, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+        ctx.shadowColor = "#c084fc";
+        ctx.shadowBlur = 18;
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawPermanentStrings() {
+      for (const s of strings) {
+        const dx = s.x2 - s.x1;
+        const dy = s.y2 - s.y1;
+        const len = Math.max(1, s.length);
+        const nx = -dy / len;
+        const ny = dx / len;
+
+        ctx.save();
+        // 外層光暈
+        ctx.shadowColor = `hsl(${s.hue}, 95%, 68%)`;
+        ctx.shadowBlur = 14 + s.amplitude * 0.8;
+        ctx.strokeStyle = `hsla(${s.hue}, 95%, 75%, 0.92)`;
+        ctx.lineWidth = 3 + s.amplitude * 0.08;
+
+        ctx.beginPath();
+        const segments = 40;
+        for (let i = 0; i <= segments; i++) {
+          const t = i / segments;
+          const wave = Math.sin(Math.PI * t) * Math.cos(s.phase) * s.amplitude;
+          const px = s.x1 + dx * t + nx * wave;
+          const py = s.y1 + dy * t + ny * wave;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+
+        // 端點錨釘與音名標籤
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.arc(s.x1, s.y1, 4.5, 0, Math.PI * 2);
+        ctx.arc(s.x2, s.y2, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        const midX = (s.x1 + s.x2) * 0.5;
+        const midY = (s.y1 + s.y2) * 0.5 - 10;
+        ctx.font = "600 12px monospace";
+        ctx.fillStyle = `hsla(${s.hue}, 95%, 85%, 0.85)`;
+        ctx.textAlign = "center";
+        ctx.fillText(s.note, midX, midY);
+        ctx.restore();
+
+        // 震動衰減
+        s.phase += 0.65;
+        s.amplitude *= 0.91;
+        if (s.amplitude < 0.05) s.amplitude = 0;
+      }
+    }
+
+    function drawDraftString(now) {
+      if (!draftString) return;
+      const { x1, y1, x2, y2, status } = draftString;
+      const len = Math.hypot(x2 - x1, y2 - y1);
+      const previewNote = freqToNoteName(lengthToFrequency(len));
+
+      ctx.save();
+      ctx.setLineDash([10, 8]);
+      if (status === "paused") {
+        const remainRatio = Math.max(0, 1 - (now - pauseStartTime) / params.pauseGraceMs);
+        ctx.strokeStyle = `rgba(251, 191, 36, ${0.5 + 0.5 * remainRatio})`;
+        ctx.shadowColor = "#f59e0b";
+        ctx.shadowBlur = 14;
+      } else {
+        ctx.strokeStyle = "rgba(192, 132, 252, 0.9)";
+        ctx.shadowColor = "#a855f7";
+        ctx.shadowBlur = 16;
+      }
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+
+      ctx.setLineDash([]);
+      ctx.fillStyle = status === "paused" ? "#fbbf24" : "#e879f9";
+      ctx.beginPath();
+      ctx.arc(x1, y1, 7, 0, Math.PI * 2);
+      ctx.arc(x2, y2, 7, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.font = "bold 14px sans-serif";
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "center";
+      ctx.fillText(
+        status === "paused" ? `凍結中 (${previewNote}) - 放開另一手固定` : `拉弦中：${previewNote}`,
+        (x1 + x2) * 0.5,
+        (y1 + y2) * 0.5 - 14
+      );
+      ctx.restore();
+    }
+
+    function drawParticles() {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= 0.035;
+        if (p.life <= 0) {
+          particles.splice(i, 1);
+          continue;
+        }
+        ctx.save();
+        ctx.fillStyle = `hsla(${p.hue}, 100%, 75%, ${p.life})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 2.8 * p.life, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    function renderLoop() {
+      const now = performance.now();
+      ctx.fillStyle = "#090b10";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // 繪製鏡像攝影機畫面
+      if (cameraRunning && video.readyState >= 2) {
+        ctx.save();
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+        ctx.globalAlpha = params.camAlpha;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
+      }
+
+      if (cameraRunning && handLandmarker && video.readyState >= 2 && video.currentTime !== lastVideoTime) {
+        lastVideoTime = video.currentTime;
+        let results = null;
+        try {
+          results = handLandmarker.detectForVideo(video, now);
+        } catch (err) {
+          console.warn("HandLandmarker frame skipped:", err);
+        }
+
+        let leftPos = null;
+        let rightPos = null;
+        let seenLeft = false;
+        let seenRight = false;
+
+        if (results && results.landmarks && results.handednesses) {
+          for (let i = 0; i < results.landmarks.length; i++) {
+            // 鏡像後左右手互換對應視覺位置
+            const rawLabel = results.handednesses[i][0].categoryName;
+            const visualSide = rawLabel === "Left" ? "Right" : "Left";
+
+            const pixelPts = results.landmarks[i].map((pt) => ({
+              x: (1 - pt.x) * canvas.width,
+              y: pt.y * canvas.height
+            }));
+            const pts = smoothHand(visualSide, pixelPts);
+
+            const thumbTip = pts[4];
+            const indexTip = pts[8];
+            const pinchDist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
+            const pinchCenter = {
+              x: (thumbTip.x + indexTip.x) * 0.5,
+              y: (thumbTip.y + indexTip.y) * 0.5
+            };
+
+            if (visualSide === "Left") {
+              seenLeft = true;
+              leftMissFrames = 0;
+              leftPinchState = updatePinchHysteresis(leftPinchState, pinchDist);
+              leftPos = pinchCenter;
+              drawHandSkeleton(pts, leftPinchState, pinchCenter);
+            } else {
+              seenRight = true;
+              rightMissFrames = 0;
+              rightPinchState = updatePinchHysteresis(rightPinchState, pinchDist);
+              rightPos = pinchCenter;
+              drawHandSkeleton(pts, rightPinchState, pinchCenter);
+            }
+
+            // 只有該手「沒有在捏合」且目前不在拉弦狀態時，才允許撥弦（防誤觸）
+            const isThisHandPinching = visualSide === "Left" ? leftPinchState : rightPinchState;
+            if (!isThisHandPinching && stringState !== STATE.DRAWING) {
+              checkPluckCrossing(`${visualSide}_index`, pts[8].x, pts[8].y, now);
+              checkPluckCrossing(`${visualSide}_middle`, pts[12].x, pts[12].y, now);
+              checkPluckCrossing(`${visualSide}_ring`, pts[16].x, pts[16].y, now);
+            } else {
+              prevFingerTips.delete(`${visualSide}_index`);
+              prevFingerTips.delete(`${visualSide}_middle`);
+              prevFingerTips.delete(`${visualSide}_ring`);
+            }
+          }
+        }
+
+        if (!seenLeft) {
+          leftMissFrames++;
+          if (leftMissFrames > params.missFrameGrace) {
+            leftPinchState = false;
+            smoothedLandmarks.Left = null;
+          }
+        }
+        if (!seenRight) {
+          rightMissFrames++;
+          if (rightMissFrames > params.missFrameGrace) {
+            rightPinchState = false;
+            smoothedLandmarks.Right = null;
+          }
+        }
+
+        if (!simMode) {
+          processStringStateMachine(now, leftPinchState, rightPinchState, leftPos, rightPos);
+        }
+      }
+
+      if (simMode) {
+        processStringStateMachine(now, simLeftPinch, simRightPinch, simLeftPos, simRightPos);
+      }
+
+      drawPermanentStrings();
+      drawDraftString(now);
+      drawParticles();
+
+      requestAnimationFrame(renderLoop);
+    }
+
+    requestAnimationFrame(renderLoop);
+  </script>
+</body>
+</html>

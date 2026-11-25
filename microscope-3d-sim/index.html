@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>3D 互動顯微鏡與景深模擬</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="top-bar">
+      <div class="brand-group">
+        <a href="../index.html" class="back-btn" title="返回生物教學首頁">← 首頁</a>
+        <div class="title-wrap">
+          <h1>3D 複式顯微鏡與景深模擬</h1>
+          <span class="subtitle">左側直接旋轉/調整 3D 顯微鏡零件與載玻片，右側即時觀察目鏡影像與景深變化</span>
+        </div>
+      </div>
+
+      <div class="header-controls">
+        <div class="mode-group" role="group" aria-label="標本模式選擇">
+          <button type="button" class="mode-btn active" data-mode="threads">立體纖維 (景深)</button>
+          <button type="button" class="mode-btn" data-mode="specimen">細胞標本</button>
+          <button type="button" class="mode-btn" data-mode="bugs">水樣蟲蟲</button>
+          <button type="button" class="mode-btn" data-mode="df">文字 (DF)</button>
+        </div>
+
+        <label class="toggle-chip" title="複式顯微鏡成像為上下顛倒、左右相反">
+          <input type="checkbox" id="compoundToggle" checked />
+          <span>複式倒立成像</span>
+        </label>
+
+        <button type="button" id="resetBtn" class="action-btn">重置實驗</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <!-- Left Column: 3D Microscope + Direct Part Controls -->
+      <section class="panel left-panel" aria-label="3D 顯微鏡互動區">
+        <div class="viewer-stage">
+          <div id="viewer3d" class="viewer-canvas-wrap"></div>
+          <div id="labelLayer" class="label-layer" aria-hidden="true"></div>
+
+          <div class="viewer-hud-top-left">
+            <div class="cam-presets">
+              <button type="button" class="hud-btn active" data-cam="default">全景</button>
+              <button type="button" class="hud-btn" data-cam="stage">載物台</button>
+              <button type="button" class="hud-btn" data-cam="aperture">光圈</button>
+              <button type="button" class="hud-btn" data-cam="front">正面</button>
+            </div>
+            <button type="button" id="toggleLabelsBtn" class="hud-btn active">部件標籤</button>
+          </div>
+
+          <div class="viewer-hud-top-right">
+            <span id="hoverPartTitle" class="hover-title">3D 互動操作</span>
+            <span id="hoverPartHint" class="hover-hint">拖曳空白處可旋轉 3D 視角，點擊或拖曳各顯微鏡部件直接操作</span>
+          </div>
+        </div>
+
+        <div class="parts-dock">
+          <div class="dock-row">
+            <div class="control-block">
+              <span class="ctrl-label">物鏡倍率</span>
+              <div class="seg-group" id="objectiveBtns">
+                <button type="button" class="seg-btn active" data-obj="0">4X</button>
+                <button type="button" class="seg-btn" data-obj="1">10X</button>
+                <button type="button" class="seg-btn" data-obj="2">40X</button>
+              </div>
+            </div>
+
+            <div class="control-block">
+              <span class="ctrl-label">目鏡倍率</span>
+              <div class="seg-group" id="eyepieceBtns">
+                <button type="button" class="seg-btn active" data-eye="10">10X</button>
+                <button type="button" class="seg-btn" data-eye="15">15X</button>
+              </div>
+            </div>
+
+            <div class="control-block">
+              <span class="ctrl-label">光源開關</span>
+              <button type="button" id="lightToggleBtn" class="power-btn on" title="開啟或關閉顯微鏡底座光源">
+                <span class="power-led"></span>
+                <span id="lightToggleText">開啟</span>
+              </button>
+            </div>
+
+            <div class="control-block">
+              <span class="ctrl-label">圓盤光圈 <em id="apertureHoleText">#3 (中孔)</em></span>
+              <div class="aperture-dots" id="apertureBtns">
+                <button type="button" class="ap-btn" data-ap="1" title="光圈 #1 (最小：景深最深、較暗)">1</button>
+                <button type="button" class="ap-btn" data-ap="2" title="光圈 #2">2</button>
+                <button type="button" class="ap-btn active" data-ap="3" title="光圈 #3">3</button>
+                <button type="button" class="ap-btn" data-ap="4" title="光圈 #4">4</button>
+                <button type="button" class="ap-btn" data-ap="5" title="光圈 #5">5</button>
+                <button type="button" class="ap-btn" data-ap="6" title="光圈 #6 (最大：景深最淺、最亮)">6</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="dock-row knobs-row">
+            <div class="knob-control">
+              <div class="knob-header">
+                <span class="ctrl-label">粗調節輪 (載物台升降)</span>
+                <span class="mono-val" id="stageZVal">-26.0 μm</span>
+              </div>
+              <div class="slider-wrap">
+                <button type="button" class="step-btn" id="coarseDownBtn" title="降低載物台 (−4 μm)">−</button>
+                <input type="range" id="coarseSlider" min="-45" max="45" step="0.5" value="-26" />
+                <button type="button" class="step-btn" id="coarseUpBtn" title="調高載物台 (+4 μm)">+</button>
+              </div>
+            </div>
+
+            <div class="knob-control">
+              <div class="knob-header">
+                <span class="ctrl-label">細調節輪 (精細對焦 ±10 μm)</span>
+                <span class="mono-val accent" id="focalZVal">焦平面 -26.0 μm</span>
+              </div>
+              <div class="slider-wrap">
+                <button type="button" class="step-btn" id="fineDownBtn" title="微降載物台 (−0.4 μm)">−</button>
+                <input type="range" id="fineSlider" min="-10" max="10" step="0.1" value="0" />
+                <button type="button" class="step-btn" id="fineUpBtn" title="微升載物台 (+0.4 μm)">+</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Column: Eyepiece Image + Stage Top View & DoF Visualizer -->
+      <section class="right-column" aria-label="顯微影像與景深分析">
+        <div class="panel eyepiece-panel">
+          <div class="panel-head">
+            <h2>顯微鏡目鏡視野</h2>
+            <div class="metrics-strip">
+              <span class="metric-pill" title="總放大倍率 = 目鏡 × 物鏡">
+                倍率 <strong id="metricMag">40X</strong>
+              </span>
+              <span class="metric-pill dof-pill" title="景深厚度：焦平面上下可同時清晰成像的厚度">
+                景深 <strong id="metricDof">±21.8 μm</strong>
+              </span>
+              <span class="metric-pill" title="視野亮度與對比">
+                亮度 <strong id="metricBright">96%</strong>
+              </span>
+            </div>
+          </div>
+
+          <div class="eyepiece-stage">
+            <canvas id="eyepieceCanvas" width="480" height="480"></canvas>
+          </div>
+
+          <div class="status-banner" id="statusBanner">
+            <span id="statusText">提示：切換至 400X 後微調「細調節輪」，觀察紅 (+16 μm)、黃 (0 μm)、藍 (−16 μm) 纖維的景深層次。</span>
+            <div id="bugTools" class="bug-tools hidden">
+              <span class="kill-badge">已消滅：<strong id="bugKillCount">0</strong></span>
+              <button type="button" id="respawnBugsBtn" class="mini-btn">補充蟲蟲</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="bottom-subgrid">
+          <div class="panel sub-panel">
+            <div class="sub-head">
+              <h3>載物台與載玻片 (可拖曳)</h3>
+              <button type="button" id="centerSlideBtn" class="mini-btn">歸中</button>
+            </div>
+            <div class="sub-canvas-wrap">
+              <canvas id="slideCanvas" width="320" height="220"></canvas>
+            </div>
+            <div class="dpad-row">
+              <button type="button" class="dpad-btn" data-dx="0" data-dy="-1" title="上移載玻片">↑</button>
+              <button type="button" class="dpad-btn" data-dx="0" data-dy="1" title="下移載玻片">↓</button>
+              <button type="button" class="dpad-btn" data-dx="-1" data-dy="0" title="左移載玻片">←</button>
+              <button type="button" class="dpad-btn" data-dx="1" data-dy="0" title="右移載玻片">→</button>
+              <span class="dpad-hint">方向鍵可微調</span>
+            </div>
+          </div>
+
+          <div class="panel sub-panel">
+            <div class="sub-head">
+              <h3>Z 軸景深與對焦剖面</h3>
+              <span class="mono-small" id="dofRangeText">Na 0.10</span>
+            </div>
+            <div class="sub-canvas-wrap">
+              <canvas id="dofCanvas" width="320" height="240"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
