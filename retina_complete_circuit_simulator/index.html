@@ -1,0 +1,2436 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>視網膜五類神經元完整微迴路互動模擬器</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #090e1a;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      color: #e2e8f0;
+    }
+
+    /* 主全螢幕神經生理模擬畫布 */
+    #simCanvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      touch-action: none;
+      z-index: 1;
+    }
+
+    /* 左上角精簡標題列與常駐觀察重點條 */
+    .top-left-hud {
+      position: fixed;
+      top: 10px;
+      left: 12px;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-width: calc(100vw - 415px);
+      pointer-events: none;
+    }
+
+    .hud-card {
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(71, 85, 105, 0.75);
+      border-radius: 12px;
+      padding: 8px 14px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      pointer-events: auto;
+    }
+
+    .hud-title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pulse-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #34d399;
+      box-shadow: 0 0 8px #34d399;
+      flex-shrink: 0;
+    }
+
+    .hud-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #f8fafc;
+      letter-spacing: 0.02em;
+      margin: 0;
+    }
+
+    .hud-subtitle {
+      font-size: 11px;
+      color: #94a3b8;
+      margin: 3px 0 0 0;
+      line-height: 1.35;
+    }
+
+    /* 常駐精簡「目前觀察指標」提示條 */
+    .watch-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(14, 116, 144, 0.25);
+      border: 1px solid rgba(56, 189, 248, 0.55);
+      border-radius: 10px;
+      padding: 6px 12px;
+      font-size: 12px;
+      color: #e0f2fe;
+      backdrop-filter: blur(8px);
+      pointer-events: auto;
+    }
+
+    .watch-badge {
+      background: #0284c7;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
+
+    /* 動態情境教學 Toast（位於主畫布上方中央，不遮擋右側面板） */
+    #teaching-toast {
+      position: fixed;
+      top: 12px;
+      left: calc((100vw - 380px) * 0.5);
+      transform: translateX(-50%) translateY(-16px);
+      width: min(460px, calc(100vw - 410px));
+      z-index: 35;
+      background: rgba(15, 23, 42, 0.96);
+      border: 1.5px solid #38bdf8;
+      border-radius: 14px;
+      padding: 12px 14px 10px 14px;
+      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.65), 0 0 20px rgba(56, 189, 248, 0.2);
+      backdrop-filter: blur(12px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.28s ease, transform 0.28s ease, left 0.3s ease, width 0.3s ease;
+    }
+
+    #teaching-toast.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+      pointer-events: auto;
+    }
+
+    body.panel-collapsed #teaching-toast {
+      left: 50%;
+      width: min(520px, calc(100vw - 180px));
+    }
+
+    body.panel-collapsed .top-left-hud {
+      max-width: calc(100vw - 170px);
+    }
+
+    .toast-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 5px;
+    }
+
+    .toast-badge-wrap {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .toast-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(56, 189, 248, 0.2);
+      color: #7dd3fc;
+      border: 1px solid rgba(56, 189, 248, 0.5);
+    }
+
+    .toast-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+
+    .toast-close {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+
+    .toast-close:hover {
+      background: rgba(51, 65, 85, 0.6);
+      color: #f8fafc;
+    }
+
+    .toast-body {
+      font-size: 12.5px;
+      line-height: 1.5;
+      color: #cbd5e1;
+      margin-bottom: 8px;
+    }
+
+    .toast-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .toast-action-btn {
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      color: #fff;
+      border: 1px solid #38bdf8;
+      border-radius: 8px;
+      padding: 5px 11px;
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: filter 0.15s ease;
+    }
+
+    .toast-action-btn:hover {
+      filter: brightness(1.15);
+    }
+
+    .toast-progress-track {
+      height: 3px;
+      width: 100%;
+      background: rgba(51, 65, 85, 0.5);
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+
+    .toast-progress-fill {
+      height: 100%;
+      width: 100%;
+      background: #38bdf8;
+      transform-origin: left center;
+    }
+
+    /* 面板收合時顯示在右上角的展開浮動按鈕 */
+    #expandPanelBtn {
+      position: fixed;
+      top: 10px;
+      right: 12px;
+      z-index: 30;
+      min-height: 42px;
+      padding: 8px 14px;
+      background: rgba(15, 23, 42, 0.94);
+      border: 1px solid #38bdf8;
+      border-radius: 12px;
+      color: #e0f2fe;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+      display: none;
+      align-items: center;
+      gap: 6px;
+    }
+
+    body.panel-collapsed #expandPanelBtn {
+      display: flex;
+    }
+
+    /* =========================================================================
+       右側可捲動實驗控制面板（嚴格遵循 flex column + min-height: 0 + overflow-y: auto）
+       絕不鎖死高度或裁切頂部/底部
+       ========================================================================= */
+    #control-panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 36px; /* 避開底部固定高度狀態列 */
+      width: 370px;
+      max-width: 92vw;
+      height: calc(100% - 36px);
+      max-height: calc(100dvh - 36px);
+      z-index: 28;
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+      background: rgba(13, 20, 36, 0.96);
+      border-left: 1px solid rgba(71, 85, 105, 0.85);
+      box-shadow: -10px 0 32px rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(14px);
+      transition: transform 0.28s ease;
+    }
+
+    body.panel-collapsed #control-panel {
+      transform: translateX(105%);
+      pointer-events: none;
+    }
+
+    .panel-header {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 14px;
+      background: rgba(15, 23, 42, 0.98);
+      border-bottom: 1px solid rgba(51, 65, 85, 0.9);
+    }
+
+    .panel-header-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #f1f5f9;
+    }
+
+    .panel-collapse-btn {
+      min-height: 40px;
+      padding: 6px 12px;
+      background: #1e293b;
+      border: 1px solid #475569;
+      border-radius: 10px;
+      color: #e2e8f0;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .panel-collapse-btn:hover {
+      background: #334155;
+    }
+
+    /* 面板可捲動主內容區 */
+    .panel-body {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+      padding: 12px 14px 36px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* 清晰可見的自訂細捲軸樣式 */
+    .panel-body::-webkit-scrollbar {
+      width: 7px;
+    }
+    .panel-body::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.7);
+      border-radius: 999px;
+    }
+    .panel-body::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 999px;
+      border: 1px solid #1e293b;
+    }
+    .panel-body::-webkit-scrollbar-thumb:hover {
+      background: #64748b;
+    }
+
+    /* 面板內部區塊卡片 */
+    .sec-box {
+      background: rgba(15, 23, 42, 0.78);
+      border: 1px solid rgba(51, 65, 85, 0.85);
+      border-radius: 12px;
+      padding: 11px 12px;
+    }
+
+    .sec-title {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      margin: 0 0 8px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* 4 步驟自學導覽卡片 */
+    .tour-card {
+      background: linear-gradient(160deg, rgba(14, 116, 144, 0.25), rgba(30, 41, 59, 0.85));
+      border: 1.5px solid rgba(56, 189, 248, 0.65);
+      border-radius: 12px;
+      padding: 11px 12px;
+    }
+
+    .tour-step-pill {
+      background: #0284c7;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+    }
+
+    .tour-question {
+      font-size: 13px;
+      font-weight: 700;
+      color: #f8fafc;
+      margin: 6px 0 4px 0;
+    }
+
+    .tour-hint {
+      font-size: 11.5px;
+      color: #bae6fd;
+      line-height: 1.45;
+      margin: 0 0 9px 0;
+    }
+
+    .tour-btn-row {
+      display: grid;
+      grid-template-columns: 1fr 1.2fr 1fr;
+      gap: 6px;
+    }
+
+    .btn-ctrl {
+      min-height: 40px;
+      padding: 6px 8px;
+      border-radius: 9px;
+      border: 1px solid #475569;
+      background: #1e293b;
+      color: #e2e8f0;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    .btn-ctrl:hover {
+      background: #334155;
+    }
+
+    .btn-ctrl.primary {
+      background: #0284c7;
+      border-color: #38bdf8;
+      color: #fff;
+    }
+
+    .btn-ctrl.primary:hover {
+      background: #0369a1;
+    }
+
+    /* 模式與雙極細胞選擇按鈕群 */
+    .mode-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .mode-btn {
+      min-height: 42px;
+      padding: 7px 9px;
+      border-radius: 9px;
+      border: 1px solid #334155;
+      background: #1e293b;
+      color: #cbd5e1;
+      font-size: 12px;
+      font-weight: 700;
+      text-align: left;
+      cursor: pointer;
+      line-height: 1.3;
+    }
+
+    .mode-btn span {
+      display: block;
+      font-size: 10.5px;
+      font-weight: 400;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+
+    .mode-btn.active {
+      background: rgba(6, 182, 212, 0.22);
+      border-color: #22d3ee;
+      color: #ecfeff;
+    }
+
+    .mode-btn.active span {
+      color: #a5f3fc;
+    }
+
+    .bp-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+
+    .bp-btn {
+      min-height: 44px;
+      padding: 6px 4px;
+      border-radius: 9px;
+      border: 1px solid #334155;
+      background: #1e293b;
+      color: #cbd5e1;
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: center;
+      line-height: 1.25;
+    }
+
+    .bp-btn.active {
+      background: rgba(56, 189, 248, 0.24);
+      border-color: #38bdf8;
+      color: #f0f9ff;
+    }
+
+    /* 滑桿與一鍵阻斷按鈕 */
+    .slider-block {
+      background: rgba(9, 14, 26, 0.65);
+      border: 1px solid #1e293b;
+      border-radius: 9px;
+      padding: 8px 10px;
+      margin-bottom: 8px;
+    }
+
+    .slider-block:last-child {
+      margin-bottom: 0;
+    }
+
+    .slider-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      margin-bottom: 6px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .block-pill-btn {
+      min-height: 32px;
+      padding: 3px 8px;
+      border-radius: 7px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      border: 1px solid rgba(244, 63, 94, 0.65);
+      background: rgba(136, 19, 55, 0.5);
+      color: #ffe4e6;
+    }
+
+    .block-pill-btn.teal {
+      border-color: rgba(45, 212, 191, 0.65);
+      background: rgba(17, 94, 89, 0.5);
+      color: #ccfbf1;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 8px;
+      background: #1e293b;
+      border-radius: 999px;
+      outline: none;
+      border: 1px solid #334155;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #38bdf8;
+      cursor: pointer;
+      border: 2px solid #0f172a;
+    }
+
+    input[type="range"].teal-slider::-webkit-slider-thumb {
+      background: #2dd4bf;
+    }
+
+    input[type="range"].rose-slider::-webkit-slider-thumb {
+      background: #f43f5e;
+    }
+
+    /* 監測柱 1~8 選擇網格 */
+    .col-grid {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 4px;
+    }
+
+    .col-btn {
+      min-height: 40px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      background: #1e293b;
+      color: #cbd5e1;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .col-btn.active {
+      background: #06b6d4;
+      border-color: #67e8f9;
+      color: #082f49;
+    }
+
+    /* 模擬速度四段按鈕 */
+    .speed-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 5px;
+    }
+
+    .spd-btn {
+      min-height: 40px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      background: #1e293b;
+      color: #cbd5e1;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .spd-btn.active {
+      background: #10b981;
+      border-color: #6ee7b7;
+      color: #022c22;
+    }
+
+    /* 底部固定高度（36px）即時五細胞膜電位狀態列 */
+    #statusBar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 36px;
+      z-index: 30;
+      background: rgba(9, 14, 26, 0.98);
+      border-top: 1px solid #1e293b;
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #cbd5e1;
+    }
+
+    .status-readings {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-weight: 700;
+    }
+
+    /* 手機與窄螢幕自適應 */
+    @media (max-width: 780px) {
+      .top-left-hud {
+        max-width: calc(100vw - 125px);
+      }
+      .hud-subtitle {
+        display: none;
+      }
+      #teaching-toast {
+        left: 50%;
+        width: calc(100vw - 24px);
+        top: 64px;
+      }
+      #control-panel {
+        width: 320px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 全螢幕 HTML5 Canvas 神經迴路與示波器 -->
+  <canvas id="simCanvas"></canvas>
+
+  <!-- 左上角標題與常駐觀察重點提示條 -->
+  <div class="top-left-hud">
+    <div class="hud-card">
+      <div class="hud-title-row">
+        <span class="pulse-dot"></span>
+        <h1 class="hud-title">視網膜五類神經元完整微迴路互動模擬器</h1>
+      </div>
+      <p class="hud-subtitle">
+        感光細胞 (Rod/Cone) → 水平細胞 (OPL) → ON/OFF 雙極細胞 (INL) → 無軸突細胞 (IPL) → 神經節細胞 (GCL/NFL)
+      </p>
+    </div>
+
+    <!-- 常駐精簡「目前觀察指標」提示條 -->
+    <div class="watch-bar" id="watchBar">
+      <span class="watch-badge">目前看點</span>
+      <span id="watchBarText">觀察第 4 柱：開燈瞬間雙極細胞持續去極化，但無軸突細胞延遲抑制後把輸出修剪為瞬時脈衝。</span>
+    </div>
+  </div>
+
+  <!-- 動態情境教學 Toast 浮動視窗 -->
+  <div id="teaching-toast" role="status" aria-live="polite">
+    <div class="toast-top">
+      <div class="toast-badge-wrap">
+        <span id="toastBadge" class="toast-badge">自學任務 1/4</span>
+        <span id="toastTitle" class="toast-title">黑暗電流與感光細胞過極化</span>
+      </div>
+      <button id="toastCloseBtn" class="toast-close" title="關閉提示">×</button>
+    </div>
+    <div id="toastBody" class="toast-body">
+      現在請看第 4 柱最上方的感光層：關燈時感光細胞維持去極化 (-40mV) 並持續釋放琥珀色麩胺酸；開燈後反而過極化 (-70mV) 並減少麩胺酸釋放！
+    </div>
+    <div class="toast-footer">
+      <button id="toastActionBtn" class="toast-action-btn">聚焦該柱與套用示範條件</button>
+      <span id="toastSubHint" style="font-size: 11px; color: #94a3b8;">點擊畫布任意細胞可看解剖說明</span>
+    </div>
+    <div class="toast-progress-track">
+      <div id="toastProgressFill" class="toast-progress-fill"></div>
+    </div>
+  </div>
+
+  <!-- 當右側面板收合時顯示的展開按鈕 -->
+  <button id="expandPanelBtn">
+    <span>☰ 展開教學與控制面板</span>
+  </button>
+
+  <!-- 右側可捲動實驗控制面板（嚴格遵循 flex-direction: column 與可捲動 panel-body） -->
+  <aside id="control-panel">
+    <div class="panel-header">
+      <span class="panel-header-title">自學導覽與神經迴路控制</span>
+      <button id="collapsePanelBtn" class="panel-collapse-btn">收合面板 ✕</button>
+    </div>
+
+    <div class="panel-body" id="panelBody">
+      <!-- 1. 4 步驟自學導覽任務（位於最上方，預設完整可見） -->
+      <div class="tour-card">
+        <div class="sec-title" style="margin-bottom: 4px;">
+          <span class="tour-step-pill" id="tourStepPill">自學任務 1 / 4</span>
+          <label style="display:flex; align-items:center; gap:5px; font-size:11.5px; color:#cbd5e1; cursor:pointer;">
+            <input type="checkbox" id="autoToastCheck" checked style="width:15px; height:15px; accent-color:#38bdf8; cursor:pointer;" />
+            自動情境提示
+          </label>
+        </div>
+        <div class="tour-question" id="tourQuestion">1. 黑暗電流與感光細胞過極化</div>
+        <p class="tour-hint" id="tourHint">
+          照光後感光細胞為何反而「過極化 (-70mV)」並減少釋放麩胺酸？觀察第 4 柱開關燈時琥珀色軸突與示波器第 1 軌變化。
+        </p>
+        <div class="tour-btn-row">
+          <button id="tourPrevBtn" class="btn-ctrl">← 上一步</button>
+          <button id="tourNextBtn" class="btn-ctrl primary">下一步任務 →</button>
+          <button id="tourReplayBtn" class="btn-ctrl">重播提示</button>
+        </div>
+      </div>
+
+      <!-- 2. 視覺刺激模式 -->
+      <div class="sec-box">
+        <div class="sec-title" style="color: #fcd34d;">
+          <span>視覺刺激模式</span>
+          <button id="manualStepToggleBtn" class="block-pill-btn teal" style="min-height:30px;">立即開/關燈</button>
+        </div>
+        <div class="mode-grid">
+          <button class="mode-btn active" data-mode="step">
+            持續光階躍 (Step)
+            <span>週期開關光，觀察時間濾波</span>
+          </button>
+          <button class="mode-btn" data-mode="pulse">
+            週期閃爍脈衝 (Pulse)
+            <span>短促閃光刺激，測試反應速度</span>
+          </button>
+          <button class="mode-btn" data-mode="spatial">
+            明暗空間邊緣 (Edge)
+            <span>1~4柱暗、5~8柱亮，馬赫帶銳化</span>
+          </button>
+          <button class="mode-btn" data-mode="move">
+            移動光點 (Moving Bar)
+            <span>測試方向選擇性非對稱抑制</span>
+          </button>
+        </div>
+
+        <!-- 移動方向控制列（僅在移動光點模式顯示） -->
+        <div id="moveDirControls" style="display:none; margin-top:8px; padding-top:8px; border-top:1px solid #1e293b;">
+          <div style="display:flex; gap:6px;">
+            <button id="moveRightBtn" class="btn-ctrl primary" style="flex:1;">左 → 右 (偏好方向)</button>
+            <button id="moveLeftBtn" class="btn-ctrl" style="flex:1;">右 → 左 (非偏好)</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. 雙極細胞路徑切換 (ON / OFF / DUAL) -->
+      <div class="sec-box">
+        <div class="sec-title" style="color: #38bdf8;">
+          <span>雙極細胞突觸路徑 (內核層 INL)</span>
+        </div>
+        <div class="bp-grid">
+          <button class="bp-btn active" data-bp="ON">
+            ON 型雙極細胞<br/><span style="font-size:10px; font-weight:400; color:#7dd3fc;">mGluR6 照光興奮</span>
+          </button>
+          <button class="bp-btn" data-bp="OFF">
+            OFF 型雙極細胞<br/><span style="font-size:10px; font-weight:400; color:#fdba74;">AMPA 關燈興奮</span>
+          </button>
+          <button class="bp-btn" data-bp="DUAL">
+            ON+OFF 並列<br/><span style="font-size:10px; font-weight:400; color:#94a3b8;">雙通道同柱對照</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 4. 側向與時間抑制調控（水平細胞 & 無軸突細胞） -->
+      <div class="sec-box">
+        <div class="sec-title" style="color: #fb7185;">
+          <span>抑制性神經元迴路調控</span>
+        </div>
+
+        <!-- 水平細胞側向抑制 (OPL) -->
+        <div class="slider-block">
+          <div class="slider-header">
+            <span style="color: #2dd4bf;">水平細胞側向抑制 (OPL)：<strong id="hcGainText" class="mono">100%</strong></span>
+            <button id="blockHcBtn" class="block-pill-btn teal">一鍵阻斷水平細胞</button>
+          </div>
+          <input id="hcGainSlider" type="range" min="0" max="150" step="5" value="100" class="teal-slider" />
+        </div>
+
+        <!-- 無軸突細胞抑制強度 (IPL) -->
+        <div class="slider-block">
+          <div class="slider-header">
+            <span style="color: #fb7185;">無軸突細胞抑制強度 (IPL)：<strong id="acGainText" class="mono">100%</strong></span>
+            <button id="blockAcBtn" class="block-pill-btn">一鍵阻斷無軸突細胞</button>
+          </div>
+          <input id="acGainSlider" type="range" min="0" max="150" step="5" value="100" class="rose-slider" />
+        </div>
+      </div>
+
+      <!-- 5. 示波器監測柱選擇 (1~8 柱) 與模擬速度 -->
+      <div class="sec-box">
+        <div class="sec-title" style="color: #e2e8f0;">
+          <span>示波器監測柱 (1~8 柱)</span>
+          <span id="monitoredColLabel" style="color: #38bdf8;">第 4 柱 (視錐)</span>
+        </div>
+        <div class="col-grid" id="colSelectorGrid"></div>
+
+        <div class="sec-title" style="color: #e2e8f0; margin-top: 10px;">
+          <span>模擬時間流速與視角</span>
+        </div>
+        <div class="speed-grid">
+          <button class="spd-btn" data-speed="0">暫停</button>
+          <button class="spd-btn" data-speed="0.5">0.5x</button>
+          <button class="spd-btn active" data-speed="1">1.0x</button>
+          <button class="spd-btn" data-speed="1.5">1.5x</button>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:8px;">
+          <button id="resetViewBtn" class="btn-ctrl">重置縮放視角 (100%)</button>
+          <button id="resetAllParamsBtn" class="btn-ctrl">恢復預設生理參數</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 底部固定高度（36px）即時五細胞膜電位狀態列 -->
+  <footer id="statusBar">
+    <div class="status-readings">
+      <span id="statusColTitle" style="color:#38bdf8; font-weight:700;">第 4 柱 (視錐)：</span>
+      <span>感光 <strong id="statPR" class="mono" style="color:#fbbf24;">-40mV</strong></span>
+      <span>水平 <strong id="statHC" class="mono" style="color:#2dd4bf;">-45mV</strong></span>
+      <span>雙極 <strong id="statBC" class="mono" style="color:#38bdf8;">-55mV</strong></span>
+      <span>無軸突 <strong id="statAC" class="mono" style="color:#fb7185;">-60mV</strong></span>
+      <span>神經節 <strong id="statRGC" class="mono" style="color:#34d399;">-65mV</strong></span>
+    </div>
+    <div style="font-size:11px; color:#94a3b8; white-space:nowrap;">
+      <span id="zoomStatusText">縮放：100%</span> | 滾輪/雙指放大 &gt;135% 看突觸囊泡
+    </div>
+  </footer>
+
+  <script>
+    /**
+     * 視網膜五類神經元完整微迴路互動模擬器
+     * 單檔自包含邏輯：
+     * 1. 五類神經元（感光細胞 Rod/Cone、水平細胞、ON/OFF 雙極細胞、無軸突細胞、神經節細胞）
+     * 2. 動態情境教學 Toast 系統 + 4 步驟自學導覽任務
+     * 3. 底部五軌同步示波器 + 支援縮放平移與突觸囊泡微觀細節的解剖微迴路畫布
+     */
+    (function () {
+      const canvas = document.getElementById('simCanvas');
+      const ctx = canvas.getContext('2d');
+
+      const NUM_COLS = 8;
+      const HISTORY_LEN = 360;
+      // 第 1,2,7,8 柱為視桿細胞 (Rod)；第 3,4,5,6 柱為視錐細胞 (Cone)
+      const PR_TYPES = ['Rod', 'Rod', 'Cone', 'Cone', 'Cone', 'Cone', 'Rod', 'Rod'];
+
+      // 模擬核心狀態
+      const state = {
+        mode: 'step',          // 'step' | 'pulse' | 'spatial' | 'move'
+        bipolarMode: 'ON',     // 'ON' | 'OFF' | 'DUAL'
+        moveDir: 1,            // 1: 左 -> 右, -1: 右 -> 左
+        simSpeed: 1.0,
+        time: 0,
+
+        monitoredCol: 3,       // 預設監測第 4 柱 (索引 3)
+        hcGain: 1.0,           // 水平細胞側向抑制強度 (0 ~ 1.5)
+        acGain: 1.0,           // 無軸突細胞抑制強度 (0 ~ 1.5)
+        acDelayMs: 145,        // 無軸突細胞時間延遲
+
+        stepTimer: 0,
+        stepLightOn: true,
+        spotPos: 0,
+
+        // 各柱即時生理量
+        light: new Float32Array(NUM_COLS),
+        prDepol: new Float32Array(NUM_COLS),     // 1=黑暗去極化(-40mV), 0=照光過極化(-70mV)
+        prGlutamate: new Float32Array(NUM_COLS),
+        prVm: new Float32Array(NUM_COLS),
+
+        hcAct: new Float32Array(NUM_COLS),
+        hcVm: new Float32Array(NUM_COLS),
+
+        bcOnAct: new Float32Array(NUM_COLS),
+        bcOffAct: new Float32Array(NUM_COLS),
+        bcVm: new Float32Array(NUM_COLS),
+
+        acOnDelayed: new Float32Array(NUM_COLS),
+        acOffDelayed: new Float32Array(NUM_COLS),
+        acInhOn: new Float32Array(NUM_COLS),
+        acInhOff: new Float32Array(NUM_COLS),
+        acVm: new Float32Array(NUM_COLS),
+
+        rgcOnDrive: new Float32Array(NUM_COLS),
+        rgcOffDrive: new Float32Array(NUM_COLS),
+        rgcVm: new Float32Array(NUM_COLS),
+
+        spikeCooldownOn: new Float32Array(NUM_COLS),
+        spikeCooldownOff: new Float32Array(NUM_COLS),
+        axonSpikes: Array.from({ length: NUM_COLS }, () => []),
+
+        vesicles: [],
+        history: {
+          pr: new Float32Array(HISTORY_LEN),
+          hc: new Float32Array(HISTORY_LEN),
+          bc: new Float32Array(HISTORY_LEN),
+          bcOff: new Float32Array(HISTORY_LEN),
+          ac: new Float32Array(HISTORY_LEN),
+          rgc: new Float32Array(HISTORY_LEN),
+          spikes: new Uint8Array(HISTORY_LEN)
+        },
+        sampleAccum: 0
+      };
+
+      // 相機縮放與平移
+      const camera = {
+        scale: 1.0,
+        minScale: 0.65,
+        maxScale: 3.2,
+        offsetX: 0,
+        offsetY: 0,
+        isDragging: false,
+        dragMoved: false,
+        downX: 0,
+        downY: 0,
+        lastX: 0,
+        lastY: 0,
+        pinchDist: 0,
+        pinchStartScale: 1.0
+      };
+
+      // 畫布幾何佈局
+      let layout = {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        oscTop: 0,
+        oscHeight: 215,
+        colSpacing: 100,
+        startX: 0,
+        yLight: 0,
+        yOS: 0,
+        yONL: 0,
+        yOPL: 0,
+        yINL: 0,
+        yIPL: 0,
+        yGCL: 0,
+        yNFL: 0
+      };
+
+      let cellHitboxes = [];
+
+      function resizeCanvas() {
+        const dpr = window.devicePixelRatio || 1;
+        layout.width = window.innerWidth;
+        layout.height = window.innerHeight;
+        canvas.width = layout.width * dpr;
+        canvas.height = layout.height * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        const bottomBarH = 36;
+        layout.oscHeight = Math.max(180, Math.min(230, layout.height * 0.28));
+        layout.oscTop = layout.height - bottomBarH - layout.oscHeight;
+
+        const topMargin = 82;
+        const circuitH = layout.oscTop - topMargin;
+
+        layout.yLight = topMargin + circuitH * 0.04;
+        layout.yOS    = topMargin + circuitH * 0.15;
+        layout.yONL   = topMargin + circuitH * 0.27;
+        layout.yOPL   = topMargin + circuitH * 0.39;
+        layout.yINL   = topMargin + circuitH * 0.54;
+        layout.yIPL   = topMargin + circuitH * 0.69;
+        layout.yGCL   = topMargin + circuitH * 0.84;
+        layout.yNFL   = topMargin + circuitH * 0.96;
+
+        const collapsed = document.body.classList.contains('panel-collapsed');
+        const rightOccupied = (!collapsed && layout.width > 780) ? 380 : 20;
+        const usableWidth = layout.width - rightOccupied - 20;
+        layout.colSpacing = Math.max(60, Math.min(112, usableWidth / (NUM_COLS + 0.85)));
+        const totalSpan = layout.colSpacing * (NUM_COLS - 1);
+        const centerTargetX = (!collapsed && layout.width > 780) ? (layout.width - 370) * 0.5 : layout.width * 0.5;
+        layout.startX = centerTargetX - totalSpan * 0.5;
+      }
+
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+
+      // =========================================================================
+      // 動態教學 Toast 與 4 步驟自學導覽系統
+      // =========================================================================
+      const TOUR_STEPS = [
+        {
+          pill: '自學任務 1 / 4',
+          title: '黑暗電流與感光細胞過極化',
+          question: '1. 黑暗電流與感光細胞過極化',
+          hint: '照光後感光細胞為何反而「過極化 (-70mV)」並減少釋放麩胺酸？觀察第 4 柱開關燈時琥珀色軸突與示波器第 1 軌變化。',
+          watch: '看第 4 柱最上方：黑暗中感光細胞維持 -40mV 持續釋放琥珀色麩胺酸；開燈後反而過極化 (-70mV) 停止釋放！',
+          toastBadge: '自學任務 1/4 · 感光層',
+          toastBody: '請看第 4 柱最上方的視錐細胞與示波器第 1 軌（黃線）：黑暗中維持「暗電流去極化 (-40mV)」持續釋放麩胺酸；照光後 Na+ 通道關閉，膜電位反而「過極化 (-70mV)」並減少麩胺酸釋放！',
+          actionLabel: '聚焦第 4 柱並切換開/關燈',
+          applySetup: () => {
+            setMode('step', true);
+            setBipolarMode('ON', true);
+            setMonitoredCol(3);
+            state.stepLightOn = !state.stepLightOn;
+            state.stepTimer = 0;
+          }
+        },
+        {
+          pill: '自學任務 2 / 4',
+          title: 'ON 與 OFF 雙極細胞訊號分流',
+          question: '2. ON 與 OFF 雙極細胞訊號分流',
+          hint: '同一個光訊號如何同時產生「開燈興奮」與「關燈興奮」？切換至 ON+OFF 並列模式，對照第 4 柱天藍與琥珀橘雙極細胞。',
+          watch: '看第 4 柱內核層 (INL)：開燈時左側天藍 ON 雙極興奮 (mGluR6 反轉)；關燈瞬間右側橘色 OFF 雙極爆發 (AMPA 受體)！',
+          toastBadge: '自學任務 2/4 · 內核層 INL',
+          toastBody: '已切換為「ON+OFF 並列對照」！請看第 4 柱內核層：ON 型雙極細胞利用 mGluR6 受體在照光（麩胺酸減少）時興奮；OFF 型雙極細胞利用 AMPA 受體在關燈（麩胺酸恢復）時爆發放電。',
+          actionLabel: '切換至 ON+OFF 並列對照',
+          applySetup: () => {
+            setMode('step', true);
+            setBipolarMode('DUAL', true);
+            setMonitoredCol(3);
+            state.stepLightOn = true;
+            state.stepTimer = 0;
+          }
+        },
+        {
+          pill: '自學任務 3 / 4',
+          title: '水平細胞與空間邊緣馬赫帶銳化',
+          question: '3. 水平細胞與空間邊緣銳化',
+          hint: '明暗交界處為何對比特別強烈？在「明暗空間邊緣」模式下，對比第 5 柱（亮側邊緣）在水平細胞正常 vs 阻斷時的差異。',
+          watch: '看第 4 柱(暗) 與 第 5 柱(亮) 交界：第 5 柱受暗側水平細胞強 GABA 抑制回饋，使 ON 雙極與神經節細胞產生最大邊緣銳化！',
+          toastBadge: '自學任務 3/4 · 外網狀層 OPL',
+          toastBody: '現在第 1~4 柱黑暗、第 5~8 柱明亮！請看交界處第 5 柱（亮側邊緣）：因為左側暗區水平細胞去極化並向第 5 柱發送強 GABA 抑制，造成中心-周邊拮抗，使亮邊緣神經節細胞放電最強（馬赫帶效應）。',
+          actionLabel: '觀察第 5 柱明暗交界銳化',
+          applySetup: () => {
+            setMode('spatial', true);
+            setBipolarMode('ON', true);
+            setHcGain(1.0, true);
+            setMonitoredCol(4); // 第 5 柱
+          }
+        },
+        {
+          pill: '自學任務 4 / 4',
+          title: '無軸突細胞：時間濾波與方向選擇性',
+          question: '4. 無軸突細胞的時間濾波與方向選擇性',
+          hint: '無軸突細胞沒有長軸突，卻在內網狀層 (IPL) 透過延遲 GABA/Glycine 抑制修剪持續訊號，並偵測物體移動方向。',
+          watch: '看示波器第 4 軌(粉紅無軸突) 與 第 5 軌(綠神經節)：無軸突細胞延遲抑制把持續光修剪為瞬時脈衝，並阻擋非偏好方向移動！',
+          toastBadge: '自學任務 4/4 · 內網狀層 IPL',
+          toastBody: '請看第 4 柱內網狀層 (IPL) 的洋紅色無軸突細胞與示波器第 4、5 軌：無軸突細胞延遲約 145ms 後釋放 GABA/Glycine，將持續光訊號修剪為「瞬時 ON 尖峰」；也可試著按「一鍵阻斷無軸突細胞」對照差異！',
+          actionLabel: '套用持續光階躍並觀察時間濾波',
+          applySetup: () => {
+            setMode('step', true);
+            setBipolarMode('ON', true);
+            setAcGain(1.0, true);
+            setMonitoredCol(3);
+            state.stepLightOn = true;
+            state.stepTimer = 0;
+          }
+        }
+      ];
+
+      let currentTourIdx = 0;
+      let toastTimerId = null;
+      let toastAnimFrame = null;
+      let toastStartTime = 0;
+      const TOAST_DURATION = 9500;
+      let lastToastKey = '';
+      let lastToastTime = 0;
+
+      const toastEl = document.getElementById('teaching-toast');
+      const toastBadgeEl = document.getElementById('toastBadge');
+      const toastTitleEl = document.getElementById('toastTitle');
+      const toastBodyEl = document.getElementById('toastBody');
+      const toastActionBtn = document.getElementById('toastActionBtn');
+      const toastProgressFill = document.getElementById('toastProgressFill');
+      const watchBarText = document.getElementById('watchBarText');
+
+      function showTeachingToast({ key, badge, title, body, watchText, actionLabel, onAction, force = false }) {
+        if (watchText) {
+          watchBarText.textContent = watchText;
+        }
+
+        const autoEnabled = document.getElementById('autoToastCheck').checked;
+        if (!force && !autoEnabled) return;
+
+        const now = performance.now();
+        if (!force && key === lastToastKey && (now - lastToastTime) < 2800) {
+          return;
+        }
+        lastToastKey = key;
+        lastToastTime = now;
+
+        toastBadgeEl.textContent = badge;
+        toastTitleEl.textContent = title;
+        toastBodyEl.textContent = body;
+
+        if (actionLabel && typeof onAction === 'function') {
+          toastActionBtn.style.display = 'inline-block';
+          toastActionBtn.textContent = actionLabel;
+          toastActionBtn.onclick = () => {
+            onAction();
+          };
+        } else {
+          toastActionBtn.style.display = 'none';
+        }
+
+        toastEl.classList.add('visible');
+
+        if (toastTimerId) clearTimeout(toastTimerId);
+        if (toastAnimFrame) cancelAnimationFrame(toastAnimFrame);
+
+        toastStartTime = performance.now();
+        function updateToastProgress(ts) {
+          const elapsed = ts - toastStartTime;
+          const remain = Math.max(0, 1 - elapsed / TOAST_DURATION);
+          toastProgressFill.style.transform = `scaleX(${remain})`;
+          if (remain > 0 && toastEl.classList.contains('visible')) {
+            toastAnimFrame = requestAnimationFrame(updateToastProgress);
+          }
+        }
+        toastAnimFrame = requestAnimationFrame(updateToastProgress);
+
+        toastTimerId = setTimeout(() => {
+          toastEl.classList.remove('visible');
+        }, TOAST_DURATION);
+      }
+
+      document.getElementById('toastCloseBtn').addEventListener('click', () => {
+        toastEl.classList.remove('visible');
+        if (toastTimerId) clearTimeout(toastTimerId);
+      });
+
+      function loadTourStep(idx, triggerToast = true) {
+        currentTourIdx = (idx + TOUR_STEPS.length) % TOUR_STEPS.length;
+        const step = TOUR_STEPS[currentTourIdx];
+
+        document.getElementById('tourStepPill').textContent = step.pill;
+        document.getElementById('tourQuestion').textContent = step.question;
+        document.getElementById('tourHint').textContent = step.hint;
+
+        step.applySetup();
+
+        if (triggerToast) {
+          showTeachingToast({
+            key: `tour_${currentTourIdx}`,
+            badge: step.toastBadge,
+            title: step.title,
+            body: step.toastBody,
+            watchText: step.watch,
+            actionLabel: step.actionLabel,
+            onAction: step.applySetup,
+            force: true
+          });
+        }
+      }
+
+      document.getElementById('tourPrevBtn').addEventListener('click', () => loadTourStep(currentTourIdx - 1, true));
+      document.getElementById('tourNextBtn').addEventListener('click', () => loadTourStep(currentTourIdx + 1, true));
+      document.getElementById('tourReplayBtn').addEventListener('click', () => loadTourStep(currentTourIdx, true));
+
+      // =========================================================================
+      // 突觸囊泡粒子與監測柱網格初始化
+      // =========================================================================
+      function initVesicles() {
+        state.vesicles = [];
+        for (let c = 0; c < NUM_COLS; c++) {
+          for (let k = 0; k < 9; k++) {
+            state.vesicles.push({ col: c, kind: 'pr_glu', progress: Math.random(), dx: (Math.random() - 0.5) * 12, speed: 0.7 + Math.random() * 0.5 });
+            state.vesicles.push({ col: c, kind: 'hc_gaba', dir: k % 2 === 0 ? -1 : 1, progress: Math.random(), dy: (Math.random() - 0.5) * 8, speed: 0.6 + Math.random() * 0.5 });
+            state.vesicles.push({ col: c, kind: 'bc_glu', progress: Math.random(), dx: (Math.random() - 0.5) * 10, speed: 0.75 + Math.random() * 0.5 });
+            state.vesicles.push({ col: c, kind: 'ac_gaba', dir: k % 2 === 0 ? -1 : 1, progress: Math.random(), dy: (Math.random() - 0.5) * 9, speed: 0.65 + Math.random() * 0.6 });
+          }
+        }
+      }
+      initVesicles();
+
+      function buildColSelector() {
+        const grid = document.getElementById('colSelectorGrid');
+        grid.innerHTML = '';
+        for (let i = 0; i < NUM_COLS; i++) {
+          const btn = document.createElement('button');
+          btn.textContent = `${i + 1}`;
+          btn.className = i === state.monitoredCol ? 'col-btn active' : 'col-btn';
+          btn.addEventListener('click', () => {
+            setMonitoredCol(i);
+            const tLabel = PR_TYPES[i] === 'Cone' ? '視錐細胞 (快速高解析)' : '視桿細胞 (微光高靈敏)';
+            showTeachingToast({
+              key: `col_${i}`,
+              badge: `監測切換 · 第 ${i + 1} 柱`,
+              title: `切換示波器追蹤第 ${i + 1} 柱（${tLabel}）`,
+              body: `下方五軌示波器現正即時繪製第 ${i + 1} 柱的 5 類神經元膜電位波形。注意第 1、2、7、8 柱為視桿細胞，第 3～6 柱為視錐細胞。`,
+              watchText: `目前監測第 ${i + 1} 柱 (${PR_TYPES[i] === 'Cone' ? '視錐' : '視桿'})：觀察下方五軌示波器即時電位變化。`
+            });
+          });
+          grid.appendChild(btn);
+        }
+      }
+
+      function setMonitoredCol(idx) {
+        state.monitoredCol = idx;
+        const grid = document.getElementById('colSelectorGrid');
+        Array.from(grid.children).forEach((b, k) => {
+          b.className = k === idx ? 'col-btn active' : 'col-btn';
+        });
+        const typeStr = PR_TYPES[idx] === 'Cone' ? '視錐' : '視桿';
+        document.getElementById('monitoredColLabel').textContent = `第 ${idx + 1} 柱 (${typeStr})`;
+        document.getElementById('statusColTitle').textContent = `第 ${idx + 1} 柱 (${typeStr})：`;
+      }
+      buildColSelector();
+
+      // =========================================================================
+      // 畫布交互：平移 (Pan)、縮放 (Zoom) 與點擊細胞生理說明
+      // =========================================================================
+      function screenToWorld(sx, sy) {
+        const cx = layout.width * 0.5;
+        const cy = layout.oscTop * 0.5;
+        return {
+          x: (sx - cx - camera.offsetX) / camera.scale + cx,
+          y: (sy - cy - camera.offsetY) / camera.scale + cy
+        };
+      }
+
+      function handleCanvasTap(sx, sy) {
+        if (sy > layout.oscTop) return;
+        const w = screenToWorld(sx, sy);
+
+        for (let k = cellHitboxes.length - 1; k >= 0; k--) {
+          const hb = cellHitboxes[k];
+          if (Math.hypot(w.x - hb.x, w.y - hb.y) <= hb.r) {
+            setMonitoredCol(hb.col);
+            showTeachingToast({
+              key: `cell_${hb.kind}_${hb.col}`,
+              badge: hb.badge,
+              title: hb.title,
+              body: hb.body,
+              watchText: hb.watch,
+              force: true
+            });
+            return;
+          }
+        }
+      }
+
+      canvas.addEventListener('mousedown', (e) => {
+        if (e.clientY < layout.oscTop) {
+          camera.isDragging = true;
+          camera.dragMoved = false;
+          camera.downX = e.clientX;
+          camera.downY = e.clientY;
+          camera.lastX = e.clientX;
+          camera.lastY = e.clientY;
+        }
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!camera.isDragging) return;
+        if (Math.hypot(e.clientX - camera.downX, e.clientY - camera.downY) > 5) {
+          camera.dragMoved = true;
+        }
+        camera.offsetX += e.clientX - camera.lastX;
+        camera.offsetY += e.clientY - camera.lastY;
+        camera.lastX = e.clientX;
+        camera.lastY = e.clientY;
+      });
+
+      window.addEventListener('mouseup', (e) => {
+        if (camera.isDragging && !camera.dragMoved) {
+          handleCanvasTap(e.clientX, e.clientY);
+        }
+        camera.isDragging = false;
+      });
+
+      canvas.addEventListener('wheel', (e) => {
+        if (e.clientY >= layout.oscTop) return;
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.1 : 0.91;
+        camera.scale = Math.max(camera.minScale, Math.min(camera.maxScale, camera.scale * factor));
+        updateZoomLabel();
+      }, { passive: false });
+
+      canvas.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) {
+          const t = e.touches[0];
+          if (t.clientY < layout.oscTop) {
+            camera.isDragging = true;
+            camera.dragMoved = false;
+            camera.downX = t.clientX;
+            camera.downY = t.clientY;
+            camera.lastX = t.clientX;
+            camera.lastY = t.clientY;
+          }
+        } else if (e.touches.length === 2) {
+          camera.isDragging = false;
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          camera.pinchDist = Math.hypot(dx, dy);
+          camera.pinchStartScale = camera.scale;
+        }
+      }, { passive: false });
+
+      canvas.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        if (e.touches.length === 1 && camera.isDragging) {
+          const t = e.touches[0];
+          if (Math.hypot(t.clientX - camera.downX, t.clientY - camera.downY) > 6) {
+            camera.dragMoved = true;
+          }
+          camera.offsetX += t.clientX - camera.lastX;
+          camera.offsetY += t.clientY - camera.lastY;
+          camera.lastX = t.clientX;
+          camera.lastY = t.clientY;
+        } else if (e.touches.length === 2 && camera.pinchDist > 0) {
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          const dist = Math.hypot(dx, dy);
+          camera.scale = Math.max(camera.minScale, Math.min(camera.maxScale, camera.pinchStartScale * (dist / camera.pinchDist)));
+          updateZoomLabel();
+        }
+      }, { passive: false });
+
+      canvas.addEventListener('touchend', () => {
+        if (camera.isDragging && !camera.dragMoved) {
+          handleCanvasTap(camera.downX, camera.downY);
+        }
+        camera.isDragging = false;
+        camera.pinchDist = 0;
+      });
+
+      function updateZoomLabel() {
+        const pct = Math.round(camera.scale * 100);
+        document.getElementById('zoomStatusText').textContent = `縮放：${pct}%`;
+        document.getElementById('resetViewBtn').textContent = `重置縮放視角 (${pct}%)`;
+      }
+
+      // =========================================================================
+      // 五類視網膜神經元生物物理動力學計算
+      // =========================================================================
+      function stepPhysics(dt) {
+        state.time += dt;
+
+        // 1. 入射光刺激強度
+        if (state.mode === 'step') {
+          state.stepTimer += dt;
+          if (state.stepTimer >= 2.6) {
+            state.stepTimer = 0;
+            state.stepLightOn = !state.stepLightOn;
+          }
+          const target = state.stepLightOn ? 1.0 : 0.0;
+          for (let i = 0; i < NUM_COLS; i++) {
+            state.light[i] = (i >= 2 && i <= 5) ? target : target * 0.2;
+          }
+        } else if (state.mode === 'pulse') {
+          // 週期性短促閃爍脈衝（每 1.4 秒閃亮 0.32 秒）
+          const phase = state.time % 1.4;
+          const target = phase < 0.32 ? 1.0 : 0.0;
+          for (let i = 0; i < NUM_COLS; i++) {
+            state.light[i] = (i >= 1 && i <= 6) ? target : target * 0.3;
+          }
+        } else if (state.mode === 'spatial') {
+          // 第 1~4 柱 (0~3) 暗，第 5~8 柱 (4~7) 亮
+          for (let i = 0; i < NUM_COLS; i++) {
+            state.light[i] = i >= 4 ? 1.0 : 0.0;
+          }
+        } else if (state.mode === 'move') {
+          state.spotPos += state.moveDir * dt * 2.35;
+          if (state.moveDir > 0 && state.spotPos > NUM_COLS + 0.4) state.spotPos = -0.8;
+          if (state.moveDir < 0 && state.spotPos < -1.4) state.spotPos = NUM_COLS - 0.2;
+          for (let i = 0; i < NUM_COLS; i++) {
+            const d = Math.abs(i - state.spotPos);
+            state.light[i] = Math.exp(-(d * d) / 0.65);
+          }
+        }
+
+        // 2. 感光細胞 (Rod & Cone)：黑暗去極化 (-40mV) 釋放麩胺酸；照光過極化 (-70mV) 減少釋放
+        for (let i = 0; i < NUM_COLS; i++) {
+          const isRod = PR_TYPES[i] === 'Rod';
+          const tauPR = isRod ? 0.065 : 0.028;
+          const effLight = isRod ? Math.min(1.0, state.light[i] * 1.25) : state.light[i];
+          const targetDepol = 1.0 - effLight;
+          state.prDepol[i] += (targetDepol - state.prDepol[i]) * Math.min(1, dt / tauPR);
+          state.prGlutamate[i] = Math.max(0, state.prDepol[i]);
+          state.prVm[i] = -70 + state.prDepol[i] * 30;
+        }
+
+        // 3. 外網狀層 (OPL) 水平細胞側向整合與 GABA 回饋抑制
+        const tauHC = 0.055;
+        for (let i = 0; i < NUM_COLS; i++) {
+          let pool = 0;
+          let wSum = 0;
+          for (let j = 0; j < NUM_COLS; j++) {
+            const dx = i - j;
+            const w = Math.exp(-(dx * dx) / (2 * 2.1 * 2.1));
+            pool += state.prGlutamate[j] * w;
+            wSum += w;
+          }
+          const targetHC = pool / wSum;
+          state.hcAct[i] += (targetHC - state.hcAct[i]) * Math.min(1, dt / tauHC);
+          state.hcVm[i] = -68 + state.hcAct[i] * 28;
+        }
+
+        const effectiveGlu = new Float32Array(NUM_COLS);
+        for (let i = 0; i < NUM_COLS; i++) {
+          const hcFeedback = (state.hcAct[i] - 0.45) * 0.48 * state.hcGain;
+          effectiveGlu[i] = Math.max(0, Math.min(1.2, state.prGlutamate[i] - hcFeedback));
+        }
+
+        // 4. 內核層 (INL) ON / OFF 雙極細胞
+        const tauBC = 0.032;
+        for (let i = 0; i < NUM_COLS; i++) {
+          const targetOn = Math.max(0, Math.min(1.25, 1.0 - effectiveGlu[i]));
+          const targetOff = Math.max(0, Math.min(1.25, effectiveGlu[i]));
+          state.bcOnAct[i] += (targetOn - state.bcOnAct[i]) * Math.min(1, dt / tauBC);
+          state.bcOffAct[i] += (targetOff - state.bcOffAct[i]) * Math.min(1, dt / tauBC);
+          state.bcVm[i] = -65 + (state.bipolarMode === 'OFF' ? state.bcOffAct[i] : state.bcOnAct[i]) * 28;
+        }
+
+        // 5. 內網狀層 (IPL) 無軸突細胞延遲整合與側向/非對稱抑制
+        const tauAC = state.acDelayMs / 1000.0;
+        for (let i = 0; i < NUM_COLS; i++) {
+          state.acOnDelayed[i] += (state.bcOnAct[i] - state.acOnDelayed[i]) * Math.min(1, dt / tauAC);
+          state.acOffDelayed[i] += (state.bcOffAct[i] - state.acOffDelayed[i]) * Math.min(1, dt / tauAC);
+          const activeAC = state.bipolarMode === 'OFF' ? state.acOffDelayed[i] : state.acOnDelayed[i];
+          state.acVm[i] = -66 + activeAC * 26;
+        }
+
+        for (let dst = 0; dst < NUM_COLS; dst++) {
+          let sumOn = 0, sumOff = 0, wSum = 0;
+          for (let src = 0; src < NUM_COLS; src++) {
+            const dx = dst - src;
+            let w = Math.exp(-(dx * dx) / (2 * 1.9 * 1.9));
+            if (state.mode === 'move') {
+              if (dx < 0) w *= 1.85;
+              else if (dx > 0) w *= 0.2;
+            }
+            sumOn += state.acOnDelayed[src] * w;
+            sumOff += state.acOffDelayed[src] * w;
+            wSum += w;
+          }
+          state.acInhOn[dst] = (sumOn / (wSum * 0.65)) * state.acGain;
+          state.acInhOff[dst] = (sumOff / (wSum * 0.65)) * state.acGain;
+        }
+
+        // 6. 神經節細胞層 (GCL) 整合與動作電位尖峰
+        for (let i = 0; i < NUM_COLS; i++) {
+          const netOn = state.bcOnAct[i] - state.acInhOn[i] * 0.86;
+          const netOff = state.bcOffAct[i] - state.acInhOff[i] * 0.86;
+          state.rgcOnDrive[i] = netOn;
+          state.rgcOffDrive[i] = netOff;
+
+          const primaryDrive = state.bipolarMode === 'OFF' ? netOff : netOn;
+          state.rgcVm[i] = Math.max(-76, Math.min(-42, -65 + primaryDrive * 32));
+
+          state.spikeCooldownOn[i] = Math.max(0, state.spikeCooldownOn[i] - dt);
+          if ((state.bipolarMode === 'ON' || state.bipolarMode === 'DUAL') && netOn > 0.14 && state.spikeCooldownOn[i] <= 0) {
+            state.axonSpikes[i].push({ progress: 0, subtype: 'ON' });
+            state.spikeCooldownOn[i] = Math.max(0.035, 0.22 - netOn * 0.18);
+            if (i === state.monitoredCol) state.history.spikes[HISTORY_LEN - 1] = 1;
+          }
+
+          state.spikeCooldownOff[i] = Math.max(0, state.spikeCooldownOff[i] - dt);
+          if ((state.bipolarMode === 'OFF' || state.bipolarMode === 'DUAL') && netOff > 0.14 && state.spikeCooldownOff[i] <= 0) {
+            state.axonSpikes[i].push({ progress: 0, subtype: 'OFF' });
+            state.spikeCooldownOff[i] = Math.max(0.035, 0.22 - netOff * 0.18);
+            if (i === state.monitoredCol && state.bipolarMode === 'OFF') state.history.spikes[HISTORY_LEN - 1] = 1;
+          }
+
+          for (let s = state.axonSpikes[i].length - 1; s >= 0; s--) {
+            state.axonSpikes[i][s].progress += dt * 2.5;
+            if (state.axonSpikes[i][s].progress > 1.0) state.axonSpikes[i].splice(s, 1);
+          }
+        }
+
+        // 7. 突觸囊泡更新
+        for (let v = 0; v < state.vesicles.length; v++) {
+          const ves = state.vesicles[v];
+          let rate = 0.1;
+          if (ves.kind === 'pr_glu') rate = state.prGlutamate[ves.col] * 2.2;
+          else if (ves.kind === 'hc_gaba') rate = state.hcAct[ves.col] * state.hcGain * 1.8;
+          else if (ves.kind === 'bc_glu') rate = (state.bipolarMode === 'OFF' ? state.bcOffAct[ves.col] : state.bcOnAct[ves.col]) * 2.2;
+          else if (ves.kind === 'ac_gaba') rate = (state.bipolarMode === 'OFF' ? state.acOffDelayed[ves.col] : state.acOnDelayed[ves.col]) * state.acGain * 2.0;
+          ves.progress += dt * ves.speed * (0.08 + rate);
+          if (ves.progress >= 1.0) ves.progress -= 1.0;
+        }
+
+        // 8. 示波器歷史波形寫入
+        state.sampleAccum += dt;
+        while (state.sampleAccum >= 0.016) {
+          state.sampleAccum -= 0.016;
+          const h = state.history;
+          const m = state.monitoredCol;
+          h.pr.copyWithin(0, 1);
+          h.hc.copyWithin(0, 1);
+          h.bc.copyWithin(0, 1);
+          h.bcOff.copyWithin(0, 1);
+          h.ac.copyWithin(0, 1);
+          h.rgc.copyWithin(0, 1);
+          h.spikes.copyWithin(0, 1);
+
+          h.pr[HISTORY_LEN - 1] = state.prDepol[m];
+          h.hc[HISTORY_LEN - 1] = state.hcAct[m];
+          h.bc[HISTORY_LEN - 1] = state.bipolarMode === 'OFF' ? state.bcOffAct[m] : state.bcOnAct[m];
+          h.bcOff[HISTORY_LEN - 1] = state.bcOffAct[m];
+          h.ac[HISTORY_LEN - 1] = state.bipolarMode === 'OFF' ? state.acOffDelayed[m] : state.acOnDelayed[m];
+          const rawRgc = state.bipolarMode === 'OFF' ? state.rgcOffDrive[m] : state.rgcOnDrive[m];
+          h.rgc[HISTORY_LEN - 1] = Math.max(-0.3, Math.min(1.15, rawRgc));
+          h.spikes[HISTORY_LEN - 1] = 0;
+        }
+      }
+
+      // =========================================================================
+      // 主渲染流程
+      // =========================================================================
+      function render() {
+        const w = layout.width;
+        const h = layout.height;
+
+        ctx.fillStyle = '#090e1a';
+        ctx.fillRect(0, 0, w, h);
+
+        // 背景網格
+        ctx.strokeStyle = 'rgba(30, 41, 59, 0.35)';
+        ctx.lineWidth = 1;
+        for (let x = 0; x < w; x += 42) {
+          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, layout.oscTop); ctx.stroke();
+        }
+        for (let y = 0; y < layout.oscTop; y += 42) {
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+        }
+
+        // 上方解剖微迴路畫布
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, w, layout.oscTop);
+        ctx.clip();
+
+        const cx = w * 0.5;
+        const cy = layout.oscTop * 0.5;
+        ctx.translate(cx + camera.offsetX, cy + camera.offsetY);
+        ctx.scale(camera.scale, camera.scale);
+        ctx.translate(-cx, -cy);
+
+        cellHitboxes = [];
+        drawAnatomicalLayers();
+        drawOPLHorizontalNetwork();
+        drawIPLAmacrineNetwork();
+        drawColumnsAndNeurons();
+        drawOpticNerveBundle();
+        if (camera.scale >= 1.35) drawMicroSynapticLOD();
+        drawModeOverlayAnnotations();
+
+        ctx.restore();
+
+        // 下方五軌同步生理示波器
+        drawFiveTraceOscilloscope();
+        updateBottomStatusBar();
+      }
+
+      function drawAnatomicalLayers() {
+        const leftEdge = layout.startX - layout.colSpacing * 0.72;
+        const rightEdge = layout.startX + layout.colSpacing * (NUM_COLS - 0.28);
+        const bandW = rightEdge - leftEdge;
+
+        ctx.fillStyle = 'rgba(45, 212, 191, 0.08)';
+        roundRect(ctx, leftEdge, layout.yOPL - 17, bandW, 34, 10);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(45, 212, 191, 0.28)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        roundRect(ctx, leftEdge, layout.yOPL - 17, bandW, 34, 10);
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(244, 63, 94, 0.09)';
+        roundRect(ctx, leftEdge, layout.yIPL - 20, bandW, 40, 10);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(244, 63, 94, 0.3)';
+        roundRect(ctx, leftEdge, layout.yIPL - 20, bandW, 40, 10);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        const labelX = leftEdge - 10;
+        ctx.font = '700 11px "Noto Sans TC", sans-serif';
+        ctx.textAlign = 'right';
+
+        const layers = [
+          { y: layout.yOS,  text: '感光層 (OS/IS)', color: '#fbbf24' },
+          { y: layout.yONL, text: '外核層 (ONL)', color: '#fcd34d' },
+          { y: layout.yOPL, text: '外網狀層 (OPL)', color: '#2dd4bf' },
+          { y: layout.yINL, text: '內核層 (INL)', color: '#38bdf8' },
+          { y: layout.yIPL, text: '內網狀層 (IPL)', color: '#fb7185' },
+          { y: layout.yGCL, text: '神經節細胞層 (GCL)', color: '#34d399' },
+          { y: layout.yNFL, text: '視神經纖維層 (NFL)', color: '#6ee7b7' }
+        ];
+        for (let l of layers) {
+          ctx.fillStyle = l.color;
+          ctx.fillText(l.text, labelX, l.y + 4);
+        }
+      }
+
+      function drawOPLHorizontalNetwork() {
+        for (let i = 0; i < NUM_COLS; i++) {
+          const x = layout.startX + i * layout.colSpacing;
+          const act = state.hcAct[i] * state.hcGain;
+
+          if (i < NUM_COLS - 1) {
+            const xNext = layout.startX + (i + 1) * layout.colSpacing;
+            ctx.beginPath();
+            ctx.moveTo(x, layout.yOPL);
+            ctx.lineTo(xNext, layout.yOPL);
+            ctx.strokeStyle = act > 0.05 ? `rgba(45, 212, 191, ${0.25 + Math.min(0.75, act * 0.7)})` : '#334155';
+            ctx.lineWidth = 2.2 + Math.min(2.5, act * 2);
+            ctx.stroke();
+          }
+
+          ctx.fillStyle = act > 0.05 ? `rgba(20, 184, 166, ${0.3 + Math.min(0.7, act * 0.7)})` : '#0f172a';
+          ctx.strokeStyle = act > 0.05 ? '#5eead4' : '#475569';
+          ctx.lineWidth = 1.8;
+          roundRect(ctx, x - 13, layout.yOPL - 8, 26, 16, 8);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = '#ccfbf1';
+          ctx.font = '700 9px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('HC', x, layout.yOPL + 3);
+
+          cellHitboxes.push({
+            col: i, kind: 'HC', x, y: layout.yOPL, r: 15,
+            badge: `水平細胞 (OPL) · 第 ${i + 1} 柱`,
+            title: `水平細胞目前膜電位：${Math.round(state.hcVm[i])} mV`,
+            body: `水平細胞橫向連結鄰近感光細胞終端，接收麩胺酸後釋放 GABA 進行側向抑制，建立中心-周邊拮抗感受野（目前增益 ${Math.round(state.hcGain * 100)}%）。`,
+            watch: `看第 ${i + 1} 柱外網狀層 (OPL)：水平細胞透過橫向樹突將抑制訊號擴散至相鄰柱位。`
+          });
+        }
+      }
+
+      function drawIPLAmacrineNetwork() {
+        for (let src = 0; src < NUM_COLS; src++) {
+          const rawAct = state.bipolarMode === 'OFF' ? state.acOffDelayed[src] : state.acOnDelayed[src];
+          const act = rawAct * state.acGain;
+          if (act < 0.04) continue;
+
+          const x1 = layout.startX + src * layout.colSpacing;
+          const y1 = layout.yIPL;
+
+          for (let dst = 0; dst < NUM_COLS; dst++) {
+            const dx = dst - src;
+            if (Math.abs(dx) > 3) continue;
+            let w = Math.exp(-(dx * dx) / (2 * 1.9 * 1.9));
+            if (state.mode === 'move') w *= dx < 0 ? 1.85 : (dx > 0 ? 0.2 : 1.0);
+            const str = Math.min(1.0, act * w);
+            if (str < 0.06) continue;
+
+            const x2 = layout.startX + dst * layout.colSpacing;
+            if (src !== dst) {
+              ctx.beginPath();
+              ctx.moveTo(x1, y1);
+              ctx.quadraticCurveTo((x1 + x2) * 0.5, y1 - 12 - Math.abs(dx) * 3.5, x2, y1 + 12);
+              ctx.strokeStyle = `rgba(244, 63, 94, ${0.15 + str * 0.65})`;
+              ctx.lineWidth = 1.2 + str * 2.4;
+              ctx.stroke();
+
+              ctx.beginPath();
+              ctx.moveTo(x2 - 4, y1 + 11);
+              ctx.lineTo(x2 + 4, y1 + 11);
+              ctx.strokeStyle = `rgba(251, 113, 133, ${0.45 + str * 0.55})`;
+              ctx.lineWidth = 2;
+              ctx.stroke();
+            } else {
+              ctx.beginPath();
+              ctx.arc(x1, y1 + 3, 13, 0, Math.PI * 2);
+              ctx.strokeStyle = `rgba(244, 63, 94, ${0.22 + str * 0.55})`;
+              ctx.lineWidth = 1.6;
+              ctx.stroke();
+            }
+          }
+        }
+
+        for (let i = 0; i < NUM_COLS; i++) {
+          const x = layout.startX + i * layout.colSpacing;
+          const y = layout.yIPL;
+          const rawAct = state.bipolarMode === 'OFF' ? state.acOffDelayed[i] : state.acOnDelayed[i];
+          const act = Math.min(1.2, rawAct * state.acGain);
+
+          const span = Math.min(layout.colSpacing * 0.72, 34);
+          ctx.strokeStyle = act > 0.08 ? '#fb7185' : '#475569';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(x - span, y - 4);
+          ctx.lineTo(x + span, y + 4);
+          ctx.moveTo(x - span * 0.8, y + 6);
+          ctx.lineTo(x + span * 0.8, y - 6);
+          ctx.stroke();
+
+          ctx.fillStyle = act > 0.06 ? `rgba(244, 63, 94, ${0.35 + act * 0.65})` : '#1a1325';
+          ctx.strokeStyle = act > 0.06 ? '#fda4af' : '#64748b';
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          ctx.arc(x, y, 9, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = '#ffe4e6';
+          ctx.font = '700 8.5px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('AC', x, y + 3);
+
+          cellHitboxes.push({
+            col: i, kind: 'AC', x, y, r: 14,
+            badge: `無軸突細胞 (IPL) · 第 ${i + 1} 柱`,
+            title: `無軸突細胞：樹突兼軸突的局部抑制中樞`,
+            body: `無軸突細胞沒有長軸突，僅在內網狀層 (IPL) 延遲釋放 GABA / 甘胺酸，將雙極細胞的持續訊號修剪為瞬時脈衝，並產生方向選擇性（目前增益 ${Math.round(state.acGain * 100)}%）。`,
+            watch: `看第 ${i + 1} 柱內網狀層 (IPL)：無軸突細胞延遲活化後，以紅色 T 型抑制符號壓低神經節細胞持續放電。`
+          });
+        }
+      }
+
+      function drawColumnsAndNeurons() {
+        for (let i = 0; i < NUM_COLS; i++) {
+          const x = layout.startX + i * layout.colSpacing;
+          const isMonitored = i === state.monitoredCol;
+          const isCone = PR_TYPES[i] === 'Cone';
+          const lightVal = state.light[i];
+          const prDepol = state.prDepol[i];
+          const gluVal = state.prGlutamate[i];
+
+          if (isMonitored) {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 4]);
+            roundRect(ctx, x - 26, layout.yLight - 18, 52, layout.yNFL - layout.yLight + 22, 12);
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.fillStyle = '#38bdf8';
+            ctx.font = '700 10px "Noto Sans TC", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(`監測 #${i + 1}`, x, layout.yLight - 22);
+          }
+
+          if (lightVal > 0.03) {
+            const beamGrad = ctx.createLinearGradient(x, layout.yLight - 12, x, layout.yOS - 8);
+            beamGrad.addColorStop(0, `rgba(254, 240, 138, ${lightVal * 0.9})`);
+            beamGrad.addColorStop(1, `rgba(250, 204, 21, ${lightVal * 0.15})`);
+            ctx.fillStyle = beamGrad;
+            ctx.beginPath();
+            ctx.moveTo(x - 10, layout.yLight - 12);
+            ctx.lineTo(x + 10, layout.yLight - 12);
+            ctx.lineTo(x + 17, layout.yOS - 8);
+            ctx.lineTo(x - 17, layout.yOS - 8);
+            ctx.closePath();
+            ctx.fill();
+          }
+
+          ctx.fillStyle = lightVal > 0.05 ? `rgba(253, 224, 71, ${0.35 + lightVal * 0.65})` : '#1e293b';
+          ctx.strokeStyle = lightVal > 0.05 ? '#fef08a' : '#475569';
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.arc(x, layout.yLight - 6, 5.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          const prFill = prDepol > 0.5 ? `rgba(245, 158, 11, ${0.3 + prDepol * 0.65})` : `rgba(51, 65, 85, ${0.5 + (1 - prDepol) * 0.4})`;
+          const prStroke = prDepol > 0.5 ? '#fcd34d' : '#60a5fa';
+          ctx.fillStyle = prFill;
+          ctx.strokeStyle = prStroke;
+          ctx.lineWidth = 1.8;
+
+          if (isCone) {
+            ctx.beginPath();
+            ctx.moveTo(x, layout.yOS - 14);
+            ctx.lineTo(x + 9, layout.yOS + 8);
+            ctx.lineTo(x - 9, layout.yOS + 8);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+          } else {
+            roundRect(ctx, x - 6, layout.yOS - 15, 12, 23, 3);
+            ctx.fill();
+            ctx.stroke();
+          }
+
+          ctx.beginPath();
+          ctx.arc(x, layout.yONL, 7.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = prDepol > 0.5 ? '#fef3c7' : '#93c5fd';
+          ctx.font = '700 8px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(isCone ? 'C' : 'R', x, layout.yONL + 2.8);
+
+          ctx.beginPath();
+          ctx.moveTo(x, layout.yONL + 7.5);
+          ctx.lineTo(x, layout.yOPL - 8);
+          ctx.strokeStyle = gluVal > 0.2 ? `rgba(251, 191, 36, ${0.25 + gluVal * 0.75})` : '#334155';
+          ctx.lineWidth = 1.4 + gluVal * 2.4;
+          ctx.stroke();
+
+          cellHitboxes.push({
+            col: i, kind: 'PR', x, y: layout.yONL, r: 16,
+            badge: `${isCone ? '視錐細胞 (Cone)' : '視桿細胞 (Rod)'} · 第 ${i + 1} 柱`,
+            title: `膜電位：${Math.round(state.prVm[i])} mV（麩胺酸釋放 ${Math.round(gluVal * 100)}%）`,
+            body: `黑暗中維持去極化 (-40mV) 並持續釋放麩胺酸；照光後關閉 Na+ 通道產生「過極化 (-70mV)」，大幅減少麩胺酸釋放！`,
+            watch: `看第 ${i + 1} 柱感光細胞：開燈變暗藍過極化 (-70mV)，關燈恢復琥珀暖色去極化 (-40mV)。`
+          });
+
+          if (state.bipolarMode === 'DUAL') {
+            drawBipolarNode(x - 11, layout.yINL, state.bcOnAct[i], 'ON', i);
+            drawBipolarNode(x + 11, layout.yINL, state.bcOffAct[i], 'OFF', i);
+            drawRGCNode(x - 11, layout.yGCL, state.rgcOnDrive[i], 'ON', i);
+            drawRGCNode(x + 11, layout.yGCL, state.rgcOffDrive[i], 'OFF', i);
+          } else if (state.bipolarMode === 'OFF') {
+            drawBipolarNode(x, layout.yINL, state.bcOffAct[i], 'OFF', i);
+            drawRGCNode(x, layout.yGCL, state.rgcOffDrive[i], 'OFF', i);
+          } else {
+            drawBipolarNode(x, layout.yINL, state.bcOnAct[i], 'ON', i);
+            drawRGCNode(x, layout.yGCL, state.rgcOnDrive[i], 'ON', i);
+          }
+        }
+      }
+
+      function drawBipolarNode(bx, by, act, subtype, colIdx) {
+        const isOn = subtype === 'ON';
+        const colorHex = isOn ? '#38bdf8' : '#fb923c';
+        const fillRgba = isOn
+          ? `rgba(56, 189, 248, ${0.22 + Math.min(0.78, act * 0.78)})`
+          : `rgba(251, 146, 60, ${0.22 + Math.min(0.78, act * 0.78)})`;
+
+        ctx.beginPath();
+        ctx.moveTo(bx, layout.yOPL + 8);
+        ctx.lineTo(bx, by - 11);
+        ctx.strokeStyle = act > 0.08 ? colorHex : '#334155';
+        ctx.lineWidth = act > 0.08 ? 1.8 : 1.3;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(bx, by + 11);
+        ctx.lineTo(bx, layout.yGCL - 12);
+        ctx.strokeStyle = act > 0.08 ? colorHex : '#1e293b';
+        ctx.lineWidth = act > 0.08 ? (1.6 + act * 1.8) : 1.4;
+        ctx.stroke();
+
+        if (act > 0.1) {
+          ctx.shadowColor = colorHex;
+          ctx.shadowBlur = 10 * Math.min(1, act);
+        }
+        ctx.fillStyle = act > 0.08 ? fillRgba : '#0f172a';
+        ctx.strokeStyle = act > 0.08 ? colorHex : '#475569';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.arc(bx, by, state.bipolarMode === 'DUAL' ? 8.5 : 11, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = '700 8px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(state.bipolarMode === 'DUAL' ? (isOn ? '+' : '-') : subtype, bx, by + 2.8);
+
+        cellHitboxes.push({
+          col: colIdx, kind: 'BC', x: bx, y: by, r: 12,
+          badge: `${isOn ? 'ON 型雙極細胞' : 'OFF 型雙極細胞'} · 第 ${colIdx + 1} 柱`,
+          title: isOn ? '受體：mGluR6 代謝型訊號反轉突觸' : '受體：AMPA / Kainate 離子型興奮受體',
+          body: isOn
+            ? '黑暗中被麩胺酸抑制；照光後麩胺酸減少，解除抑制而去極化興奮，負責傳遞「光變亮」訊號。'
+            : '黑暗中被麩胺酸直接興奮去極化；照光時過極化，關燈瞬間重新去極化爆發，負責傳遞「光變暗」訊號。',
+          watch: `看第 ${colIdx + 1} 柱內核層 (INL)：${isOn ? 'ON 型照光亮起' : 'OFF 型關燈亮起'}。`
+        });
+      }
+
+      function drawRGCNode(gx, gy, drive, subtype, colIdx) {
+        const active = drive > 0.12;
+        const hyper = drive < -0.05;
+        const r = state.bipolarMode === 'DUAL' ? 9.5 : 12.5;
+
+        if (hyper) {
+          ctx.beginPath();
+          ctx.arc(gx, gy, r + 4, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(244, 63, 94, ${Math.min(0.85, Math.abs(drive) * 1.4)})`;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+
+        if (active) {
+          ctx.shadowColor = '#34d399';
+          ctx.shadowBlur = 14 * Math.min(1, drive);
+        }
+        ctx.fillStyle = active ? `rgba(16, 185, 129, ${0.28 + Math.min(0.72, drive * 0.72)})` : (hyper ? '#1f1024' : '#0f172a');
+        ctx.strokeStyle = active ? '#6ee7b7' : (hyper ? '#fb7185' : '#475569');
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(gx, gy, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        ctx.fillStyle = '#ecfdf5';
+        ctx.font = '700 8.5px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(state.bipolarMode === 'DUAL' ? 'G' : 'RGC', gx, gy + 3);
+
+        cellHitboxes.push({
+          col: colIdx, kind: 'RGC', x: gx, y: gy, r: 14,
+          badge: `視網膜神經節細胞 (${subtype} RGC) · 第 ${colIdx + 1} 柱`,
+          title: `膜電位：${Math.round(state.rgcVm[colIdx])} mV（唯一長軸突輸出神經元）`,
+          body: `整合雙極細胞興奮與無軸突細胞抑制，超過閾值時產生全有或全無「動作電位尖峰」，沿視神經纖維層送往大腦。`,
+          watch: `看第 ${colIdx + 1} 柱神經節細胞與底部視神經：亮綠色動作電位脈衝沿軸突向右傳往大腦。`
+        });
+      }
+
+      function drawOpticNerveBundle() {
+        const rightExitX = layout.startX + layout.colSpacing * (NUM_COLS - 0.15);
+
+        ctx.strokeStyle = 'rgba(52, 211, 153, 0.28)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(layout.startX, layout.yNFL);
+        ctx.lineTo(rightExitX, layout.yNFL);
+        ctx.stroke();
+
+        ctx.fillStyle = '#34d399';
+        ctx.font = '700 10px "Noto Sans TC", sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText('視神經纖維束 → 視交叉 / 大腦視覺皮質', rightExitX + 8, layout.yNFL + 4);
+
+        for (let i = 0; i < NUM_COLS; i++) {
+          const x = layout.startX + i * layout.colSpacing;
+          ctx.beginPath();
+          ctx.moveTo(x, layout.yGCL + 12);
+          ctx.lineTo(x, layout.yNFL);
+          ctx.strokeStyle = 'rgba(52, 211, 153, 0.35)';
+          ctx.lineWidth = 1.8;
+          ctx.stroke();
+
+          for (let s = 0; s < state.axonSpikes[i].length; s++) {
+            const sp = state.axonSpikes[i][s];
+            const offset = state.bipolarMode === 'DUAL' ? (sp.subtype === 'ON' ? -11 : 11) : 0;
+            let px = x + offset;
+            let py = layout.yNFL;
+
+            if (sp.progress < 0.45) {
+              const t = sp.progress / 0.45;
+              py = (layout.yGCL + 12) + t * (layout.yNFL - (layout.yGCL + 12));
+            } else {
+              const t = (sp.progress - 0.45) / 0.55;
+              px = (x + offset) + t * (rightExitX - (x + offset));
+            }
+
+            ctx.fillStyle = sp.subtype === 'OFF' ? '#fdba74' : '#a7f3d0';
+            ctx.shadowColor = sp.subtype === 'OFF' ? '#f97316' : '#10b981';
+            ctx.shadowBlur = 8;
+            ctx.beginPath();
+            ctx.arc(px, py, 3.6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+          }
+        }
+      }
+
+      function drawMicroSynapticLOD() {
+        for (let v = 0; v < state.vesicles.length; v++) {
+          const ves = state.vesicles[v];
+          const x = layout.startX + ves.col * layout.colSpacing;
+          if (ves.kind === 'pr_glu') {
+            const act = state.prGlutamate[ves.col];
+            if (act < 0.08) continue;
+            ctx.fillStyle = `rgba(253, 224, 71, ${act * 0.9})`;
+            ctx.beginPath(); ctx.arc(x + ves.dx * 0.4, (layout.yOPL - 14) + ves.progress * 10, 1.6, 0, Math.PI * 2); ctx.fill();
+          } else if (ves.kind === 'hc_gaba') {
+            const act = state.hcAct[ves.col] * state.hcGain;
+            if (act < 0.08) continue;
+            ctx.fillStyle = `rgba(94, 234, 212, ${Math.min(1, act) * 0.9})`;
+            ctx.beginPath(); ctx.arc(x + ves.dir * (12 + ves.progress * 24), layout.yOPL + ves.dy * 0.5, 1.7, 0, Math.PI * 2); ctx.fill();
+          } else if (ves.kind === 'bc_glu') {
+            const act = state.bipolarMode === 'OFF' ? state.bcOffAct[ves.col] : state.bcOnAct[ves.col];
+            if (act < 0.08) continue;
+            ctx.fillStyle = `rgba(125, 211, 252, ${act * 0.9})`;
+            ctx.beginPath(); ctx.arc(x + ves.dx * 0.4, (layout.yIPL - 14) + ves.progress * 10, 1.6, 0, Math.PI * 2); ctx.fill();
+          } else if (ves.kind === 'ac_gaba') {
+            const act = (state.bipolarMode === 'OFF' ? state.acOffDelayed[ves.col] : state.acOnDelayed[ves.col]) * state.acGain;
+            if (act < 0.08) continue;
+            ctx.fillStyle = `rgba(253, 164, 175, ${Math.min(1, act) * 0.95})`;
+            ctx.beginPath(); ctx.arc(x + ves.dir * (10 + ves.progress * 25), layout.yIPL + ves.dy * 0.6, 1.8, 0, Math.PI * 2); ctx.fill();
+          }
+        }
+
+        const mx = layout.startX + state.monitoredCol * layout.colSpacing;
+        ctx.font = '600 8.5px "Noto Sans TC", sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#5eead4';
+        ctx.fillText('OPL: 麩胺酸(Glu) + HC GABA 側向回饋', mx + 16, layout.yOPL - 10);
+        ctx.fillStyle = '#fda4af';
+        ctx.fillText('IPL: AC GABA / Glycine 延遲抑制囊泡', mx + 16, layout.yIPL - 12);
+      }
+
+      function drawModeOverlayAnnotations() {
+        if (state.mode === 'spatial') {
+          const edgeX = layout.startX + 3.5 * layout.colSpacing;
+          ctx.save();
+          ctx.strokeStyle = 'rgba(251, 191, 36, 0.65)';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([5, 4]);
+          ctx.beginPath(); ctx.moveTo(edgeX, layout.yLight - 18); ctx.lineTo(edgeX, layout.yNFL); ctx.stroke();
+          ctx.restore();
+
+          ctx.font = '700 10.5px "Noto Sans TC", sans-serif';
+          ctx.textAlign = 'right';
+          ctx.fillStyle = '#fb7185';
+          ctx.fillText('← 暗側邊緣 (第4柱)：受側向抑制壓抑', edgeX - 10, layout.yGCL + 24);
+
+          ctx.textAlign = 'left';
+          ctx.fillStyle = '#34d399';
+          ctx.fillText('亮側邊緣 (第5柱)：馬赫帶對比增強 →', edgeX + 10, layout.yGCL + 24);
+        } else if (state.mode === 'move') {
+          const sx = layout.startX + Math.max(0, Math.min(NUM_COLS - 1, state.spotPos)) * layout.colSpacing;
+          ctx.font = '700 10.5px "Noto Sans TC", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = state.moveDir > 0 ? '#34d399' : '#fb7185';
+          ctx.fillText(
+            state.moveDir > 0 ? '光點移動：左 → 右（偏好方向：RGC 強烈放電）' : '光點移動：右 → 左（非偏好方向：前方受 AC 抑制）',
+            sx,
+            layout.yLight - 20
+          );
+        }
+      }
+
+      // =========================================================================
+      // 底部五軌同步生理示波器
+      // =========================================================================
+      function drawFiveTraceOscilloscope() {
+        const collapsed = document.body.classList.contains('panel-collapsed');
+        const rightMargin = (!collapsed && layout.width > 780) ? 382 : 12;
+        const oscX = 12;
+        const oscW = Math.max(260, layout.width - oscX - rightMargin);
+        const oscY = layout.oscTop;
+        const oscH = layout.oscHeight - 4;
+
+        ctx.fillStyle = 'rgba(11, 17, 30, 0.96)';
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 1.5;
+        roundRect(ctx, oscX, oscY, oscW, oscH, 12);
+        ctx.fill();
+        ctx.stroke();
+
+        const prType = PR_TYPES[state.monitoredCol] === 'Cone' ? '視錐細胞' : '視桿細胞';
+        ctx.font = '700 11.5px "Noto Sans TC", sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#f1f5f9';
+        ctx.fillText(
+          `五類視網膜神經元同步膜電位示波器（監測第 ${state.monitoredCol + 1} 柱：${prType} | ${state.bipolarMode} 路徑）`,
+          oscX + 12,
+          oscY + 18
+        );
+
+        const plotX = oscX + 12;
+        const plotY = oscY + 25;
+        const plotW = oscW - 24;
+        const plotH = oscH - 32;
+
+        ctx.fillStyle = '#060a14';
+        roundRect(ctx, plotX, plotY, plotW, plotH, 8);
+        ctx.fill();
+
+        const h = state.history;
+        const tracks = [
+          { name: '1. 感光細胞 (照光過極化 ↓)', data: h.pr, color: '#fbbf24', rangeText: '-40 / -70mV' },
+          { name: '2. 水平細胞 (OPL 側向整合)', data: h.hc, color: '#2dd4bf', rangeText: 'GABA 抑制' },
+          {
+            name: state.bipolarMode === 'DUAL' ? '3. 雙極細胞 (藍ON / 橘OFF)' : `3. ${state.bipolarMode} 型雙極細胞`,
+            data: h.bc,
+            data2: state.bipolarMode === 'DUAL' ? h.bcOff : null,
+            color: state.bipolarMode === 'OFF' ? '#fb923c' : '#38bdf8',
+            color2: '#fb923c',
+            rangeText: state.bipolarMode === 'OFF' ? '關燈興奮' : '照光興奮'
+          },
+          { name: '4. 無軸突細胞 (IPL 延遲整合)', data: h.ac, color: '#f43f5e', rangeText: `τ=${state.acDelayMs}ms` },
+          { name: '5. 神經節細胞 (RGC 動作電位)', data: h.rgc, color: '#34d399', isRGC: true, rangeText: 'Spikes → 大腦' }
+        ];
+
+        const trackH = plotH / tracks.length;
+
+        for (let t = 0; t < tracks.length; t++) {
+          const tr = tracks[t];
+          const topY = plotY + t * trackH;
+          const midY = topY + trackH * 0.72;
+          const amp = trackH * 0.56;
+
+          if (t > 0) {
+            ctx.strokeStyle = 'rgba(30, 41, 59, 0.75)';
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(plotX, topY); ctx.lineTo(plotX + plotW, topY); ctx.stroke();
+          }
+
+          ctx.font = '600 10px "Noto Sans TC", sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillStyle = tr.color;
+          ctx.fillText(tr.name, plotX + 8, topY + 12);
+
+          ctx.textAlign = 'right';
+          ctx.fillStyle = '#64748b';
+          ctx.font = '10px monospace';
+          ctx.fillText(tr.rangeText, plotX + plotW - 8, topY + 12);
+
+          drawOscTrace(tr.data, plotX + 4, plotW - 8, midY, amp, tr.color, 1.9);
+          if (tr.data2) drawOscTrace(tr.data2, plotX + 4, plotW - 8, midY, amp, tr.color2, 1.6);
+
+          if (tr.isRGC) {
+            ctx.strokeStyle = '#a7f3d0';
+            ctx.lineWidth = 1.6;
+            for (let i = 0; i < HISTORY_LEN; i++) {
+              if (h.spikes[i] === 1) {
+                const sx = (plotX + 4) + (i / (HISTORY_LEN - 1)) * (plotW - 8);
+                const sy = midY - Math.max(0, tr.data[i]) * amp;
+                ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx, Math.max(topY + 3, sy - trackH * 0.45)); ctx.stroke();
+              }
+            }
+          }
+        }
+      }
+
+      function drawOscTrace(arr, x0, w, baseY, amp, color, lw) {
+        ctx.beginPath();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = lw;
+        for (let i = 0; i < HISTORY_LEN; i++) {
+          const px = x0 + (i / (HISTORY_LEN - 1)) * w;
+          const py = baseY - arr[i] * amp;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+
+      function roundRect(ctx, x, y, width, height, radius) {
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + width - radius, y);
+        ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+        ctx.lineTo(x + width, y + height - radius);
+        ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+        ctx.lineTo(x + radius, y + height);
+        ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+        ctx.closePath();
+      }
+
+      function updateBottomStatusBar() {
+        const m = state.monitoredCol;
+        document.getElementById('statPR').textContent = `${Math.round(state.prVm[m])}mV`;
+        document.getElementById('statHC').textContent = `${Math.round(state.hcVm[m])}mV`;
+        document.getElementById('statBC').textContent = `${Math.round(state.bcVm[m])}mV`;
+        document.getElementById('statAC').textContent = `${Math.round(state.acVm[m])}mV`;
+        document.getElementById('statRGC').textContent = `${Math.round(state.rgcVm[m])}mV`;
+      }
+
+      // =========================================================================
+      // 控制面板 UI 事件與情境 Toast 連動
+      // =========================================================================
+      document.getElementById('collapsePanelBtn').addEventListener('click', () => {
+        document.body.classList.add('panel-collapsed');
+        resizeCanvas();
+      });
+
+      document.getElementById('expandPanelBtn').addEventListener('click', () => {
+        document.body.classList.remove('panel-collapsed');
+        resizeCanvas();
+      });
+
+      function setMode(m, silent = false) {
+        state.mode = m;
+        document.querySelectorAll('.mode-btn').forEach((b) => {
+          b.classList.toggle('active', b.getAttribute('data-mode') === m);
+        });
+        document.getElementById('moveDirControls').style.display = m === 'move' ? 'block' : 'none';
+
+        if (silent) return;
+        if (m === 'step') {
+          state.stepTimer = 0;
+          state.stepLightOn = true;
+          showTeachingToast({
+            key: 'mode_step',
+            badge: '刺激模式 · 持續光階躍',
+            title: '觀察持續光照如何被修剪為瞬時脈衝',
+            body: '現在看第 4 柱示波器第 3 軌（雙極持續興奮）與第 5 軌（神經節瞬時尖峰）：無軸突細胞延遲抑制會濾除穩定不變的背景光！',
+            watchText: '看第 4 柱示波器：雙極細胞持續維持高電位，神經節細胞僅在開燈瞬間爆發尖峰。'
+          });
+        } else if (m === 'pulse') {
+          showTeachingToast({
+            key: 'mode_pulse',
+            badge: '刺激模式 · 週期閃爍脈衝',
+            title: '短促閃光刺激下的快速時間解析',
+            body: '短促閃光結束得比無軸突細胞延遲更快，因此每一道閃光都能精準觸發視錐細胞與神經節細胞的同步放電。',
+            watchText: '看第 3～6 柱視錐細胞與視神經：每次閃光皆產生整齊的綠色動作電位脈衝波。'
+          });
+        } else if (m === 'spatial') {
+          setMonitoredCol(4);
+          showTeachingToast({
+            key: 'mode_spatial',
+            badge: '刺激模式 · 明暗空間邊緣',
+            title: '馬赫帶效應：明暗交界處對比大幅增強',
+            body: '第 1～4 柱黑暗、第 5～8 柱明亮。請看交界處第 5 柱（亮側邊緣）：它受到左側暗區水平細胞與無軸突細胞的側向調控，神經節細胞放電比深亮區（第 7、8 柱）更強！',
+            watchText: '比較第 5 柱（亮側邊緣）與第 7 柱（亮區內部）：第 5 柱神經節細胞放電明顯更密集！'
+          });
+        } else if (m === 'move') {
+          showTeachingToast({
+            key: 'mode_move',
+            badge: '刺激模式 · 移動光點方向選擇性',
+            title: '星爆型無軸突細胞的非對稱方向抑制',
+            body: '光點「左 → 右」移動（偏好方向）時，無軸突細胞主要向左側發送抑制，右側前方不受阻擋而強烈放電；切換為「右 → 左」時，前方會先被抑制！',
+            watchText: '觀察光點移動前方的神經節細胞：左→右時強烈放電，右→左時被紅色抑制阻斷。'
+          });
+        }
+      }
+
+      document.querySelectorAll('.mode-btn').forEach((btn) => {
+        btn.addEventListener('click', () => setMode(btn.getAttribute('data-mode'), false));
+      });
+
+      document.getElementById('manualStepToggleBtn').addEventListener('click', () => {
+        if (state.mode !== 'step') setMode('step', true);
+        state.stepLightOn = !state.stepLightOn;
+        state.stepTimer = 0;
+        showTeachingToast({
+          key: `toggle_light_${state.stepLightOn}`,
+          badge: state.stepLightOn ? '光刺激 · 立即開燈 (ON)' : '光刺激 · 立即關燈 (OFF)',
+          title: state.stepLightOn ? '開燈瞬間：感光細胞過極化，ON 路徑爆發' : '關燈瞬間：暗電流恢復，OFF 路徑爆發',
+          body: state.stepLightOn
+            ? '開燈使感光細胞過極化 (-70mV) 並停止釋放麩胺酸，ON 型雙極細胞解除抑制而去極化，觸發神經節細胞尖峰！'
+            : '關燈使感光細胞恢復暗電流去極化 (-40mV) 並大量釋放麩胺酸，OFF 型雙極細胞受 AMPA 受體興奮而去極化！',
+          watchText: state.stepLightOn ? '開燈中：看 ON 雙極細胞與 ON 神經節細胞亮起。' : '關燈中：看感光細胞恢復琥珀暖色 (-40mV) 釋放麩胺酸。'
+        });
+      });
+
+      const moveRightBtn = document.getElementById('moveRightBtn');
+      const moveLeftBtn = document.getElementById('moveLeftBtn');
+      moveRightBtn.addEventListener('click', () => {
+        state.moveDir = 1;
+        moveRightBtn.classList.add('primary');
+        moveLeftBtn.classList.remove('primary');
+        showTeachingToast({
+          key: 'move_right',
+          badge: '方向選擇性 · 偏好方向 (左 → 右)',
+          title: '光點向右移動：逃離左側抑制波，強烈放電',
+          body: '無軸突細胞主要向左側發送抑制訊號，因此光點向右移動時，前方的神經節細胞尚未被抑制，產生高頻動作電位！',
+          watchText: '偏好方向 (左 → 右)：觀察光點經過時神經節細胞亮綠爆發。'
+        });
+      });
+
+      moveLeftBtn.addEventListener('click', () => {
+        state.moveDir = -1;
+        moveLeftBtn.classList.add('primary');
+        moveRightBtn.classList.remove('primary');
+        showTeachingToast({
+          key: 'move_left',
+          badge: '方向選擇性 · 非偏好方向 (右 → 左)',
+          title: '光點向左移動：前方先遭無軸突細胞側向抑制！',
+          body: '因為無軸突細胞向左側發送強抑制，當光點向左移動時，左側前方的神經節細胞已被超極化（出現紫紅外環），幾乎無法產生動作電位！',
+          watchText: '非偏好方向 (右 → 左)：觀察光點左側前方的神經節細胞出現紫紅抑制外環。'
+        });
+      });
+
+      function setBipolarMode(bp, silent = false) {
+        state.bipolarMode = bp;
+        document.querySelectorAll('.bp-btn').forEach((b) => {
+          b.classList.toggle('active', b.getAttribute('data-bp') === bp);
+        });
+        if (silent) return;
+
+        const descMap = {
+          ON: {
+            title: 'ON 型雙極細胞路徑（mGluR6 訊號反轉）',
+            body: 'ON 型雙極細胞帶有代謝型 mGluR6 受體：黑暗中被麩胺酸抑制，照光後麩胺酸減少反而「去極化興奮」，專門向大腦報告物體變亮。',
+            watch: '看內核層 (INL) 天藍色 ON 雙極細胞：照光時興奮亮起。'
+          },
+          OFF: {
+            title: 'OFF 型雙極細胞路徑（AMPA 離子型受體）',
+            body: 'OFF 型雙極細胞帶有離子型 AMPA 受體：黑暗中被麩胺酸直接興奮，照光時過極化沉默，關燈瞬間重新爆發，專門報告物體變暗。',
+            watch: '看內核層 (INL) 琥珀橘色 OFF 雙極細胞：關燈瞬間興奮亮起。'
+          },
+          DUAL: {
+            title: 'ON 與 OFF 雙通道並列同柱對照',
+            body: '同一根感光細胞的麩胺酸變化，同時分流給左側天藍 ON 雙極細胞與右側橘色 OFF 雙極細胞，讓視覺系統同時偵測明暗對比！',
+            watch: '同時觀察每柱內核層左側天藍 (ON) 與右側橘色 (OFF) 的互補交替亮起。'
+          }
+        };
+        showTeachingToast({
+          key: `bp_${bp}`,
+          badge: `雙極細胞切換 · ${bp} 路徑`,
+          title: descMap[bp].title,
+          body: descMap[bp].body,
+          watchText: descMap[bp].watch
+        });
+      }
+
+      document.querySelectorAll('.bp-btn').forEach((btn) => {
+        btn.addEventListener('click', () => setBipolarMode(btn.getAttribute('data-bp'), false));
+      });
+
+      // 水平細胞與無軸突細胞滑桿及一鍵阻斷
+      const hcGainSlider = document.getElementById('hcGainSlider');
+      const hcGainText = document.getElementById('hcGainText');
+      function setHcGain(val, silent = false) {
+        state.hcGain = val;
+        const pct = Math.round(val * 100);
+        hcGainSlider.value = pct;
+        hcGainText.textContent = pct === 0 ? '0% (已阻斷)' : `${pct}%`;
+        if (!silent && pct === 0) {
+          showTeachingToast({
+            key: 'hc_blocked',
+            badge: '藥理阻斷 · 水平細胞 OPL 抑制歸零',
+            title: '水平細胞已阻斷：喪失中心-周邊拮抗與空間邊緣銳化',
+            body: '阻斷外網狀層 (OPL) 水平細胞的 GABA 側向回饋後，明暗交界處（第 5 柱）不再產生額外邊緣增強，空間對比度明顯下降。',
+            watchText: '水平細胞已阻斷 (0%)：比較第 5 柱與第 7 柱，邊緣銳化差異消失。'
+          });
+        }
+      }
+      hcGainSlider.addEventListener('input', (e) => setHcGain(parseInt(e.target.value, 10) / 100, false));
+      document.getElementById('blockHcBtn').addEventListener('click', () => {
+        setHcGain(state.hcGain > 0 ? 0 : 1.0, false);
+      });
+
+      const acGainSlider = document.getElementById('acGainSlider');
+      const acGainText = document.getElementById('acGainText');
+      function setAcGain(val, silent = false) {
+        state.acGain = val;
+        const pct = Math.round(val * 100);
+        acGainSlider.value = pct;
+        acGainText.textContent = pct === 0 ? '0% (已阻斷)' : `${pct}%`;
+        if (!silent && pct === 0) {
+          showTeachingToast({
+            key: 'ac_blocked',
+            badge: '藥理阻斷 · 無軸突細胞 IPL 抑制歸零',
+            title: '無軸突細胞已阻斷：時間濾波與方向選擇性消失！',
+            body: '請看示波器第 5 軌（綠色神經節細胞）：失去無軸突細胞的延遲 GABA/Glycine 抑制後，持續光不再被修剪為瞬時脈衝，神經節細胞會一路持續放電到關燈！',
+            watchText: '無軸突細胞已阻斷 (0%)：看示波器第 5 軌，神經節細胞退化為持續放電！'
+          });
+        }
+      }
+      acGainSlider.addEventListener('input', (e) => setAcGain(parseInt(e.target.value, 10) / 100, false));
+      document.getElementById('blockAcBtn').addEventListener('click', () => {
+        setAcGain(state.acGain > 0 ? 0 : 1.0, false);
+      });
+
+      // 模擬時間流速
+      document.querySelectorAll('.spd-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.simSpeed = parseFloat(btn.getAttribute('data-speed'));
+          document.querySelectorAll('.spd-btn').forEach((b) => b.classList.toggle('active', b === btn));
+        });
+      });
+
+      // 重置視角與恢復預設
+      document.getElementById('resetViewBtn').addEventListener('click', () => {
+        camera.scale = 1.0;
+        camera.offsetX = 0;
+        camera.offsetY = 0;
+        updateZoomLabel();
+      });
+
+      document.getElementById('resetAllParamsBtn').addEventListener('click', () => {
+        setHcGain(1.0, true);
+        setAcGain(1.0, true);
+        setBipolarMode('ON', true);
+        setMode('step', true);
+        setMonitoredCol(3);
+        state.simSpeed = 1.0;
+        document.querySelectorAll('.spd-btn').forEach((b) => b.classList.toggle('active', b.getAttribute('data-speed') === '1'));
+        camera.scale = 1.0;
+        camera.offsetX = 0;
+        camera.offsetY = 0;
+        updateZoomLabel();
+        loadTourStep(0, true);
+      });
+
+      // =========================================================================
+      // 主動畫迴圈
+      // =========================================================================
+      let lastTs = 0;
+      function animate(ts) {
+        if (!lastTs) lastTs = ts;
+        const rawDt = Math.min(0.05, (ts - lastTs) / 1000);
+        lastTs = ts;
+
+        if (state.simSpeed > 0) {
+          const subSteps = 3;
+          const dt = (rawDt * state.simSpeed) / subSteps;
+          for (let s = 0; s < subSteps; s++) {
+            stepPhysics(dt);
+          }
+        }
+
+        render();
+        requestAnimationFrame(animate);
+      }
+
+      window.onload = function () {
+        // 啟動時載入第 1 步自學任務並彈出歡迎引導 Toast
+        loadTourStep(0, true);
+        requestAnimationFrame(animate);
+      };
+    })();
+  </script>
+</body>
+</html>
