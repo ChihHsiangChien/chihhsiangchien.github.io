@@ -1,6 +1,6 @@
-import * as THREE from '../microscope/lib/three.module.js';
-import { OrbitControls } from '../microscope/lib/OrbitControls.js';
-import { STLLoader } from '../microscope/lib/STLLoader.js';
+import * as THREE from './lib/three.module.js';
+import { OrbitControls } from './lib/OrbitControls.js';
+import { STLLoader } from './lib/STLLoader.js';
 import {
   APERTURE_HOLES,
   OBJECTIVES,
@@ -11,7 +11,7 @@ import {
   clamp,
 } from './optics.js';
 
-const STL_BASE_PATH = '../microscope/';
+const STL_BASE_PATH = './models/';
 
 const SCAD_PART_CONFIGS = {
   'disk.stl': {
