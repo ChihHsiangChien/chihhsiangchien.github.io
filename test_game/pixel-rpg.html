@@ -682,6 +682,8 @@
 
   <!-- 右上角工具列 -->
   <div id="hud-right">
+    <button class="px-btn" id="btn-mode">📖 劇情版</button>
+    <button class="px-btn active" id="btn-exam-hub" style="display:none;">📝 段考題庫</button>
     <button class="px-btn" id="btn-sniff">🐶 巴迪嗅探</button>
     <button class="px-btn" id="btn-inv">🎒 證物道具</button>
     <button class="px-btn" id="btn-map">🗺️ 地圖</button>
@@ -1458,7 +1460,9 @@ const state = {
   time: 0,
   keys: {},
   touchVec: { x: 0, y: 0 },
-  wrongCount: 0
+  wrongCount: 0,
+  mode: "story", // "story" | "exam"
+  exam: { solvedIds: [], wrongIds: [] }
 };
 
 /* ============================================================================
@@ -1495,6 +1499,9 @@ function addItem(item) {
 }
 
 function getQuestText() {
+  if (state.mode === "exam") {
+    return `📝 段考刷題版｜已答對 ${state.exam.solvedIds.length} / ${EXAM_BANK.length} 題（點物件或上方【📝 段考題庫】刷題）`;
+  }
   if (!state.flags.labSolved) return "任務 1：前往右側【生化實驗室】，調校恆溫水浴槽還原蛋白酶線索！";
   if (!state.flags.greenhouseSolved) return "任務 2：前往上方【玻璃溫室】，想辦法拯救遭濃食鹽水潑灑的盆栽！";
   if (!state.flags.snakeJarFound) return "任務 3：從左側開啟的門進入【後山林場】，讓巴迪嗅探樹洞異常氣味！";
@@ -2484,6 +2491,227 @@ function triggerBuddySniff() {
 }
 
 /* ============================================================================
+   8.5 115A2 段考刷題版題庫與模式切換系統（40 題選擇＋7 題手寫實驗題）
+   ============================================================================ */
+const EXAM_CATEGORIES = [
+  { id: "circ", name: "❤️ 循環、防線與急救（臥室／主廳）", rooms: ["bedroom", "hall", "cellar"] },
+  { id: "enzyme", name: "🧪 酵素特性與消化（實驗室）", rooms: ["lab"] },
+  { id: "plant_leaf", name: "🌿 葉片、光合與氣孔（玻璃溫室）", rooms: ["greenhouse"] },
+  { id: "plant_stem", name: "🌲 根毛、木質部與年輪（後山林場）", rooms: ["forest"] },
+  { id: "handwritten", name: "📓 蒸散實驗手寫大題（二樓書房）", rooms: ["study"] }
+];
+
+const EXAM_BANK = [
+  { id: 1, cat: "circ", q: "1. 推動人體血液在血管內持續單向流動的主要動力為何？", opts: ["肺部呼吸擠壓血管", "走動時重力牽引", "大腦直接控制血管收縮", "心臟肌肉規律收縮與舒張產生壓力"], ans: 3, exp: "心臟肌肉規律收縮舒張產生壓力，配合瓣膜推動血液單向流動。" },
+  { id: 2, cat: "enzyme", q: "2. 細胞將澱粉或蛋白質等大分子，轉變成葡萄糖或胺基酸等小分子的過程稱為什麼？", opts: ["合成作用", "分解作用", "蒸散作用", "擴散作用"], ans: 1, exp: "大分子轉變成小分子的代謝過程稱為分解作用。" },
+  { id: 3, cat: "enzyme", q: "3. 生物體內的各類酵素（例如神經解毒酵素），其主要成分大多數為何？", opts: ["蛋白質", "醣類", "脂質", "礦物質"], ans: 0, exp: "酵素（酶）的化學成分大多數為蛋白質。" },
+  { id: 4, cat: "enzyme", q: "4. 唾液澱粉酶只能催化澱粉分解，即便提高劑量也無法分解牛排中的蛋白質，這描述酵素的什麼特性？", opts: ["耐溫性", "專一性", "可重複利用性", "隨機擴散性"], ans: 1, exp: "一種酵素只能催化特定受質的反應，稱為專一性。" },
+  { id: 5, cat: "enzyme", q: "5. 恆溫水浴槽設為 90°C，試管中的解藥酵素在此高溫下活性會發生何種變化？", opts: ["持續無限制增加", "稍微降低，降回 25°C 可立即恢復", "超過高溫後會永久失去活性", "完全不受溫度影響"], ans: 2, exp: "酵素成分為蛋白質，高溫會破壞其立體結構導致永久失去活性。" },
+  { id: 6, cat: "enzyme", q: "6. 高溫炒菁(>80°C)綠茶與高溫烘焙(>90°C)紅茶中，高於 70°C 即失活的多酚氧化酵素活性為何？", opts: ["綠茶無活性，紅茶有活性", "綠茶有活性，紅茶無活性", "綠茶與紅茶皆失去酵素活性", "兩者皆保有完整活性"], ans: 2, exp: "兩者製程皆超過 70°C，多酚氧化酵素均已永久失活。" },
+  { id: 7, cat: "enzyme", q: "7. 含蛋白酶去漬洗衣精想達到最佳去污效果，應使用哪一種清洗方式？", opts: ["95°C 滾燙熱水浸泡", "加冰塊接近 0°C 浸泡", "37°C 左右溫水浸泡", "加入強鹼溶液加熱"], ans: 2, exp: "人體/去漬蛋白酶在約 37°C 溫水環境下活性最佳。" },
+  { id: 8, cat: "enzyme", q: "8. 甲(澱粉+唾液+稀鹽酸)、乙(澱粉+水+稀鹽酸)、丙(澱粉+唾液+水)於 37°C 反應，設置「乙管」主要目的為何？", opts: ["證明唾液酵素在中性最佳", "作為對照組，確認稀鹽酸本身是否會直接分解澱粉", "探討水分多寡的影響", "驗證酵素在強酸下是否永久破壞"], ans: 1, exp: "乙管未加唾液，用來對照確認稀鹽酸本身是否會分解澱粉。" },
+  { id: 9, cat: "enzyme", q: "9. 「雙層耐酸口服腸溶膠囊」主要是為了避免酵素在哪一個消化器官中被強酸及蛋白酶破壞？", opts: ["口腔", "食道", "胃", "大腸"], ans: 2, exp: "胃分泌強酸(鹽酸)與胃蛋白酶，會破壞口服蛋白質酵素。" },
+  { id: 10, cat: "enzyme", q: "10. 小腸內的消化液，通常在下列哪種酸鹼環境下具有最大催化活性？", opts: ["弱鹼性", "中性", "弱酸性", "強酸性"], ans: 0, exp: "胰液、膽汁與腸液進入小腸，使小腸呈弱鹼性環境。" },
+  { id: 11, cat: "plant_leaf", q: "11. 在葉片橫切面各層構造中，下列哪些細胞含有葉綠體？", opts: ["只有表皮細胞與角質層", "葉肉細胞與保衛細胞", "只有葉脈中的木質部細胞", "上表皮與下表皮細胞"], ans: 1, exp: "一般表皮細胞不含葉綠體，葉肉細胞與保衛細胞才含有葉綠體。" },
+  { id: 12, cat: "plant_leaf", q: "12. 葉片表面覆蓋一層光滑透明的蠟質，可防止水分過度散失，該構造稱作什麼？", opts: ["表皮組織", "角質層", "形成層", "韌皮部"], ans: 1, exp: "角質層為蠟質構造，能減少葉片表面水分蒸散。" },
+  { id: 13, cat: "plant_leaf", q: "13. 顯微鏡觀察葉片橫切面，葉脈中的木質部與韌皮部排列位置通常為何？", opts: ["木質部靠近上側，韌皮部靠近下側", "韌皮部靠近上側，木質部靠近下側", "木質部呈同心圓散布在保衛細胞旁", "隨機交錯無固定規律"], ans: 0, exp: "葉脈中木質部通常在靠近葉片上表皮的一側，韌皮部在下側。" },
+  { id: 14, cat: "plant_leaf", q: "14. 溫室氣體偵測器顯示植物全速進行光合作用時，哪一種氣體濃度會持續上升？", opts: ["二氧化碳", "氮氣", "氧氣", "葡萄糖"], ans: 2, exp: "光合作用消耗二氧化碳與水，產生葡萄糖並釋放氧氣。" },
+  { id: 15, cat: "plant_leaf", q: "15. 植物進行光合作用後合成了哪一種產物，遇碘液會呈現藍黑色？", opts: ["蛋白質", "葡萄糖", "脂肪酸", "澱粉"], ans: 3, exp: "光合作用產生的葡萄糖可轉換成澱粉儲存，澱粉遇碘液呈藍黑色。" },
+  { id: 16, cat: "plant_leaf", q: "16. 檢驗葉片澱粉實驗中，步驟「酒精隔水加熱」而非直接加熱的主要原因為何？", opts: ["確保實驗安全，並有效溶出葉綠素", "酒精直接受熱會分解澱粉", "水能降低酒精沸點", "防止碘液揮發"], ans: 0, exp: "酒精易燃，隔水加熱可避免危險並溶解葉綠素以利觀察變色。" },
+  { id: 17, cat: "plant_leaf", q: "17. 光照、水分與肥料無虞下，將 CO₂ 濃度從 0.04% 提升至 0.15%，對植物最直接的影響為何？", opts: ["促進氣孔永久關閉", "增加光合作用原料，提升葡萄糖合成效率", "直接提供氧氣進行代謝", "使保衛細胞大量分裂"], ans: 1, exp: "二氧化碳是光合作用原料，適度提高濃度可提升合成葡萄糖效率。" },
+  { id: 18, cat: "plant_leaf", q: "18. 當保衛細胞處於高濃度食鹽水中，氣孔開閉與氣體交換會如何變化？", opts: ["吸水膨脹、氣孔開啟", "氣孔不變、擴散加倍", "失水萎縮、氣孔關閉，CO₂ 吸收與蒸散量皆減少", "保衛細胞破裂"], ans: 2, exp: "濃食鹽水濃度高於細胞內，保衛細胞滲透失水萎縮而關閉氣孔。" },
+  { id: 19, cat: "plant_leaf", q: "19. 浮水植物（如睡蓮）葉片平浮於水面，其氣孔分布最可能呈現何種特徵？", opts: ["氣孔完全退化封閉", "上下表皮皆無角質層", "下表皮氣孔極度密集", "上表皮具有大量氣孔，下表皮幾乎無氣孔"], ans: 3, exp: "浮水植物只有上表皮接觸空氣，故氣孔多分布於上表皮。" },
+  { id: 20, cat: "plant_leaf", q: "20. 下列哪個特徵最能說明單子葉植物（如玉米、竹子）無法年年增粗長成大樹？", opts: ["維管束環狀排列且具發達形成層", "維管束散生排列，且缺乏形成層", "只含有木質部不含韌皮部", "莖中心有發達年輪"], ans: 1, exp: "單子葉植物維管束散生且缺乏形成層，無法逐年加粗。" },
+  { id: 21, cat: "plant_stem", q: "21. 關於植物根毛的特徵及其吸水機制，下列敘述何者最正確？", opts: ["由許多細胞聚集形成的組織行光合作用", "由根部表皮細胞向外突出形成，增加吸水表面積", "水分由氣孔吸收送到根毛排出", "主要功能是排出代謝廢物"], ans: 1, exp: "根毛是單個表皮細胞的突起，可大幅增加根部吸水表面積。" },
+  { id: 22, cat: "plant_stem", q: "22. 植物體內負責運送光合作用養分的主要構造及其運輸方向特性為何？", opts: ["木質部，只能由下往上", "木質部，由蒸散拉力決定", "形成層，由內向外水平運送", "韌皮部，可隨生長需求向上或向下運送"], ans: 3, exp: "韌皮部運送葉片製造的養分，方向可依需求向上或向下。" },
+  { id: 23, cat: "plant_stem", q: "23. 多年生木本植物莖橫切面「由外向內」的組織排列順序，何者完全正確？", opts: ["形成層→樹皮→韌皮部→木質部", "樹皮→木質部→形成層→韌皮部", "樹皮→形成層→新生木質部→老木質部", "韌皮部→老木質部→形成層→新木質部"], ans: 2, exp: "由外而內為：樹皮(含韌皮部) → 形成層 → 新生木質部 → 老木質部。" },
+  { id: 24, cat: "plant_stem", q: "24. 巨木斷面上，細胞顏色較淺、管徑較大、質地較疏鬆的年輪區域，是在何種環境下形成？", opts: ["溫暖多雨、生長快速的春夏季節", "寒冷乾燥的秋冬季節", "嚴寒結冰的深冬", "持續嚴重乾旱環境"], ans: 0, exp: "春夏季氣候溫暖多雨、生長快，形成的木質部細胞較大、顏色較淺。" },
+  { id: 25, cat: "plant_stem", q: "25. 樹木主幹基部被整圈「環狀剝皮」後，最先直接受阻的運輸功能為何？", opts: ["根部水分向上運送", "葉片製造的養分經韌皮部向下運送至根部", "土壤礦物質向上運送", "氣體在樹幹內部擴散"], ans: 1, exp: "環狀剝皮會剝除樹皮內的韌皮部，阻斷養分向下運送到根部。" },
+  { id: 26, cat: "plant_stem", q: "26. 樹皮內側薄薄一層負責分裂產生新韌皮部和新木質部的構造為何？", opts: ["角質層", "表皮細胞", "形成層", "葉肉細胞"], ans: 2, exp: "形成層具分裂能力，向外長出新韌皮部、向內長出新木質部。" },
+  { id: 27, cat: "plant_stem", q: "27. 枝條插入紅墨水後橫切面被染紅的部位及其主要生理功能為何？", opts: ["韌皮部，向下運送養分", "木質部，由下往上運送水分與礦物質", "形成層，吞噬紅墨水", "表皮細胞，吸收色素"], ans: 1, exp: "木質部負責由下往上運輸水分與溶於水的礦物質，故被紅墨水染紅。" },
+  { id: 28, cat: "plant_stem", q: "28. 植物能將根部水分一路向上拉引到頂端葉片，最主要的動力來源為何？", opts: ["葉片氣孔蒸散作用所產生的巨大拉力", "根毛細胞的主動推力", "莖管壁細胞收縮", "雨水大氣壓入葉片"], ans: 0, exp: "葉片氣孔蒸散水蒸氣產生的拉力是水分向上運輸的最主要動力。" },
+  { id: 29, cat: "plant_stem", q: "29. 移植樹木時通常會修剪大量枝葉並選在陰天或黃昏進行，其生理原理為何？", opts: ["減少葉子降低葡萄糖合成", "降低蒸散作用，避免根系吸水不足而枯死", "刺激形成層快速分裂", "促使氣孔強光下張開"], ans: 1, exp: "移栽時根系受損吸水力弱，修剪枝葉可減少蒸散失水。" },
+  { id: 30, cat: "circ", q: "30. 下列人體防禦構造中，哪一項屬於阻擋外來病原體入侵的「第一道防線」？", opts: ["血液中吞噬作用的白血球", "淋巴結內的淋巴球", "專一性抗體", "完好無破損的皮膚角質層與呼吸道黏膜"], ans: 3, exp: "皮膚與黏膜屬於阻擋病原體進入體內的物理性「第一道防線」。" },
+  { id: 31, cat: "enzyme", q: "31. 傷口邊緣出現局部紅腫現象，其主要的生理原因為何？", opts: ["微血管收縮血流阻斷", "局部微血管擴張，血液流量增多且組織液增加", "血小板破裂釋放抗體", "淋巴結迅速萎縮"], ans: 1, exp: "發炎反應時局部微血管擴張、通透性增加，使血流與組織液增多而紅腫。" },
+  { id: 32, cat: "enzyme", q: "32. 瘦肉（蛋白質）、米飯（澱粉）與油脂（脂質）在消化道完全分解後依序轉變為何種小分子？", opts: ["胺基酸、葡萄糖、脂肪酸與甘油", "葡萄糖、蛋白質、脂肪酸", "胺基酸、礦物質、葡萄糖", "葡萄糖、維生素、甘油"], ans: 0, exp: "蛋白質→胺基酸；澱粉→葡萄糖；脂質→脂肪酸與甘油。" },
+  { id: 33, cat: "enzyme", q: "33. 人體哪一個消化腺體能分泌兼具分解醣類、蛋白質與脂質酵素的「全能消化液」？", opts: ["肝臟", "胃", "胰臟", "膽囊"], ans: 2, exp: "胰臟分泌的胰液同時含有澱粉酶、蛋白酶與脂酶。" },
+  { id: 34, cat: "circ", q: "34. 膽結石患者切除膽囊後，醫生建議限制大量高脂肪飲食的原因為何？", opts: ["缺乏膽囊濃縮儲存膽汁，一次攝入大量脂肪易乳化不全而腹瀉", "唾液澱粉酶分泌受阻", "胃蛋白酶活性增強", "防止大腸水腫"], ans: 0, exp: "膽汁由肝臟分泌、膽囊儲存濃縮；切除膽囊後一次吃高脂食物易乳化不全。" },
+  { id: 35, cat: "enzyme", q: "35. 小腸內壁具有環狀皺褶，皺褶表面密布絨毛，這種結構有何生理意義？", opts: ["長時間儲存未消化食物", "讓細菌繁殖合成脂肪酸", "強化肌肉加速推進", "大幅增加吸收養分與水分的表面積"], ans: 3, exp: "皺褶與絨毛能極大化表面積，提升養分與水分的吸收效率。" },
+  { id: 36, cat: "circ", q: "36. 人體心臟的腔室與大血管中，下列哪一組內部流動的血液全部屬於「充氧血」？", opts: ["右心房、右心室、肺動脈", "左心房、左心室、肺靜脈", "上下大靜脈、右心房、肺動脈", "右心室、主動脈、下大靜脈"], ans: 1, exp: "肺靜脈將充氧血送回左心房，再經左心室由主動脈打向全身。" },
+  { id: 37, cat: "circ", q: "37. 關於人體三種主要血管的管壁結構與特徵比較，下列敘述何者最正確？", opts: ["靜脈管壁彈性最大、血流最快", "微血管管壁由多層細胞構成", "動脈管壁最厚、最有彈性且管內血壓最高", "只有動脈管腔有瓣膜"], ans: 2, exp: "動脈承受心臟直接打出的高壓血液，管壁最厚且富有彈性。" },
+  { id: 38, cat: "circ", q: "38. 靜脈注射的水溶性升壓強心劑，最可能由血液中的哪一種成分負責運送？", opts: ["紅血球", "白血球", "血小板", "血漿"], ans: 3, exp: "血漿主要成分為水，負責運送養分、廢物、激素與水溶性藥物。" },
+  { id: 39, cat: "circ", q: "39. 藥物自手臂靜脈進入心血管循環後的正確路徑為何？", opts: ["上大靜脈→右心房→右心室→肺動脈→肺部微血管→肺靜脈→左心房→左心室→主動脈", "下大靜脈→左心房→左心室→肺動脈", "上大靜脈→左心室→左心房→肺靜脈", "頸靜脈→右心室→右心房→主動脈"], ans: 0, exp: "手臂靜脈→上大靜脈→右心房→右心室→肺循環→左心房→左心室→主動脈。" },
+  { id: 40, cat: "circ", q: "40. 遭毒蛇咬傷急救時，應該施打「蛇毒疫苗」還是「抗蛇毒血清」？原理為何？", opts: ["施打疫苗，立刻產生抗體", "注射抗蛇毒血清，內含現成抗體能立即中和毒素", "口服胃蛋白酶分解毒素", "注射血清會摧毀骨髓"], ans: 1, exp: "血清含有現成專一性抗體，可立即中和蛇毒；疫苗則需數週才誘發抗體。" },
+  { id: 41, cat: "handwritten", q: "【手寫1】植物進行蒸散作用時，水分主要是以何種形態透過氣孔散失到空氣中？", opts: ["固態", "液態", "氣態", "電漿態"], ans: 2, exp: "蒸散作用是指水分以氣態水蒸氣形式從氣孔散失。" },
+  { id: 42, cat: "handwritten", q: "【手寫2】蒸散量筒水面上滴入少許植物油，其主要目的為何？", opts: ["提供植物養分", "防止量筒內的水分直接從水面自然蒸發", "避免植物缺氧", "增加重量防傾倒"], ans: 1, exp: "油層浮在水面可阻隔空氣，防止水分自然蒸發影響實驗數據。" },
+  { id: 43, cat: "handwritten", q: "【手寫3】甲(未塗)、乙(塗上表皮)、丙(塗下表皮)、丁(去葉塗剪口)、戊(玻璃棒)五組，光照後哪一組剩餘水量最多？", opts: ["甲組", "丙組", "丁組", "戊組"], ans: 3, exp: "戊組為玻璃棒，沒有任何植物蒸散作用，剩餘水量最多。" },
+  { id: 44, cat: "handwritten", q: "【手寫4】已知巨木氣孔只分布在下表皮，則乙組(塗上表皮)與丙組(塗下表皮)的「水分減少量」關係為何？", opts: ["乙 ＞ 丙", "乙 ＜ 丙", "乙 ＝ 丙", "無法比較"], ans: 0, exp: "氣孔只在下表皮，丙塗下表皮阻礙蒸散，乙塗上表皮仍正常蒸散，故乙減少量＞丙。" },
+  { id: 45, cat: "handwritten", q: "【手寫8-9】甲組減少 18.5 mL、丁組(去葉)減少 2.5 mL、戊組(玻璃棒)減少 0.5 mL，則「全株總蒸散量」與「僅葉片貢獻蒸散量」分別為何？", opts: ["18.0 mL 與 16.0 mL", "18.5 mL 與 16.0 mL", "18.0 mL 與 15.5 mL", "16.0 mL 與 14.0 mL"], ans: 0, exp: "全株 = 18.5 - 0.5 = 18.0 mL；莖部 = 2.5 - 0.5 = 2.0 mL；僅葉片 = 18.0 - 2.0 = 16.0 mL。" },
+  { id: 46, cat: "handwritten", q: "【手寫10】20:00 浸泡起至 00:00（4 小時）染紅 16 cm。口袋枝條染紅僅 8 cm，推算實際拔離時間為幾點？", opts: ["21:00", "22:00", "23:00", "00:00"], ans: 1, exp: "上升速率 16 ÷ 4 = 4 cm/hr；8 ÷ 4 = 2 小時，20:00 + 2 小時 = 22:00。" }
+];
+
+function toggleGameMode() {
+  state.mode = state.mode === "story" ? "exam" : "story";
+  const btn = document.getElementById("btn-mode");
+  const hubBtn = document.getElementById("btn-exam-hub");
+  const isExam = state.mode === "exam";
+  btn.textContent = isExam ? "📝 段考刷題版" : "📖 劇情版";
+  btn.classList.toggle("active", isExam);
+  hubBtn.style.display = isExam ? "inline-flex" : "none";
+  updateHud();
+  SFX.play("select");
+  showToast(isExam ? "📝 已切換至【115A2 段考刷題版】！" : "📖 已切換回【偵探劇情版】！");
+}
+
+function openRoomExamPrompt(target) {
+  const roomCat = EXAM_CATEGORIES.find((c) => c.rooms.includes(state.room)) || EXAM_CATEGORIES[0];
+  const catIds = EXAM_BANK.filter((q) => q.cat === roomCat.id).map((q) => q.id);
+  const unsolved = catIds.filter((id) => !state.exam.solvedIds.includes(id));
+  openModal(`
+    <div class="modal-title"><span>📝 段考刷題版：${target.name}</span><button class="px-btn" id="close-re">✕</button></div>
+    <div class="battle-log" style="margin-bottom:10px;">
+      目前處於<strong>【115A2 段考刷題版】</strong>。<br>
+      本區對應主題：<strong>${roomCat.name}</strong>（尚餘 ${unsolved.length} / ${catIds.length} 題未答對）
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button class="px-btn active" id="re-quiz" style="padding:10px;font-size:13.5px;">📝 挑戰本區段考題（${unsolved.length > 0 ? `未答對 ${unsolved.length} 題` : `重溫全部 ${catIds.length} 題`}）</button>
+      <button class="px-btn" id="re-story" style="padding:10px;font-size:13.5px;">💬 改看原本劇情互動／線索</button>
+    </div>
+  `);
+  document.getElementById("close-re").onclick = closeModal;
+  document.getElementById("re-quiz").onclick = () => {
+    const list = unsolved.length > 0 ? unsolved : catIds;
+    startExamSession(list, roomCat.name);
+  };
+  document.getElementById("re-story").onclick = () => {
+    closeModal();
+    INTERACTIONS[target.interact]();
+  };
+}
+
+function openExamHubModal() {
+  const total = EXAM_BANK.length;
+  const solved = state.exam.solvedIds.length;
+  const wrongCnt = state.exam.wrongIds.length;
+  openModal(`
+    <div class="modal-title">
+      <span>📝 115A2 段考刷題總覽（已答對 ${solved} / ${total} 題）</span>
+      <button class="px-btn" id="close-eh">✕</button>
+    </div>
+    <div class="exp-track" style="height:10px;margin-bottom:10px;"><div class="exp-fill" style="width:${Math.round((solved / total) * 100)}%;"></div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+      <button class="skill-btn" id="eh-rand10">⚡ 隨機 10 題模擬考<span class="skill-sub">全範圍隨機抽題測試</span></button>
+      <button class="skill-btn" id="eh-wrong" ${wrongCnt ? "" : "disabled"}>🔥 錯題重練（${wrongCnt} 題）<span class="skill-sub">${wrongCnt ? "專攻答錯過的題目" : "目前沒有錯題！"}</span></button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      ${EXAM_CATEGORIES.map((c) => {
+        const ids = EXAM_BANK.filter((q) => q.cat === c.id).map((q) => q.id);
+        const done = ids.filter((id) => state.exam.solvedIds.includes(id)).length;
+        return `<button class="skill-btn eh-cat" data-cat="${c.id}">${c.name}<span class="skill-sub">進度：${done} / ${ids.length} 題</span></button>`;
+      }).join("")}
+    </div>
+  `);
+  document.getElementById("close-eh").onclick = closeModal;
+  document.getElementById("eh-rand10").onclick = () => {
+    const shuffled = [...EXAM_BANK].sort(() => Math.random() - 0.5).slice(0, 10).map((q) => q.id);
+    startExamSession(shuffled, "⚡ 隨機 10 題模擬考");
+  };
+  document.getElementById("eh-wrong").onclick = () => {
+    if (!state.exam.wrongIds.length) return;
+    startExamSession([...state.exam.wrongIds], "🔥 錯題重練特訓");
+  };
+  document.querySelectorAll(".eh-cat").forEach((b) => {
+    b.onclick = () => {
+      const cat = EXAM_CATEGORIES.find((c) => c.id === b.dataset.cat);
+      const ids = EXAM_BANK.filter((q) => q.cat === cat.id).map((q) => q.id);
+      startExamSession(ids, cat.name);
+    };
+  });
+}
+
+function startExamSession(qIds, title) {
+  let idx = 0;
+  let score = 0;
+  let answered = false;
+  let lastPicked = -1;
+
+  const render = () => {
+    if (idx >= qIds.length) {
+      SFX.play("fanfare");
+      openModal(`
+        <div class="modal-title"><span>🏁 刷題結算：${title}</span><button class="px-btn" id="close-ex">✕</button></div>
+        <div class="battle-log" style="margin-bottom:10px;">
+          本次答對：<strong>${score} / ${qIds.length}</strong> 題！<br>
+          總題庫進度：<strong>${state.exam.solvedIds.length} / ${EXAM_BANK.length}</strong> 題
+        </div>
+        <div style="display:flex;gap:8px;justify-content:center;">
+          <button class="px-btn active" id="ex-hub">📋 返回題庫總覽</button>
+          <button class="px-btn" id="ex-done">繼續探索</button>
+        </div>
+      `);
+      document.getElementById("close-ex").onclick = closeModal;
+      document.getElementById("ex-hub").onclick = openExamHubModal;
+      document.getElementById("ex-done").onclick = closeModal;
+      return;
+    }
+
+    const qObj = EXAM_BANK.find((q) => q.id === qIds[idx]);
+    openModal(`
+      <div class="modal-title"><span>${title}（${idx + 1} / ${qIds.length}）</span><button class="px-btn" id="close-ex">✕</button></div>
+      <div class="battle-log" style="margin-bottom:10px;">
+        ${qObj.q}
+        ${answered ? `<div style="margin-top:8px;padding-top:6px;border-top:1px dashed #475569;color:${lastPicked === qObj.ans ? "#86efac" : "#fca5a5"};">
+          ${lastPicked === qObj.ans ? "⭕ 答對了！＋15 EXP" : `❌ 答錯了！正確答案：(${String.fromCharCode(65 + qObj.ans)}) ${qObj.opts[qObj.ans]}`}<br>
+          <span style="color:#fde047;">💡 解析：${qObj.exp}</span>
+        </div>` : ""}
+      </div>
+      <div class="battle-skills">
+        ${qObj.opts.map((o, i) => {
+          let style = "";
+          if (answered) {
+            if (i === qObj.ans) style = "border-color:#22c55e;background:#14532d;";
+            else if (i === lastPicked) style = "border-color:#ef4444;background:#7f1d1d;";
+          }
+          return `<button class="skill-btn ex-opt" data-i="${i}" style="${style}" ${answered ? "disabled" : ""}>(${String.fromCharCode(65 + i)}) ${o}</button>`;
+        }).join("")}
+      </div>
+      ${answered ? `<button class="px-btn active" id="ex-next" style="width:100%;margin-top:10px;padding:9px;font-size:13.5px;">${idx + 1 < qIds.length ? "下一題 ▶" : "查看結算 🏆"}</button>` : ""}
+    `);
+
+    document.getElementById("close-ex").onclick = closeModal;
+    document.querySelectorAll(".ex-opt").forEach((b) => {
+      b.onclick = () => {
+        if (answered) return;
+        answered = true;
+        lastPicked = Number(b.dataset.i);
+        if (lastPicked === qObj.ans) {
+          SFX.play("hit");
+          score++;
+          if (!state.exam.solvedIds.includes(qObj.id)) state.exam.solvedIds.push(qObj.id);
+          state.exam.wrongIds = state.exam.wrongIds.filter((id) => id !== qObj.id);
+          gainExp(15);
+        } else {
+          SFX.play("error");
+          if (!state.exam.wrongIds.includes(qObj.id)) state.exam.wrongIds.push(qObj.id);
+        }
+        updateHud();
+        render();
+      };
+    });
+    const nextBtn = document.getElementById("ex-next");
+    if (nextBtn) {
+      nextBtn.onclick = () => {
+        idx++;
+        answered = false;
+        lastPicked = -1;
+        render();
+      };
+    }
+  };
+  render();
+}
+
+/* ============================================================================
    9. 背包、地圖面板與輸入控制
    ============================================================================ */
 function openInventoryModal() {
@@ -2593,6 +2821,10 @@ function triggerInteract() {
   const target = findNearestInteractable();
   if (target && INTERACTIONS[target.interact]) {
     SFX.play("select");
+    if (state.mode === "exam") {
+      openRoomExamPrompt(target);
+      return;
+    }
     INTERACTIONS[target.interact]();
   }
 }
@@ -3268,6 +3500,8 @@ window.addEventListener("keyup", (e) => {
 });
 
 document.getElementById("rpg-dialogue").addEventListener("click", advanceDialogue);
+document.getElementById("btn-mode").addEventListener("click", toggleGameMode);
+document.getElementById("btn-exam-hub").addEventListener("click", openExamHubModal);
 document.getElementById("btn-sniff").addEventListener("click", triggerBuddySniff);
 document.getElementById("btn-inv").addEventListener("click", openInventoryModal);
 document.getElementById("btn-map").addEventListener("click", openMapModal);
