@@ -1,0 +1,2723 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>霧月山莊迷案：16-bit 生物偵探 RPG</title>
+  <style>
+    :root {
+      --bg-void: #0a0c14;
+      --ui-bg: #131828;
+      --ui-bg-dark: #0b0e18;
+      --ui-border: #e5c158;
+      --ui-border-dim: #7c6028;
+      --hp-green: #22c55e;
+      --hp-red: #ef4444;
+      --exp-blue: #38bdf8;
+      --text-main: #f8fafc;
+      --text-gold: #fde047;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      user-select: none;
+      touch-action: manipulation;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
+      overscroll-behavior: none;
+      background: radial-gradient(circle at center, #141b2d 0%, #07090f 100%);
+      color: var(--text-main);
+      font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    }
+
+    /* 16:9 像素舞台置中容器 */
+    #viewport-wrap {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding:
+        max(8px, env(safe-area-inset-top))
+        max(8px, env(safe-area-inset-right))
+        max(8px, env(safe-area-inset-bottom))
+        max(8px, env(safe-area-inset-left));
+    }
+
+    #stage-box {
+      position: relative;
+      width: min(100%, calc((100dvh - 16px) * 16 / 9));
+      height: min(100%, calc((100vw - 16px) * 9 / 16));
+      max-width: 100%;
+      max-height: 100%;
+      background: #000;
+      border: 3px solid var(--ui-border);
+      box-shadow:
+        0 0 0 3px #0b0e18,
+        0 0 32px rgba(0, 0, 0, 0.9);
+      overflow: hidden;
+    }
+
+    #game-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+
+    /* 復古 16-bit 雙層邊框 */
+    .px-box {
+      background: rgba(15, 20, 36, 0.95);
+      border: 2px solid var(--ui-border);
+      box-shadow: inset 0 0 0 2px #0b0e18, 0 6px 18px rgba(0, 0, 0, 0.8);
+    }
+
+    /* 左上角：地區、任務目標、等級經驗條 */
+    #hud-left {
+      position: fixed;
+      top: max(10px, env(safe-area-inset-top));
+      left: max(10px, env(safe-area-inset-left));
+      z-index: 20;
+      padding: 8px 12px;
+      max-width: min(440px, 56vw);
+      pointer-events: none;
+    }
+
+    .hud-zone-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: clamp(14px, 1.9vw, 17px);
+      font-weight: 800;
+      color: var(--text-gold);
+      letter-spacing: 0.04em;
+    }
+
+    .lv-pill {
+      background: #7c2d12;
+      border: 1px solid var(--ui-border);
+      color: #fff;
+      font-size: 12px;
+      padding: 2px 8px;
+    }
+
+    .hud-quest {
+      margin-top: 4px;
+      font-size: clamp(13px, 1.7vw, 15px);
+      color: #e2e8f0;
+      line-height: 1.45;
+    }
+
+    .exp-track {
+      margin-top: 6px;
+      width: 160px;
+      max-width: 100%;
+      height: 6px;
+      background: #090d16;
+      border: 1px solid #475569;
+    }
+
+    .exp-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #0284c7, #38bdf8);
+      transition: width 0.3s ease;
+    }
+
+    /* 右上角快捷按鈕列 */
+    #hud-right {
+      position: fixed;
+      top: max(10px, env(safe-area-inset-top));
+      right: max(10px, env(safe-area-inset-right));
+      z-index: 20;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      max-width: 40vw;
+    }
+
+    .px-btn {
+      background: #1e293b;
+      border: 2px solid var(--ui-border);
+      color: #f8fafc;
+      font-family: inherit;
+      font-size: clamp(13px, 1.6vw, 15px);
+      font-weight: 700;
+      padding: 8px 12px;
+      min-height: 40px;
+      cursor: pointer;
+      box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.45);
+    }
+
+    .px-btn:hover {
+      background: #334155;
+      border-color: #fde047;
+    }
+
+    .px-btn.active {
+      background: #7c2d12;
+      border-color: #fde047;
+    }
+
+    /* 底部操作提示條（沒有對話時顯示） */
+    #hint-bar {
+      position: fixed;
+      bottom: max(12px, env(safe-area-inset-bottom));
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 15;
+      background: rgba(11, 14, 24, 0.88);
+      border: 1.5px solid rgba(229, 193, 88, 0.65);
+      padding: 6px 14px;
+      font-size: 13px;
+      color: #e2e8f0;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    /* 經典 RPG 底部對話框 */
+    #rpg-dialogue {
+      position: fixed;
+      bottom: max(12px, env(safe-area-inset-bottom));
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(860px, calc(100vw - 20px));
+      z-index: 30;
+      display: none;
+      gap: 14px;
+      padding: 14px 16px;
+      cursor: pointer;
+    }
+
+    #rpg-dialogue.visible {
+      display: flex;
+    }
+
+    .dlg-portrait-wrap {
+      width: 74px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #dlg-portrait {
+      width: 64px;
+      height: 64px;
+      background: #0b0e18;
+      border: 2px solid var(--ui-border);
+      image-rendering: pixelated;
+    }
+
+    .dlg-speaker {
+      font-size: 12.5px;
+      font-weight: 800;
+      color: var(--text-gold);
+      text-align: center;
+      background: #1e293b;
+      border: 1px solid var(--ui-border-dim);
+      padding: 2px 4px;
+      width: 100%;
+    }
+
+    .dlg-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-width: 0;
+    }
+
+    #dlg-text {
+      font-size: clamp(16px, 2.4vw, 20px);
+      line-height: 1.65;
+      color: #f8fafc;
+      min-height: 62px;
+      word-break: break-word;
+    }
+
+    .dlg-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13.5px;
+      font-weight: 700;
+      color: var(--text-gold);
+      margin-top: 8px;
+    }
+
+    .blink-arrow {
+      animation: blink 0.75s infinite alternate;
+    }
+
+    @keyframes blink {
+      from { opacity: 0.4; }
+      to { opacity: 1; }
+    }
+
+    /* 觸控 / iPad / 滑鼠虛擬十字鍵與 A/B 按鈕 */
+    #touch-controls {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 25;
+      display: none;
+    }
+
+    #touch-controls.show {
+      display: block;
+    }
+
+    body.ui-busy #touch-controls {
+      display: none !important;
+    }
+
+    .dpad {
+      position: fixed;
+      left: max(18px, env(safe-area-inset-left));
+      bottom: max(18px, env(safe-area-inset-bottom));
+      width: 148px;
+      height: 148px;
+      pointer-events: auto;
+      touch-action: none;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 4px;
+    }
+
+    .dpad-btn, .ab-btn {
+      background: rgba(19, 24, 40, 0.82);
+      border: 2.5px solid rgba(229, 193, 88, 0.85);
+      color: #fde047;
+      font-weight: 900;
+      font-size: 20px;
+      touch-action: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      border-radius: 10px;
+    }
+
+    .dpad-btn:active, .dpad-btn.pressed, .ab-btn:active {
+      background: rgba(124, 45, 18, 0.95);
+      transform: scale(0.95);
+    }
+
+    .ab-group {
+      position: fixed;
+      right: max(18px, env(safe-area-inset-right));
+      bottom: max(28px, env(safe-area-inset-bottom));
+      display: flex;
+      gap: 14px;
+      pointer-events: auto;
+      touch-action: none;
+    }
+
+    .ab-btn {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+    }
+
+    /* 共用彈窗遮罩（水浴槽實驗台 / 背包 / 地圖 / 戰鬥 / 結算） */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(6, 8, 15, 0.84);
+      z-index: 40;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: max(14px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+    }
+
+    .modal-overlay.visible {
+      display: flex;
+    }
+
+    .modal-card {
+      width: min(640px, 95vw);
+      max-height: 90dvh;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 18px 20px;
+    }
+
+    .modal-title {
+      font-size: clamp(16px, 2.2vw, 19px);
+      font-weight: 900;
+      color: var(--text-gold);
+      border-bottom: 2px solid var(--ui-border-dim);
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* 溫控實驗台 */
+    .lab-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      font-size: 15.5px;
+      line-height: 1.55;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 34px;
+      accent-color: #fde047;
+      cursor: pointer;
+    }
+
+    .temp-readout {
+      font-family: monospace;
+      font-size: 24px;
+      font-weight: 900;
+      color: #38bdf8;
+      text-align: center;
+      background: #090d16;
+      border: 2px solid #334155;
+      padding: 8px;
+    }
+
+    .ph-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .ph-opt {
+      flex: 1;
+      padding: 11px 8px;
+      font-size: 15px;
+      min-height: 44px;
+      text-align: center;
+      background: #1e293b;
+      border: 2px solid #475569;
+      color: #e2e8f0;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .ph-opt.selected {
+      border-color: #fde047;
+      background: #334155;
+      color: #fde047;
+    }
+
+    .lab-feedback {
+      min-height: 52px;
+      padding: 10px 12px;
+      background: #0b0e18;
+      border: 1.5px solid #475569;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    /* RPG 回合制戰鬥介面 */
+    .battle-arena {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .battle-status-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .combatant-card {
+      background: #0b0e18;
+      border: 2px solid #475569;
+      padding: 10px 12px;
+    }
+
+    .combatant-name {
+      font-size: 14.5px;
+      font-weight: 800;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .hp-bar-bg {
+      height: 12px;
+      background: #1e293b;
+      border: 1px solid #64748b;
+    }
+
+    .hp-bar-fill {
+      height: 100%;
+      transition: width 0.35s ease;
+    }
+
+    .battle-stage-visual {
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      background: linear-gradient(180deg, #121a2f 0%, #1d263d 100%);
+      border: 2px solid var(--ui-border-dim);
+      padding: 12px;
+      min-height: 82px;
+    }
+
+    .battle-sprite-canvas {
+      width: 60px;
+      height: 60px;
+      image-rendering: pixelated;
+    }
+
+    .battle-log {
+      background: #0b0e18;
+      border: 2px solid var(--ui-border-dim);
+      padding: 10px 12px;
+      font-size: 15px;
+      line-height: 1.6;
+      min-height: 62px;
+      white-space: pre-line;
+    }
+
+    .battle-skills {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .skill-btn {
+      text-align: left;
+      padding: 11px 12px;
+      min-height: 54px;
+      background: #1e293b;
+      border: 2px solid var(--ui-border);
+      color: #f8fafc;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .skill-btn:hover:not(:disabled) {
+      background: #334155;
+      border-color: #fde047;
+    }
+
+    .skill-btn:disabled {
+      opacity: 0.42;
+      cursor: not-allowed;
+    }
+
+    .skill-sub {
+      display: block;
+      font-size: 12.5px;
+      color: #cbd5e1;
+      font-weight: 400;
+      margin-top: 3px;
+    }
+
+    /* 8cm 時間戳拉桿 */
+    .timestamp-box {
+      background: #161d31;
+      border: 2px solid #fde047;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font-size: 15px;
+    }
+
+    .ink-tube-visual {
+      height: 24px;
+      background: #0b0e18;
+      border: 2px solid #94a3b8;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .ink-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #be123c, #f43f5e);
+      transition: width 0.15s ease;
+    }
+
+    /* 道具與證物清單 */
+    .inv-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+
+    .inv-item {
+      background: #0b0e18;
+      border: 1.5px solid #475569;
+      padding: 10px 12px;
+      font-size: 14.5px;
+      line-height: 1.55;
+    }
+
+    .inv-item.key {
+      border-color: var(--ui-border);
+    }
+
+    .inv-item-title {
+      font-weight: 800;
+      color: var(--text-gold);
+      font-size: 15.5px;
+    }
+
+    /* 跳出浮動經驗值提示 */
+    #toast-wrap {
+      position: fixed;
+      top: max(74px, calc(env(safe-area-inset-top) + 64px));
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 45;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .rpg-toast {
+      background: rgba(124, 45, 18, 0.96);
+      border: 2px solid #fde047;
+      color: #fde047;
+      font-size: 14.5px;
+      font-weight: 800;
+      padding: 6px 16px;
+      animation: toastPop 1.8s forwards ease-out;
+    }
+
+    @keyframes toastPop {
+      0% { opacity: 0; transform: translateY(8px); }
+      15% { opacity: 1; transform: translateY(0); }
+      80% { opacity: 1; transform: translateY(-6px); }
+      100% { opacity: 0; transform: translateY(-14px); }
+    }
+
+    @media (hover: none) and (pointer: coarse), (max-width: 900px) {
+      #touch-controls { display: block; }
+      #hint-bar { display: none; }
+    }
+
+    @media (max-width: 640px) {
+      #hud-left { max-width: 55vw; padding: 6px 8px; }
+      #hud-right { max-width: 42vw; gap: 5px; }
+      .px-btn { padding: 6px 9px; font-size: 12.5px; min-height: 36px; }
+      .battle-skills { grid-template-columns: 1fr; }
+      .dlg-portrait-wrap { width: 58px; }
+      #dlg-portrait { width: 52px; height: 52px; }
+      .dpad { width: 132px; height: 132px; }
+      .ab-btn { width: 58px; height: 58px; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="viewport-wrap">
+  <div id="stage-box">
+    <canvas id="game-canvas" width="320" height="180"></canvas>
+  </div>
+
+  <!-- 左上角 RPG HUD -->
+  <div id="hud-left" class="px-box">
+    <div class="hud-zone-row">
+      <span id="hud-zone">霧月山莊主廳</span>
+      <span class="lv-pill" id="hud-lv">LV.1</span>
+    </div>
+    <div class="hud-quest" id="hud-quest">調查主廳與實驗室，查明博士倒下的原因！</div>
+    <div class="exp-track"><div class="exp-fill" id="hud-exp"></div></div>
+  </div>
+
+  <!-- 右上角工具列 -->
+  <div id="hud-right">
+    <button class="px-btn" id="btn-inv">🎒 證物道具</button>
+    <button class="px-btn" id="btn-map">🗺️ 地圖</button>
+    <button class="px-btn" id="btn-pad">🎮 虛擬手把</button>
+    <button class="px-btn active" id="btn-bgm">🎵 配樂</button>
+    <button class="px-btn active" id="btn-sfx">🔊 音效</button>
+  </div>
+
+  <div id="toast-wrap"></div>
+  <div id="hint-bar">移動: WASD / 方向鍵 ｜ 調查互動: Space / Enter / Z ｜ 巴迪會自動嗅探異常點</div>
+
+  <!-- 虛擬十字鍵與 AB 鍵（支援 iPad / 手機觸控） -->
+  <div id="touch-controls">
+    <div class="dpad">
+      <div></div>
+      <button class="dpad-btn" data-dir="up" aria-label="上">▲</button>
+      <div></div>
+      <button class="dpad-btn" data-dir="left" aria-label="左">◀</button>
+      <div></div>
+      <button class="dpad-btn" data-dir="right" aria-label="右">▶</button>
+      <div></div>
+      <button class="dpad-btn" data-dir="down" aria-label="下">▼</button>
+      <div></div>
+    </div>
+    <div class="ab-group">
+      <button class="ab-btn" id="btn-b" aria-label="證物道具">🎒</button>
+      <button class="ab-btn" id="btn-a" aria-label="調查與對話">A</button>
+    </div>
+  </div>
+
+  <!-- 底部 RPG 對話框 -->
+  <div id="rpg-dialogue" class="px-box">
+    <div class="dlg-portrait-wrap">
+      <canvas id="dlg-portrait" width="32" height="32"></canvas>
+      <div class="dlg-speaker" id="dlg-speaker">艾德華</div>
+    </div>
+    <div class="dlg-body">
+      <div id="dlg-text"></div>
+      <div class="dlg-footer">
+        <span id="dlg-progress">1 / 1</span>
+        <span class="blink-arrow" id="dlg-next">▼ 繼續</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 通用彈窗（背包 / 地圖 / 實驗台 / 戰鬥 / 結局） -->
+  <div id="modal-overlay" class="modal-overlay">
+    <div class="modal-card px-box" id="modal-card"></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================================
+   1. 8-bit Chiptune 配樂 & 音效引擎（純 Web Audio API，支援 iPad Safari 解鎖）
+   ============================================================================ */
+let sharedAudioCtx = null;
+function ensureAudio() {
+  if (!sharedAudioCtx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) sharedAudioCtx = new AC();
+  }
+  if (sharedAudioCtx && sharedAudioCtx.state === "suspended") {
+    sharedAudioCtx.resume().catch(() => {});
+  }
+  return sharedAudioCtx;
+}
+
+const SFX = {
+  enabled: true,
+  play(type) {
+    if (!this.enabled) return;
+    try {
+      const ctx = ensureAudio();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+      const playTone = (freq, dur, wave = "square", vol = 0.05, delay = 0, slide = null) => {
+        if (freq <= 0) return;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = wave;
+        osc.frequency.setValueAtTime(freq, now + delay);
+        if (slide && slide > 0) osc.frequency.exponentialRampToValueAtTime(slide, now + delay + dur);
+        gain.gain.setValueAtTime(vol, now + delay);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + delay + dur);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + delay);
+        osc.stop(now + delay + dur + 0.01);
+      };
+
+      if (type === "blip") playTone(720, 0.032, "square", 0.02);
+      else if (type === "step") playTone(145, 0.035, "triangle", 0.025, 0, 110);
+      else if (type === "door") {
+        playTone(392, 0.06, "square", 0.04, 0, 523.25);
+        playTone(587.33, 0.09, "square", 0.04, 0.055, 783.99);
+      } else if (type === "bark") {
+        playTone(440, 0.055, "square", 0.045, 0, 620);
+        playTone(480, 0.065, "square", 0.045, 0.09, 680);
+      } else if (type === "select") playTone(520, 0.06, "square", 0.04, 0, 780);
+      else if (type === "splash") playTone(320, 0.18, "triangle", 0.06, 0, 920);
+      else if (type === "hit") playTone(180, 0.14, "sawtooth", 0.07, 0, 75);
+      else if (type === "error") {
+        playTone(220, 0.12, "sawtooth", 0.06, 0);
+        playTone(165, 0.18, "sawtooth", 0.06, 0.11);
+      } else if (type === "fanfare") {
+        playTone(523.25, 0.09, "square", 0.05, 0);
+        playTone(659.25, 0.09, "square", 0.05, 0.09);
+        playTone(783.99, 0.09, "square", 0.05, 0.18);
+        playTone(1046.5, 0.24, "square", 0.06, 0.27);
+      } else if (type === "thunder") {
+        playTone(110, 0.35, "sawtooth", 0.08, 0, 48);
+      }
+    } catch (_) {}
+  }
+};
+
+const BGM = {
+  enabled: true,
+  unlocked: false,
+  currentTrack: "mansion",
+  stepIdx: 0,
+  timer: null,
+  tracks: {
+    // D 小調神祕古堡探索曲（DQ/FF 風）
+    mansion: {
+      bpm: 116,
+      lead: [
+        293.66, 0, 349.23, 440.00, 415.30, 0, 349.23, 329.63,
+        293.66, 0, 261.63, 293.66, 329.63, 0, 220.00, 0,
+        293.66, 0, 349.23, 440.00, 523.25, 0, 493.88, 440.00,
+        392.00, 0, 349.23, 329.63, 293.66, 0, 0, 0
+      ],
+      bass: [
+        146.83, 220.00, 146.83, 220.00, 130.81, 196.00, 130.81, 196.00,
+        116.54, 174.61, 116.54, 174.61, 110.00, 164.81, 110.00, 164.81,
+        146.83, 220.00, 146.83, 220.00, 130.81, 196.00, 130.81, 196.00,
+        116.54, 174.61, 110.00, 164.81, 146.83, 0, 110.00, 0
+      ]
+    },
+    // A 小調溫室／暴雨森林幽靜曲
+    nature: {
+      bpm: 106,
+      lead: [
+        440.00, 0, 523.25, 493.88, 440.00, 0, 392.00, 329.63,
+        349.23, 0, 392.00, 440.00, 329.63, 0, 0, 0,
+        440.00, 0, 523.25, 587.33, 659.25, 0, 587.33, 523.25,
+        493.88, 0, 392.00, 329.63, 440.00, 0, 0, 0
+      ],
+      bass: [
+        110.00, 164.81, 220.00, 164.81, 98.00, 146.83, 196.00, 146.83,
+        87.31, 130.81, 174.61, 130.81, 82.41, 123.47, 164.81, 123.47,
+        110.00, 164.81, 220.00, 164.81, 87.31, 130.81, 174.61, 130.81,
+        98.00, 146.83, 82.41, 123.47, 110.00, 0, 110.00, 0
+      ]
+    },
+    // E 小調疾走 JRPG BOSS 對決曲
+    battle: {
+      bpm: 156,
+      lead: [
+        329.63, 392.00, 493.88, 329.63, 523.25, 493.88, 440.00, 392.00,
+        329.63, 392.00, 493.88, 587.33, 659.25, 0, 587.33, 493.88,
+        440.00, 493.88, 523.25, 440.00, 392.00, 440.00, 493.88, 392.00,
+        369.99, 440.00, 493.88, 587.33, 659.25, 0, 493.88, 0
+      ],
+      bass: [
+        164.81, 164.81, 246.94, 164.81, 196.00, 196.00, 220.00, 246.94,
+        164.81, 164.81, 246.94, 164.81, 130.81, 130.81, 146.83, 146.83,
+        110.00, 110.00, 130.81, 130.81, 196.00, 196.00, 146.83, 146.83,
+        123.47, 123.47, 146.83, 146.83, 164.81, 164.81, 123.47, 0
+      ]
+    },
+    // C 大調凱旋破案慶祝曲
+    victory: {
+      bpm: 132,
+      lead: [
+        523.25, 0, 659.25, 783.99, 659.25, 783.99, 1046.50, 0,
+        880.00, 0, 783.99, 659.25, 587.33, 659.25, 783.99, 0,
+        523.25, 0, 659.25, 783.99, 880.00, 987.77, 1046.50, 0,
+        783.99, 659.25, 587.33, 523.25, 523.25, 0, 0, 0
+      ],
+      bass: [
+        130.81, 196.00, 261.63, 196.00, 130.81, 196.00, 261.63, 196.00,
+        174.61, 220.00, 130.81, 196.00, 196.00, 246.94, 196.00, 146.83,
+        130.81, 196.00, 261.63, 196.00, 174.61, 196.00, 130.81, 196.00,
+        196.00, 146.83, 196.00, 130.81, 130.81, 0, 0, 0
+      ]
+    }
+  },
+  playNote(freq, durSec, wave, vol) {
+    if (!freq || freq <= 0) return;
+    try {
+      const ctx = ensureAudio();
+      if (!ctx || ctx.state !== "running") return;
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = wave;
+      osc.frequency.setValueAtTime(freq, now);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.linearRampToValueAtTime(vol, now + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0008, now + durSec);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + durSec + 0.02);
+    } catch (_) {}
+  },
+  tick() {
+    if (!this.enabled || !this.unlocked) return;
+    const track = this.tracks[this.currentTrack];
+    if (!track) return;
+    const stepDur = (60 / track.bpm) / 2;
+    const idx = this.stepIdx % track.lead.length;
+    this.playNote(track.lead[idx], stepDur * 0.85, "square", 0.018);
+    this.playNote(track.bass[idx], stepDur * 0.9, "triangle", 0.026);
+    this.stepIdx++;
+  },
+  startLoop() {
+    this.stop();
+    if (!this.enabled || !this.unlocked) return;
+    const track = this.tracks[this.currentTrack];
+    if (!track) return;
+    const ms = Math.round(((60 / track.bpm) / 2) * 1000);
+    this.tick();
+    this.timer = setInterval(() => this.tick(), ms);
+  },
+  stop() {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+  },
+  playTrack(name) {
+    if (!this.tracks[name]) return;
+    if (this.currentTrack === name && this.timer) return;
+    this.currentTrack = name;
+    this.stepIdx = 0;
+    if (this.enabled && this.unlocked) this.startLoop();
+  },
+  playTrackForRoom(roomId) {
+    if (state.flags && state.flags.caseSolved) {
+      this.playTrack("victory");
+    } else if (roomId === "greenhouse" || roomId === "forest") {
+      this.playTrack("nature");
+    } else {
+      this.playTrack("mansion");
+    }
+  },
+  unlock() {
+    ensureAudio();
+    if (!this.unlocked) {
+      this.unlocked = true;
+      if (this.enabled) this.startLoop();
+    }
+  },
+  toggle() {
+    this.enabled = !this.enabled;
+    ensureAudio();
+    this.unlocked = true;
+    if (this.enabled) this.startLoop();
+    else this.stop();
+    return this.enabled;
+  }
+};
+
+/* ============================================================================
+   2. 16×16 點陣圖精靈繪製系統（人物、夥伴巴迪、道具與物件）
+   ============================================================================ */
+const PALETTES = {
+  edward: { H: "#0f172a", S: "#fcd9bd", C: "#1d4ed8", L: "#93c5fd", G: "#facc15", B: "#1e293b" },
+  kiki:   { H: "#78350f", S: "#fcd9bd", C: "#d97706", L: "#fef3c7", G: "#f8fafc", B: "#451a03" },
+  butler: { H: "#cbd5e1", S: "#fcd9bd", C: "#1e293b", L: "#f8fafc", G: "#e11d48", B: "#0f172a" },
+  midori: { H: "#451a03", S: "#fcd9bd", C: "#065f46", L: "#ecfdf5", G: "#f43f5e", B: "#022c22" },
+  shira:  { H: "#451a03", S: "#fcd9bd", C: "#e0f2fe", L: "#ffffff", G: "#ef4444", B: "#334155" },
+  akai:   { H: "#64748b", S: "#fcd9bd", C: "#3f6212", L: "#fef08a", G: "#84cc16", B: "#1a2e05" },
+  drChen: { H: "#e2e8f0", S: "#e2e8f0", C: "#cbd5e1", L: "#38bdf8", G: "#facc15", B: "#475569" },
+  buddy:  { H: "#d97706", S: "#fde68a", C: "#b45309", L: "#ffffff", G: "#ef4444", B: "#1c1917" }
+};
+
+// 12x14 精靈像素點陣模板（四方向＋走路步態）
+const SPRITE_HUMAN = [
+  "....HHHH....",
+  "...HHHHHH...",
+  "...HSSSSSH..",
+  "...HSBSHBH..",
+  "...HSSSSSH..",
+  "....SSSS....",
+  "..CCCCCCCC..",
+  ".CCCLGGLCCC.",
+  ".CCCLGGLCCC.",
+  ".SSCCCCCCSS.",
+  "...CCCCCC...",
+  "...BB..BB...",
+  "...BB..BB...",
+  "..BBB..BBB.."
+];
+
+const SPRITE_GLASSES_HUMAN = [
+  "....HHHH....",
+  "...HHHHHH...",
+  "...HSSSSSH..",
+  "...HGBGGBH..",
+  "...HSSSSSH..",
+  "....SSSS....",
+  "..CCCCCCCC..",
+  ".CCCLGGLCCC.",
+  ".CCCLGGLCCC.",
+  ".SSCCCCCCSS.",
+  "...CCCCCC...",
+  "...BB..BB...",
+  "...BB..BB...",
+  "..BBB..BBB.."
+];
+
+const SPRITE_GLASSES_DOWN_WALK = [
+  "....HHHH....",
+  "...HHHHHH...",
+  "...HSSSSSH..",
+  "...HGBGGBH..",
+  "...HSSSSSH..",
+  "....SSSS....",
+  "..CCCCCCCC..",
+  ".CCCLGGLCCC.",
+  ".CCCLGGLCCC.",
+  ".SSCCCCCCSS.",
+  "...CCCCCC...",
+  "..BB....BB..",
+  "..BBB..BB...",
+  "............"
+];
+
+const SPRITE_HUMAN_UP = [
+  "....HHHH....",
+  "...HHHHHH...",
+  "..HHHHHHHH..",
+  "..HHHHHHHH..",
+  "...HHHHHH...",
+  "....HHHH....",
+  "..CCCCCCCC..",
+  ".CCCCCCCCCC.",
+  ".CCCCCCCCCC.",
+  ".SSCCCCCCSS.",
+  "...CCCCCC...",
+  "...BB..BB...",
+  "...BB..BB...",
+  "..BBB..BBB.."
+];
+
+const SPRITE_HUMAN_UP_WALK = [
+  "....HHHH....",
+  "...HHHHHH...",
+  "..HHHHHHHH..",
+  "..HHHHHHHH..",
+  "...HHHHHH...",
+  "....HHHH....",
+  "..CCCCCCCC..",
+  ".CCCCCCCCCC.",
+  ".CCCCCCCCCC.",
+  ".SSCCCCCCSS.",
+  "...CCCCCC...",
+  "..BB....BB..",
+  "..BB...BBB..",
+  "............"
+];
+
+const SPRITE_GLASSES_RIGHT = [
+  "....HHHH....",
+  "...HHHHHH...",
+  "...HHHHSSH..",
+  "...HHHSGBS..",
+  "...HHHSSSS..",
+  "....SSSS....",
+  "...CCCCCCC..",
+  "...CCCCGLC..",
+  "...CCCSSCC..",
+  "...CCCCCCC..",
+  "...CCCCCC...",
+  "....BB.BB...",
+  "....BB.BB...",
+  "....BBBBBB.."
+];
+
+const SPRITE_GLASSES_RIGHT_WALK = [
+  "....HHHH....",
+  "...HHHHHH...",
+  "...HHHHSSH..",
+  "...HHHSGBS..",
+  "...HHHSSSS..",
+  "....SSSS....",
+  "...CCCCCCC..",
+  "...CCCCGLC..",
+  "...CCCSSCC..",
+  "...CCCCCCC..",
+  "...CCCCCC...",
+  "...BB...BB..",
+  "..BBB....BB.",
+  "............"
+];
+
+const SPRITE_DOG = [
+  "............",
+  "............",
+  "..HH....HH..",
+  "..HHHHHHHH..",
+  "..HHBHHBHH..",
+  "...SSSSSS...",
+  "...GGGGGG...",
+  "..CCCCCCCC..",
+  ".HCCCCCCCC..",
+  ".HCCCCCCCC..",
+  "..CC....CC..",
+  "..SS....SS..",
+  "............",
+  "............"
+];
+
+const SPRITE_DOG_UP = [
+  "............",
+  "............",
+  "..HH....HH..",
+  "..HHHHHHHH..",
+  "..HHHHHHHH..",
+  "...HHHHHH...",
+  "...GGGGGG...",
+  "..CCCCCCCC..",
+  "..CCCCCCCC..",
+  "..CCCCCCCC..",
+  "..CC....CC..",
+  "..SS....SS..",
+  "............",
+  "............"
+];
+
+const SPRITE_DOG_RIGHT = [
+  "............",
+  "............",
+  "......HHH...",
+  ".....HHHHHH.",
+  ".....HHHBSS.",
+  ".....HHHHSS.",
+  "....GGGGGG..",
+  ".HHCCCCCCC..",
+  "HCCCCCCCC...",
+  "..CCCCCCC...",
+  "..CC...CC...",
+  "..SS...SS...",
+  "............",
+  "............"
+];
+
+const spriteCache = {};
+function getSpriteCanvas(key, grid, pal, scale = 1, flipX = false) {
+  const cacheKey = `${key}_${scale}_${flipX ? "f" : "n"}`;
+  if (spriteCache[cacheKey]) return spriteCache[cacheKey];
+  const h = grid.length;
+  const w = grid[0].length;
+  const c = document.createElement("canvas");
+  c.width = w * scale;
+  c.height = h * scale;
+  const cx = c.getContext("2d");
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const ch = grid[y][x];
+      if (ch !== "." && pal[ch]) {
+        cx.fillStyle = pal[ch];
+        const drawX = flipX ? (w - 1 - x) : x;
+        cx.fillRect(drawX * scale, y * scale, scale, scale);
+      }
+    }
+  }
+  spriteCache[cacheKey] = c;
+  return c;
+}
+
+function drawCharSprite(ctx, charId, px, py, scale = 1, bob = 0, dir = "down", stepFrame = 0) {
+  const pal = PALETTES[charId] || PALETTES.edward;
+  let grid;
+  let gridKey = charId;
+  const flipX = (dir === "left");
+
+  if (charId === "buddy") {
+    if (dir === "up") { grid = SPRITE_DOG_UP; gridKey += "_u"; }
+    else if (dir === "left" || dir === "right") { grid = SPRITE_DOG_RIGHT; gridKey += "_r"; }
+    else { grid = SPRITE_DOG; gridKey += "_d"; }
+  } else if (charId === "edward") {
+    if (dir === "up") {
+      grid = stepFrame ? SPRITE_HUMAN_UP_WALK : SPRITE_HUMAN_UP;
+      gridKey += stepFrame ? "_uw" : "_u";
+    } else if (dir === "left" || dir === "right") {
+      grid = stepFrame ? SPRITE_GLASSES_RIGHT_WALK : SPRITE_GLASSES_RIGHT;
+      gridKey += stepFrame ? "_rw" : "_r";
+    } else {
+      grid = stepFrame ? SPRITE_GLASSES_DOWN_WALK : SPRITE_GLASSES_HUMAN;
+      gridKey += stepFrame ? "_dw" : "_d";
+    }
+  } else {
+    grid = charId === "drChen" ? SPRITE_GLASSES_HUMAN : SPRITE_HUMAN;
+  }
+
+  const spr = getSpriteCanvas(gridKey, grid, pal, scale, flipX);
+  ctx.drawImage(spr, Math.round(px - spr.width / 2), Math.round(py - spr.height + bob));
+}
+
+function renderDialoguePortrait(charId) {
+  const pc = document.getElementById("dlg-portrait");
+  const pctx = pc.getContext("2d");
+  pctx.imageSmoothingEnabled = false;
+  pctx.clearRect(0, 0, 32, 32);
+  pctx.fillStyle = "#161f33";
+  pctx.fillRect(0, 0, 32, 32);
+  drawCharSprite(pctx, charId, 16, 30, 2, 0);
+}
+
+/* ============================================================================
+   3. 地圖、場景物件與 RPG 任務進度資料（20×11 瓦片，每格 16×16）
+   ============================================================================ */
+const TILE = 16;
+const MAP_W = 20;
+const MAP_H = 11;
+
+const ROOMS = {
+  hall: {
+    name: "霧月山莊主廳",
+    theme: "hall",
+    doors: [
+      { col: 9, row: 0, to: "greenhouse", spawnX: 9.5, spawnY: 8.6, label: "往玻璃溫室" },
+      { col: 10, row: 0, to: "greenhouse", spawnX: 9.5, spawnY: 8.6, label: "往玻璃溫室" },
+      { col: 19, row: 5, to: "lab", spawnX: 1.6, spawnY: 5.0, label: "往生化實驗室" },
+      { col: 0, row: 5, to: "forest", spawnX: 17.6, spawnY: 5.0, label: "往後山林場", reqFlag: "forestUnlocked" }
+    ],
+    solids: [
+      { x: 8, y: 2, w: 4, h: 2 },   // 急救床與心電儀
+      { x: 3, y: 1, w: 2, h: 1 },   // 急救藥櫃
+      { x: 14, y: 7, w: 1, h: 1 }   // 綠川站位
+    ],
+    npcs: [
+      { id: "drChen", name: "陳博士（病床）", x: 10.0, y: 3.3, interact: "interactDrChen", tag: "!" },
+      { id: "kiki", name: "小琪", x: 8.0, y: 3.4, interact: "interactKiki" },
+      { id: "butler", name: "老管家", x: 12.2, y: 3.4, interact: "interactButler" },
+      { id: "midori", name: "綠川富商", x: 14.5, y: 7.4, interact: "interactMidori", tag: "?" }
+    ],
+    props: [
+      { id: "med_cabinet", name: "急救藥櫃", x: 4.0, y: 2.0, type: "cabinet", interact: "interactCabinet" }
+    ]
+  },
+  lab: {
+    name: "生化實驗室",
+    theme: "lab",
+    doors: [
+      { col: 0, row: 5, to: "hall", spawnX: 17.6, spawnY: 5.0, label: "回主廳" }
+    ],
+    solids: [
+      { x: 9, y: 2, w: 3, h: 2 },   // 恆溫水浴槽桌
+      { x: 14, y: 2, w: 2, h: 2 },  // 紅墨水量筒架
+      { x: 5, y: 7, w: 3, h: 1 },   // 耐酸膠囊桌
+      { x: 13, y: 7, w: 3, h: 1 }   // 茶水桌
+    ],
+    npcs: [
+      { id: "shira", name: "白石助理", x: 5.5, y: 3.6, interact: "interactShira" }
+    ],
+    props: [
+      { id: "water_bath", name: "90°C 恆溫水浴槽", x: 10.5, y: 3.5, type: "bath", interact: "interactWaterBath", tag: "!" },
+      { id: "ink_rack", name: "紅墨水量筒架", x: 15.0, y: 3.5, type: "beaker", interact: "interactInkRack", tag: "🔍" },
+      { id: "capsule_desk", name: "耐酸膠囊與消化筆記", x: 6.5, y: 7.5, type: "desk", interact: "interactCapsuleDesk" },
+      { id: "tea_desk", name: "紅茶與綠茶殘渣", x: 14.5, y: 7.5, type: "tea", interact: "interactTeaDesk" }
+    ]
+  },
+  greenhouse: {
+    name: "玻璃溫室",
+    theme: "greenhouse",
+    doors: [
+      { col: 9, row: 10, to: "hall", spawnX: 9.5, spawnY: 1.5, label: "回主廳" },
+      { col: 10, row: 10, to: "hall", spawnX: 9.5, spawnY: 1.5, label: "回主廳" }
+    ],
+    solids: [
+      { x: 13, y: 3, w: 4, h: 3 },  // 睡蓮水池
+      { x: 8, y: 3, w: 2, h: 2 },   // 枯萎植物盆栽
+      { x: 3, y: 7, w: 2, h: 1 },   // CO2 鋼瓶
+      { x: 9, y: 7, w: 2, h: 1 }    // 斷裂單子葉莖
+    ],
+    npcs: [
+      { id: "akai", name: "赤井學者", x: 4.5, y: 3.5, interact: "interactAkai" }
+    ],
+    props: [
+      { id: "wilted_pot", name: "枯萎的實驗盆栽", x: 9.0, y: 4.5, type: "pot", interact: "interactWiltedPot", tag: "!" },
+      { id: "water_can", name: "清水壺", x: 15.0, y: 7.5, type: "can", interact: "interactWaterCan", tag: "💧" },
+      { id: "lily_pond", name: "睡蓮水池", x: 15.0, y: 5.5, type: "pond", interact: "interactLilyPond" },
+      { id: "co2_tank", name: "CO₂ 鋼瓶與葉片切片", x: 4.0, y: 7.5, type: "tank", interact: "interactCo2Tank" },
+      { id: "monocot_stem", name: "斷裂植物莖", x: 10.0, y: 7.5, type: "stem", interact: "interactMonocotStem" }
+    ]
+  },
+  forest: {
+    name: "暴雨後山林場",
+    theme: "forest",
+    doors: [
+      { col: 19, row: 5, to: "hall", spawnX: 1.5, spawnY: 5.0, label: "回主廳" }
+    ],
+    solids: [
+      { x: 1, y: 1, w: 2, h: 9 },   // 左側斷崖與斷橋
+      { x: 8, y: 2, w: 2, h: 2 },   // 環狀剝皮巨木
+      { x: 13, y: 2, w: 2, h: 2 }   // 樹洞巨木
+    ],
+    npcs: [],
+    props: [
+      { id: "broken_bridge", name: "沖垮的木橋", x: 3.0, y: 5.5, type: "bridge", interact: "interactBridge" },
+      { id: "girdled_tree", name: "環狀剝皮母株", x: 9.0, y: 4.0, type: "tree", interact: "interactGirdledTree", tag: "🔍" },
+      { id: "tree_hollow", name: "巨木樹洞（異常氣味）", x: 14.0, y: 4.0, type: "hollow", interact: "interactTreeHollow", tag: "!" },
+      { id: "seedling_log", name: "幼苗根毛與年輪斷面", x: 8.5, y: 8.2, type: "log", interact: "interactSeedlingLog" }
+    ]
+  }
+};
+
+/* ============================================================================
+   4. RPG 遊戲核心狀態
+   ============================================================================ */
+const state = {
+  room: "hall",
+  player: { x: 9.5, y: 6.8, dir: "down", walkTick: 0, moving: false },
+  buddy:  { x: 8.5, y: 7.2, dir: "down", trail: [] },
+  lv: 1,
+  exp: 0,
+  nextExp: 100,
+  flags: {
+    introDone: false,
+    labSolved: false,         // 水浴槽溫控解謎完成
+    hasWaterCan: false,       // 取得清水壺
+    greenhouseSolved: false,  // 清水沖洗食鹽水盆栽完成
+    forestUnlocked: false,    // 解鎖後山側門
+    snakeJarFound: false,     // 發現響尾蛇罐與8cm枝條
+    venomCured: false,        // 打贏 Boss 1 蛇毒戰
+    caseSolved: false,        // 打贏 Boss 2 綠川富商
+    inkMeasured: false
+  },
+  inventory: [
+    { id: "gallbladder_note", key: true, name: "📋 博士病歷：五年前切除膽囊", desc: "無膽囊濃縮儲存膽汁，一次攝入高脂奶油濃湯會乳化不全而腹瀉。" }
+  ],
+  dialogue: {
+    active: false,
+    queue: [],
+    idx: 0,
+    full: "",
+    shown: "",
+    charIdx: 0,
+    typing: false,
+    onDone: null
+  },
+  rain: Array.from({ length: 45 }, () => ({
+    x: Math.random() * 320,
+    y: Math.random() * 180,
+    speed: 140 + Math.random() * 80
+  })),
+  lightningAlpha: 0,
+  fadeAlpha: 0,
+  time: 0,
+  keys: {},
+  touchDir: null,
+  wrongCount: 0
+};
+
+/* ============================================================================
+   5. 道具、經驗值與 HUD 更新
+   ============================================================================ */
+function showToast(msg) {
+  const wrap = document.getElementById("toast-wrap");
+  const el = document.createElement("div");
+  el.className = "rpg-toast";
+  el.textContent = msg;
+  wrap.appendChild(el);
+  setTimeout(() => el.remove(), 1850);
+}
+
+function gainExp(amount) {
+  state.exp += amount;
+  showToast(`✨ 獲得 ${amount} EXP！`);
+  while (state.exp >= state.nextExp) {
+    state.exp -= state.nextExp;
+    state.lv++;
+    state.nextExp = Math.round(state.nextExp * 1.3);
+    SFX.play("fanfare");
+    showToast(`🎉 偵探等級提升至 LV.${state.lv}！`);
+  }
+  updateHud();
+}
+
+function addItem(item) {
+  if (state.inventory.some((i) => i.id === item.id)) return false;
+  state.inventory.push(item);
+  SFX.play("fanfare");
+  showToast(`🎒 獲得證物：${item.name}`);
+  return true;
+}
+
+function getQuestText() {
+  if (!state.flags.labSolved) return "任務 1：前往右側【生化實驗室】，調校恆溫水浴槽還原蛋白酶線索！";
+  if (!state.flags.greenhouseSolved) return "任務 2：前往上方【玻璃溫室】，想辦法拯救遭濃食鹽水潑灑的盆栽！";
+  if (!state.flags.snakeJarFound) return "任務 3：從左側開啟的門進入【後山林場】，讓巴迪嗅探樹洞異常氣味！";
+  if (!state.flags.venomCured) return "緊急任務：博士中的是響尾蛇毒！立刻回主廳與【陳博士病床】互動搶救！";
+  if (!state.flags.caseSolved) return "最終任務：證據齊全！在主廳向【綠川富商】發動真相對決！";
+  return "全案破獲！可自由探索霧月山莊回顧各處生物線索。";
+}
+
+function updateHud() {
+  document.getElementById("hud-zone").textContent = ROOMS[state.room].name;
+  document.getElementById("hud-lv").textContent = `LV.${state.lv}`;
+  document.getElementById("hud-quest").textContent = getQuestText();
+  document.getElementById("hud-exp").style.width = `${Math.min(100, (state.exp / state.nextExp) * 100)}%`;
+}
+
+/* ============================================================================
+   6. 對話系統（快速打字機 + 即時點擊全顯）
+   ============================================================================ */
+function syncUiBusyState() {
+  const busy = state.dialogue.active || document.getElementById("modal-overlay").classList.contains("visible");
+  document.body.classList.toggle("ui-busy", busy);
+  if (busy) state.touchDir = null;
+}
+
+function startDialogue(lines, onDone = null) {
+  state.dialogue.active = true;
+  state.dialogue.queue = lines;
+  state.dialogue.idx = 0;
+  state.dialogue.onDone = onDone;
+  document.getElementById("rpg-dialogue").classList.add("visible");
+  syncUiBusyState();
+  loadDialogueLine();
+}
+
+function loadDialogueLine() {
+  const entry = state.dialogue.queue[state.dialogue.idx];
+  const names = {
+    edward: "艾德華", kiki: "小琪", butler: "老管家",
+    midori: "綠川富商", shira: "白石助理", akai: "赤井學者",
+    drChen: "陳博士", buddy: "搜救犬巴迪"
+  };
+  document.getElementById("dlg-speaker").textContent = entry.name || names[entry.speaker] || "系統";
+  renderDialoguePortrait(entry.speaker || "edward");
+  if (entry.speaker === "buddy") SFX.play("bark");
+  document.getElementById("dlg-progress").textContent = `${state.dialogue.idx + 1} / ${state.dialogue.queue.length}`;
+  state.dialogue.full = entry.text;
+  state.dialogue.shown = "";
+  state.dialogue.charIdx = 0;
+  state.dialogue.typing = true;
+  document.getElementById("dlg-text").textContent = "";
+  document.getElementById("dlg-next").textContent = "快速顯示";
+}
+
+function advanceDialogue() {
+  if (!state.dialogue.active) return;
+  if (state.dialogue.typing) {
+    state.dialogue.typing = false;
+    state.dialogue.shown = state.dialogue.full;
+    document.getElementById("dlg-text").textContent = state.dialogue.full;
+    document.getElementById("dlg-next").textContent = "▼ 繼續";
+    return;
+  }
+  SFX.play("select");
+  if (state.dialogue.idx < state.dialogue.queue.length - 1) {
+    state.dialogue.idx++;
+    loadDialogueLine();
+  } else {
+    state.dialogue.active = false;
+    document.getElementById("rpg-dialogue").classList.remove("visible");
+    syncUiBusyState();
+    const cb = state.dialogue.onDone;
+    state.dialogue.onDone = null;
+    if (cb) cb();
+  }
+}
+
+/* ============================================================================
+   7. 各物件與 NPC 互動事件（生活化融入生物原理，非考卷文字）
+   ============================================================================ */
+const INTERACTIONS = {
+  interactDrChen() {
+    if (!state.flags.snakeJarFound) {
+      startDialogue([
+        { speaker: "drChen", text: "（陳博士昏迷不醒，脈搏十分微弱，手肘處隱約有針孔瘀青。）" },
+        { speaker: "kiki", text: "「幸好心臟肌肉仍在規律收縮舒張產生壓力，推動血液單向流動。快去實驗室與溫室找線索！」" }
+      ]);
+    } else if (!state.flags.venomCured) {
+      startDialogue([
+        { speaker: "edward", text: "「大家聽好！我們在樹洞找到響尾蛇標本罐，博士中的是劇毒蛇毒！立刻啟動急救搶救戰！」" }
+      ], openVenomBattle);
+    } else {
+      startDialogue([
+        { speaker: "drChen", text: "「唔……毒素被血清抗體中和了，感覺好多了……多謝你們把藥物準確送達我的全身循環！」" }
+      ]);
+    }
+  },
+
+  interactKiki() {
+    startDialogue([
+      { speaker: "kiki", text: "「胃液快篩沒有口服毒素！要是經口攝取，瘦肉蛋白質、米飯澱粉與油脂會先被胰液等分解成胺基酸、葡萄糖與脂肪酸，再由小腸絨毛表面積吸收。」" },
+      { speaker: "kiki", text: "「所以毒素肯定是從靜脈直接注入血管的！」" }
+    ]);
+  },
+
+  interactButler() {
+    startDialogue([
+      { speaker: "butler", text: "「外面橋斷了！我已發給大家口罩與酒精消毒——完好無破損的皮膚角質層與呼吸道黏膜，是人體抵禦病原體的第一道防線。」" }
+    ]);
+  },
+
+  interactCabinet() {
+    addItem({ id: "antivenom_kit", key: true, name: "🧪 抗蛇毒血清與靜脈輸液包", desc: "含有現成專一性蛇毒抗體的血清（立即中和毒素），以及可溶於血漿的升壓強心劑。" });
+    startDialogue([
+      { speaker: "edward", text: "「主廳藥櫃裡有備用的【抗蛇毒血清與靜脈輸液包】，還有另一支標著『蛇毒疫苗』的試劑，先收進裝備袋！」" }
+    ]);
+  },
+
+  interactMidori() {
+    if (!state.flags.venomCured) {
+      startDialogue([
+        { speaker: "midori", text: "「哼，我整晚都在客房靜養，剛才聽到警報才出來的。你們別浪費時間在我身上！」" },
+        { speaker: "buddy", text: "「汪！汪！」（巴迪對著綠川的衣角狂吠——上面沾著新鮮綠葉碎屑！）" }
+      ]);
+    } else if (!state.flags.caseSolved) {
+      startDialogue([
+        { speaker: "midori", text: "「什麼？陳博士竟然醒過來了？！不、不管怎樣，你沒有證據證明是我動的手！」" },
+        { speaker: "edward", text: "「綠川富商，你的每一個藉口都違反了最基本的生物科學！準備好迎接真相對決吧！」" }
+      ], openBossBattle);
+    } else {
+      startDialogue([
+        { speaker: "midori", text: "「怎麼可能……連植物吸水的高度都能算出我幾點進實驗室……」" }
+      ]);
+    }
+  },
+
+  interactShira() {
+    startDialogue([
+      { speaker: "shira", text: "「嘶……我右手只是剛剛不小心劃傷，因為局部微血管擴張、血流量與組織液增加才紅腫發炎的！」" },
+      { speaker: "shira", text: "「那邊的恆溫水浴槽被人刻意調到 90°C！試管裡的去漬蛋白酶都快報銷了，你能幫我把水浴槽調回最適條件嗎？」" }
+    ]);
+  },
+
+  interactWaterBath() {
+    if (state.flags.labSolved) {
+      startDialogue([{ speaker: "edward", text: "「水浴槽已經維持在 37°C 中性最適環境，成功用去漬蛋白酶洗淨血漬、抽出綠川纖維證物了。」" }]);
+      return;
+    }
+    openWaterBathPuzzle();
+  },
+
+  interactInkRack() {
+    state.flags.inkMeasured = true;
+    addItem({ id: "ink_log_16cm", key: true, name: "📏 實驗室量筒紀錄（16 公分）", desc: "20:00 浸泡起至 00:00（歷時 4 小時），水面滴油防蒸發，木質部染紅高度達 16 公分（速率 4 cm/hr）。" });
+    startDialogue([
+      { speaker: "edward", text: "「這是博士 20:00 開始計時的蒸散量筒！水面滴了一層植物油防止水分自然蒸發，到 00:00 經歷 4 小時，木質部正好染紅 16 公分！」" },
+      { speaker: "edward", text: "「等等……架子上明明少了一支枝條！看來 16 ÷ 4 = 每小時上升 4 公分，這項數據待會一定派得上用場！」" }
+    ]);
+    gainExp(25);
+  },
+
+  interactCapsuleDesk() {
+    startDialogue([
+      { speaker: "edward", text: "「地上是被踩碎的『雙層耐酸口服腸溶膠囊』——保護蛋白質酵素不被胃的強酸與胃蛋白酶破壞，好送達弱鹼性小腸分解大分子養分！」" }
+    ]);
+  },
+
+  interactTeaDesk() {
+    addItem({ id: "tea_note", key: true, name: "🌡️ 70°C 酵素失活筆記", desc: "高溫炒菁綠茶（>80°C）與高溫烘焙紅茶（>90°C）製程皆高於 70°C，多酚氧化酵素皆已永久失去活性。" });
+    startDialogue([
+      { speaker: "edward", text: "「桌上留著高溫炒菁綠茶（>80°C）和高溫烘焙紅茶（>90°C）。多酚氧化酵素超過 70°C 就會永久失活，綠川剛剛竟然想用紅茶解毒？」" }
+    ]);
+  },
+
+  interactAkai() {
+    startDialogue([
+      { speaker: "akai", text: "「溫室一團亂！有人把整桶『濃食鹽水』潑進中央那盆藥用植物裡，讓它瞬間枯萎、光合作用也停擺了！」" },
+      { speaker: "akai", text: "「快去水池邊拿【清水壺】幫它沖淡鹽分吧，救活它或許能找到兇手逃往後山的線索！」" }
+    ]);
+  },
+
+  interactWaterCan() {
+    if (state.flags.hasWaterCan) {
+      startDialogue([{ speaker: "edward", text: "「清水壺裡已經裝滿清澈的水了。」" }]);
+      return;
+    }
+    state.flags.hasWaterCan = true;
+    addItem({ id: "water_can_item", key: false, name: "💧 溫室清水壺", desc: "裝滿低濃度清水的澆花壺，可用來沖淡盆栽土壤中的高濃度食鹽水。" });
+    startDialogue([{ speaker: "edward", text: "「拿到【清水壺】了！快去澆在中央那盆被濃食鹽水弄萎的盆栽上！」" }]);
+  },
+
+  interactWiltedPot() {
+    if (state.flags.greenhouseSolved) {
+      startDialogue([{ speaker: "edward", text: "「保衛細胞重新吸水膨脹、氣孔開啟，植物正加速吸收 CO₂ 釋放氧氣呢！」" }]);
+      return;
+    }
+    if (!state.flags.hasWaterCan) {
+      startDialogue([
+        { speaker: "edward", text: "「土壤表面結滿鹽巴！濃食鹽水讓『保衛細胞』滲透失水萎縮，氣孔全關閉了！得先去右下角水池邊拿【清水壺】來沖洗才行。」" }
+      ]);
+      return;
+    }
+    SFX.play("splash");
+    state.flags.greenhouseSolved = true;
+    state.flags.forestUnlocked = true;
+    addItem({ id: "greenhouse_clue", key: true, name: "🍃 溫室葉片與腳印證物", desc: "葉片表面有防水角質層，木質部在葉脈上側、韌皮部在下側；側門泥腳印直通後山林場！" });
+    gainExp(50);
+    updateHud();
+    startDialogue([
+      { speaker: "edward", text: "「澆上清水沖淡鹽分後，保衛細胞終於重新吸水膨脹、張開氣孔！氧氣偵測器的數值回升了！」" },
+      { speaker: "buddy", text: "「汪汪！」（巴迪在盆栽旁刨出一條通往主廳左側【後山林場】的鑰匙與泥腳印！）" }
+    ]);
+  },
+
+  interactLilyPond() {
+    startDialogue([
+      { speaker: "akai", text: "「你看被巴迪踩翻的浮水睡蓮，下表皮發白幾乎沒氣孔——浮水植物的氣孔都集中在接觸空氣的上表皮喔！」" }
+    ]);
+  },
+
+  interactCo2Tank() {
+    startDialogue([
+      { speaker: "edward", text: "「0.15% 二氧化碳鋼瓶加速合成葡萄糖與澱粉！先沸水煮軟、再以『酒精隔水加熱』脫色後滴碘液，就會呈現藍黑色。」" }
+    ]);
+  },
+
+  interactMonocotStem() {
+    startDialogue([
+      { speaker: "akai", text: "「被嫌犯劈斷的這株植物，維管束散生排列又缺乏形成層，天生無法年年增粗長成大樹！」" }
+    ]);
+  },
+
+  interactBridge() {
+    startDialogue([
+      { speaker: "edward", text: "「唯一聯外木橋被山洪沖垮了，整個山莊成了暴風雨孤島密室，兇手絕對還在山莊裡！」" }
+    ]);
+  },
+
+  interactGirdledTree() {
+    startDialogue([
+      { speaker: "edward", text: "「這株母株被整圈環狀剝皮，切斷了葉片向下運送養分的韌皮部，連形成層都被外行人刮爛，無法再長出新的木質部與韌皮部！」" }
+    ]);
+  },
+
+  interactTreeHollow() {
+    if (state.flags.snakeJarFound) {
+      startDialogue([{ speaker: "edward", text: "「我們已經在樹洞找到響尾蛇標本罐與 8 公分染紅枝條，快回主廳搶救陳博士！」" }]);
+      return;
+    }
+    SFX.play("thunder");
+    state.lightningAlpha = 0.85;
+    state.flags.snakeJarFound = true;
+    addItem({ id: "snake_jar", key: true, name: "🐍 劇毒響尾蛇標本罐", desc: "藏在後山樹洞裡的真兇作案工具！證明博士不是植物中毒，而是遭靜脈注射蛇毒！" });
+    addItem({ id: "red_branch_8cm", key: true, name: "🔴 8 公分染紅枝條與雨衣", desc: "藏在綠川深色雨衣口袋裡的同規格枝條，木質部染紅高度僅停在 8 公分便被拔離水源！" });
+    gainExp(60);
+    updateHud();
+    startDialogue([
+      { speaker: "buddy", text: "「汪嗚——！！」（巴迪在巨木樹洞深處猛力刨土，咬出一個玻璃罐與深色雨衣！）" },
+      { speaker: "edward", text: "「天哪……是【劇毒響尾蛇活體標本罐】！還有綠川雨衣裡只染紅【8 公分】的實驗枝條！」" },
+      { speaker: "edward", text: "「毀樹皮只是煙霧彈！博士中的是劇毒蛇毒！我們必須立刻衝回主廳【陳博士病床】展開搶救！」" }
+    ]);
+  },
+
+  interactSeedlingLog() {
+    startDialogue([
+      { speaker: "edward", text: "「倒臥巨木淺色大管徑的年輪是在溫暖多雨的春夏季形成的；而幼苗白色根毛增加吸水表面積，全靠葉片氣孔蒸散拉力把水往上拉！」" }
+    ]);
+  }
+};
+
+/* ============================================================================
+   8. 生物機制小遊戲：溫控酵素實驗台 / 蛇毒急救戰 / 終極真相對決
+   ============================================================================ */
+function openModal(html) {
+  const overlay = document.getElementById("modal-overlay");
+  document.getElementById("modal-card").innerHTML = html;
+  overlay.classList.add("visible");
+  syncUiBusyState();
+}
+
+function closeModal() {
+  document.getElementById("modal-overlay").classList.remove("visible");
+  syncUiBusyState();
+}
+
+// --- 小遊戲 1：生化實驗室水浴槽溫控調校 ---
+function openWaterBathPuzzle() {
+  let temp = 90;
+  let ph = "acid";
+
+  const render = () => {
+    openModal(`
+      <div class="modal-title">
+        <span>🧪 實驗室恆溫水浴槽調校台</span>
+        <button class="px-btn" id="close-lab-btn">✕</button>
+      </div>
+      <div class="lab-panel">
+        <div>目標：調整水浴溫度與酸鹼值，重新活化瓶中殘留的<strong>「去漬蛋白酶」</strong>以洗去血漬、顯現兇手衣袖纖維！</div>
+        <div class="temp-readout" id="lab-temp-disp">${temp}°C</div>
+        <input type="range" id="lab-temp-slider" min="0" max="95" step="5" value="${temp}" />
+        <div class="ph-row">
+          <button class="ph-opt ${ph === "acid" ? "selected" : ""}" data-ph="acid">強酸環境</button>
+          <button class="ph-opt ${ph === "neutral" ? "selected" : ""}" data-ph="neutral">中性溫和</button>
+          <button class="ph-opt ${ph === "base" ? "selected" : ""}" data-ph="base">強鹼沸液</button>
+        </div>
+        <div class="lab-feedback" id="lab-feedback">目前設定為 90°C 高溫，酵素處於變性危險區！請拖曳滑桿並測試催化反應。</div>
+        <button class="px-btn active" id="btn-test-enzyme" style="padding:9px;font-size:13px;">🔥 啟動酵素催化測試</button>
+      </div>
+    `);
+
+    document.getElementById("close-lab-btn").onclick = closeModal;
+    document.getElementById("lab-temp-slider").oninput = (e) => {
+      temp = Number(e.target.value);
+      document.getElementById("lab-temp-disp").textContent = `${temp}°C`;
+    };
+    document.querySelectorAll(".ph-opt").forEach((b) => {
+      b.onclick = () => {
+        ph = b.dataset.ph;
+        document.querySelectorAll(".ph-opt").forEach((x) => x.classList.toggle("selected", x.dataset.ph === ph));
+      };
+    });
+    document.getElementById("btn-test-enzyme").onclick = () => {
+      const fb = document.getElementById("lab-feedback");
+      if (temp >= 70) {
+        SFX.play("error");
+        fb.innerHTML = `💥 <strong>${temp}°C 過高！</strong>蛋白質酵素在高溫下結構破壞、<strong>永久失去活性</strong>，試管冒出一股焦煙！`;
+      } else if (temp <= 15) {
+        SFX.play("error");
+        fb.innerHTML = `❄️ <strong>${temp}°C 過低！</strong>低溫使酵素活動力大幅下降，血漬完全沒有分解跡象（回溫仍可恢復）。`;
+      } else if (ph !== "neutral") {
+        SFX.play("error");
+        fb.innerHTML = `⚠️ 溫度接近了，但「去漬蛋白酶」需要<strong>中性溫和</strong>環境才能發揮最佳活性，過酸或過鹼會抑制催化！`;
+      } else {
+        SFX.play("fanfare");
+        state.flags.labSolved = true;
+        addItem({ id: "cuff_fiber", key: true, name: "🧵 綠川深綠袖口纖維", desc: "於 37°C 中性環境活化去漬蛋白酶洗淨血漬後發現！證實有人曾在實驗室掙扎。" });
+        gainExp(50);
+        updateHud();
+        closeModal();
+        BGM.playTrackForRoom(state.room);
+        startDialogue([
+          { speaker: "shira", text: "「成功了！37°C 溫水搭配中性環境讓去漬蛋白酶發揮最高活性，布片上的血漬分解得一乾二淨！」" },
+          { speaker: "edward", text: "「看這露出的纖維——是深綠色的西裝袖口線頭！看來還得去上方【玻璃溫室】追查兇手逃竄路線！」" }
+        ]);
+      }
+    };
+  };
+  render();
+}
+
+// --- 小遊戲 2：Boss Battle 1 — 蛇毒急診搶救戰 ---
+function openVenomBattle() {
+  BGM.playTrack("battle");
+  let venomHp = 100;
+  let chenHp = 55;
+  let heartBuffed = false;
+  let logMsg = "響尾蛇神經毒正在擴散！請選擇正確的生物醫學急救行動！";
+  let routingStep = false;
+
+  const render = () => {
+    const content = routingStep ? `
+      <div class="modal-title"><span>💉 引導升壓強心劑通過心血管循環</span></div>
+      <div class="battle-log">藥物從<strong>陳博士手臂靜脈</strong>注入，請選擇正確的心臟血管單向循環順序：</div>
+      <div class="battle-skills" style="grid-template-columns:1fr;margin-top:8px;">
+        <button class="skill-btn" id="route-ok">A. 上大靜脈 → 右心房 → 右心室 → 肺動脈 → 肺微血管 → 肺靜脈 → 左心房 → 左心室 → 主動脈</button>
+        <button class="skill-btn" id="route-bad1">B. 下大靜脈 → 左心房 → 左心室 → 肺動脈 → 肺微血管 → 肺靜脈 → 右心房 → 右心室</button>
+        <button class="skill-btn" id="route-bad2">C. 上大靜脈 → 右心室 → 右心房 → 主動脈 → 全身微血管</button>
+      </div>
+    ` : `
+      <div class="modal-title">
+        <span>⚔️ 急診搶救戰：響尾蛇神經毒</span>
+        <span style="font-size:11px;color:#cbd5e1;">回合制生物實戰</span>
+      </div>
+      <div class="battle-arena">
+        <div class="battle-status-row">
+          <div class="combatant-card">
+            <div class="combatant-name"><span>陳博士生命值</span><span>${chenHp}/100</span></div>
+            <div class="hp-bar-bg"><div class="hp-bar-fill" style="width:${chenHp}%;background:#22c55e;"></div></div>
+          </div>
+          <div class="combatant-card">
+            <div class="combatant-name"><span>🐍 蛇毒殘餘濃度</span><span>${venomHp}/100</span></div>
+            <div class="hp-bar-bg"><div class="hp-bar-fill" style="width:${venomHp}%;background:#ef4444;"></div></div>
+          </div>
+        </div>
+        <div class="battle-stage-visual">
+          <canvas id="b1-left" class="battle-sprite-canvas" width="32" height="32"></canvas>
+          <span style="font-size:18px;font-weight:900;color:#fde047;">VS</span>
+          <div style="font-size:30px;">🐍☣️</div>
+        </div>
+        <div class="battle-log">${logMsg}</div>
+        <div class="battle-skills">
+          <button class="skill-btn" id="sk-serum">🧪 注射抗蛇毒血清<span class="skill-sub">以現成專一性抗體立即中和毒素</span></button>
+          <button class="skill-btn" id="sk-heart">💉 靜脈推注強心劑<span class="skill-sub">依心血管循環恢復博士生命值</span></button>
+          <button class="skill-btn" id="sk-vaccine">💊 施打蛇毒疫苗<span class="skill-sub">誘導免疫系統緩慢產生記憶</span></button>
+          <button class="skill-btn" id="sk-tea">🍵 灌高溫烘焙紅茶<span class="skill-sub">綠川主張的「酵素解毒法」</span></button>
+        </div>
+      </div>
+    `;
+
+    openModal(content);
+
+    if (routingStep) {
+      document.getElementById("route-ok").onclick = () => {
+        SFX.play("fanfare");
+        routingStep = false;
+        heartBuffed = true;
+        chenHp = Math.min(100, chenHp + 35);
+        logMsg = "✅ 升壓強心劑順著『上大靜脈→右心→肺循環→左心→管壁最厚的主動脈』送達全身！博士生命值大幅回升 +35！";
+        render();
+      };
+      const failRoute = () => {
+        SFX.play("error");
+        state.wrongCount++;
+        routingStep = false;
+        chenHp = Math.max(15, chenHp - 15);
+        logMsg = "❌ 循環路徑錯誤！體靜脈必先回到右心房→右心室，經肺循環充氧後才進左心房→左心室！博士生命值 -15！";
+        render();
+      };
+      document.getElementById("route-bad1").onclick = failRoute;
+      document.getElementById("route-bad2").onclick = failRoute;
+      return;
+    }
+
+    const bc = document.getElementById("b1-left").getContext("2d");
+    bc.imageSmoothingEnabled = false;
+    drawCharSprite(bc, "kiki", 16, 30, 2, 0);
+
+    document.getElementById("sk-heart").onclick = () => {
+      SFX.play("select");
+      routingStep = true;
+      render();
+    };
+
+    document.getElementById("sk-serum").onclick = () => {
+      SFX.play("hit");
+      const dmg = heartBuffed ? 60 : 50;
+      venomHp = Math.max(0, venomHp - dmg);
+      if (venomHp === 0) {
+        SFX.play("fanfare");
+        state.flags.venomCured = true;
+        gainExp(80);
+        updateHud();
+        closeModal();
+        BGM.playTrackForRoom(state.room);
+        startDialogue([
+          { speaker: "shira", text: "「太好了！抗蛇毒血清裡的現成抗體立刻中和了毒素，博士的心跳與呼吸全部穩定下來了！」" },
+          { speaker: "edward", text: "「現在全場只剩一個人還在裝蒜——回頭找主廳右下方的【綠川富商】，徹底揭穿他的不在場證明！」" }
+        ]);
+        return;
+      }
+      chenHp = Math.max(15, chenHp - 15);
+      logMsg = `💥 抗蛇毒血清發揮專一性結合，蛇毒濃度重創 -${dmg}！（提示：可再補一次血清或先用強心劑穩住血壓）`;
+      render();
+    };
+
+    document.getElementById("sk-vaccine").onclick = () => {
+      SFX.play("error");
+      state.wrongCount++;
+      chenHp = Math.max(10, chenHp - 20);
+      logMsg = "❌ 無效！疫苗需要數天至數週才能誘導人體產生足量抗體，急性中毒必須注射現成的『抗蛇毒血清』！博士生命值 -20！";
+      render();
+    };
+
+    document.getElementById("sk-tea").onclick = () => {
+      SFX.play("error");
+      state.wrongCount++;
+      chenHp = Math.max(10, chenHp - 20);
+      logMsg = "❌ 毫無反應！紅茶經 >90°C 高溫烘焙，多酚氧化酵素早就永久失活，而且昏迷病患不可隨意口服！博士生命值 -20！";
+      render();
+    };
+  };
+  render();
+}
+
+// --- 小遊戲 3：Boss Battle 2 — 終極真相對決：揭穿綠川富商 ---
+function openBossBattle() {
+  BGM.playTrack("battle");
+  let phase = 1;
+  let focusHp = 100;
+  let bossHp = 100;
+  let logMsg = "綠川富商：「哼！我只是好心請陳博士喝熱騰騰的特調奶油濃湯，怎麼可能是兇手！」";
+  let dialHour = 24; // 20..24 (24 = 00:00)
+  let showDial = false;
+
+  const lies = {
+    1: "綠川富商：「我只是好心請陳博士喝特調奶油濃湯！有膽你拿出生物證據反駁啊！」",
+    2: "綠川富商：「好！那我剛剛建議灌紅茶救博士也沒錯啊，裡面的多酚氧化酵素可以幫忙解毒！」",
+    3: "綠川富商：「就算口袋那支枝條是我的，我也是 00:00 警報響後才趁亂進實驗室拔下來的！」"
+  };
+
+  const render = () => {
+    if (showDial) {
+      const hoursElapsed = dialHour - 20;
+      const predictedCm = hoursElapsed * 4;
+      const timeLabel = dialHour === 24 ? "00:00（午夜）" : `${dialHour}:00`;
+      openModal(`
+        <div class="modal-title"><span>🔴 終極舉證：紅墨水時間戳鎖定器</span></div>
+        <div class="timestamp-box">
+          <div style="font-size:12.5px;line-height:1.5;">
+            實驗室枝條自 <strong>20:00</strong> 浸泡至 <strong>00:00</strong>（4 小時）染紅 <strong>16 公分</strong>（速率 <strong>4 cm/hr</strong>）。<br>
+            請拖曳時間軸，找出綠川口袋那支僅染紅 <strong style="color:#f43f5e;">8 公分</strong> 的實際拔離時間！
+          </div>
+          <div style="display:flex;justify-content:space-between;font-weight:800;color:#fde047;">
+            <span>設定拔離時間：${timeLabel}</span>
+            <span>推算木質部染紅：${predictedCm} cm</span>
+          </div>
+          <div class="ink-tube-visual">
+            <div class="ink-fill" style="width:${(predictedCm / 16) * 100}%;"></div>
+          </div>
+          <input type="range" id="dial-slider" min="20" max="24" step="1" value="${dialHour}" />
+          <div class="battle-log" id="dial-fb">${logMsg}</div>
+          <button class="px-btn active" id="btn-lock-time" style="padding:9px;font-size:13px;">👉 異議！鎖定此時間戳！</button>
+        </div>
+      `);
+      document.getElementById("dial-slider").oninput = (e) => {
+        dialHour = Number(e.target.value);
+        render();
+      };
+      document.getElementById("btn-lock-time").onclick = () => {
+        if (dialHour === 22) {
+          SFX.play("fanfare");
+          state.flags.caseSolved = true;
+          gainExp(120);
+          updateHud();
+          closeModal();
+          openVictoryScreen();
+        } else {
+          SFX.play("error");
+          state.wrongCount++;
+          logMsg = `❌ 若在 ${timeLabel} 拔離，只浸泡了 ${hoursElapsed} 小時，染紅高度應為 ${predictedCm} cm，與證物 8 公分不符！`;
+          render();
+        }
+      };
+      return;
+    }
+
+    openModal(`
+      <div class="modal-title">
+        <span>⚖️ 終極真相對決：綠川富商（第 ${phase} / 3 階段）</span>
+      </div>
+      <div class="battle-arena">
+        <div class="battle-status-row">
+          <div class="combatant-card">
+            <div class="combatant-name"><span>艾德華偵探氣勢</span><span>${focusHp}/100</span></div>
+            <div class="hp-bar-bg"><div class="hp-bar-fill" style="width:${focusHp}%;background:#38bdf8;"></div></div>
+          </div>
+          <div class="combatant-card">
+            <div class="combatant-name"><span>綠川富商心理防線</span><span>${bossHp}/100</span></div>
+            <div class="hp-bar-bg"><div class="hp-bar-fill" style="width:${bossHp}%;background:#f43f5e;"></div></div>
+          </div>
+        </div>
+        <div class="battle-stage-visual">
+          <canvas id="b2-ed" class="battle-sprite-canvas" width="32" height="32"></canvas>
+          <span style="font-size:16px;font-weight:900;color:#fde047;">⚡ 論破對決 ⚡</span>
+          <canvas id="b2-mi" class="battle-sprite-canvas" width="32" height="32"></canvas>
+        </div>
+        <div class="battle-log">${logMsg}</div>
+        <div class="battle-skills">
+          <button class="skill-btn" id="ev-gall">📋 膽囊切除病歷<span class="skill-sub">反擊高油脂濃湯試探</span></button>
+          <button class="skill-btn" id="ev-tea">🌡️ 70°C 失活筆記<span class="skill-sub">戳破高溫紅茶解毒謊言</span></button>
+          <button class="skill-btn" id="ev-branch">🔴 8 公分染紅枝條<span class="skill-sub">揭穿 00:00 不在場證明</span></button>
+          <button class="skill-btn" id="ev-tree">🌲 環狀剝皮形成層<span class="skill-sub">指出外行人煙霧彈</span></button>
+        </div>
+      </div>
+    `);
+
+    const c1 = document.getElementById("b2-ed").getContext("2d");
+    const c2 = document.getElementById("b2-mi").getContext("2d");
+    c1.imageSmoothingEnabled = false;
+    c2.imageSmoothingEnabled = false;
+    drawCharSprite(c1, "edward", 16, 30, 2, 0);
+    drawCharSprite(c2, "midori", 16, 30, 2, 0);
+
+    const counterWith = (pick) => {
+      if (phase === 1 && pick === "gall") {
+        SFX.play("hit");
+        bossHp = 65;
+        phase = 2;
+        logMsg = "💥 【破防！】博士五年前已切除膽囊，缺少膽囊濃縮儲存膽汁乳化脂肪，你根本不知道這點！\n" + lies[2];
+        render();
+      } else if (phase === 2 && pick === "tea") {
+        SFX.play("hit");
+        bossHp = 30;
+        phase = 3;
+        logMsg = "💥 【會心一擊！】綠茶炒菁 >80°C、紅茶烘焙 >90°C，多酚氧化酵素高於 70°C 早已永久失活！\n" + lies[3];
+        render();
+      } else if (phase === 3 && pick === "branch") {
+        SFX.play("select");
+        logMsg = "進入最後推算：請鎖定 8 公分枝條實際被拔離的時間！";
+        showDial = true;
+        render();
+      } else {
+        SFX.play("error");
+        state.wrongCount++;
+        focusHp = Math.max(15, focusHp - 20);
+        logMsg = "❌ 這個證物無法直接反駁他目前這句話！仔細看綠川目前的辯詞：\n" + lies[phase];
+        render();
+      }
+    };
+
+    document.getElementById("ev-gall").onclick = () => counterWith("gall");
+    document.getElementById("ev-tea").onclick = () => counterWith("tea");
+    document.getElementById("ev-branch").onclick = () => counterWith("branch");
+    document.getElementById("ev-tree").onclick = () => counterWith("tree");
+  };
+  render();
+}
+
+function openVictoryScreen() {
+  BGM.playTrack("victory");
+  const rank = state.wrongCount === 0 ? "★ S 級傳奇像素生物神探 ★" : state.wrongCount <= 2 ? "★ A 級霧月山莊名偵探 ★" : "★ B 級見習生物偵探 ★";
+  openModal(`
+    <div class="modal-title"><span>🏆 全案破獲：八公分的致命時間戳</span></div>
+    <div style="text-align:center;padding:8px 0;">
+      <div style="display:inline-block;background:#7c2d12;border:2px solid #fde047;color:#fde047;padding:4px 14px;font-weight:900;margin-bottom:8px;">${rank}</div>
+      <div style="font-size:13px;line-height:1.6;text-align:left;background:#0b0e18;border:1.5px solid #475569;padding:10px;margin-bottom:10px;">
+        「兇手的國中生物如果學得夠好，或許就不會留下這麼多破綻了。可惜，生物世界裡沒有僥倖！」<br><br>
+        • 偵探等級：<strong>LV.${state.lv}</strong><br>
+        • 蒐集證物：<strong>${state.inventory.length} 件</strong><br>
+        • 推理失誤次數：<strong>${state.wrongCount} 次</strong>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:center;">
+        <button class="px-btn active" id="btn-vic-roam">🚶 繼續自由探索</button>
+        <button class="px-btn" id="btn-vic-restart">↻ 重新開始冒險</button>
+      </div>
+    </div>
+  `);
+  document.getElementById("btn-vic-roam").onclick = closeModal;
+  document.getElementById("btn-vic-restart").onclick = () => location.reload();
+}
+
+/* ============================================================================
+   9. 背包、地圖面板與輸入控制
+   ============================================================================ */
+function openInventoryModal() {
+  openModal(`
+    <div class="modal-title">
+      <span>🎒 證物與生物裝備袋（共 ${state.inventory.length} 項）</span>
+      <button class="px-btn" id="close-inv">✕</button>
+    </div>
+    <div class="inv-grid">
+      ${state.inventory.map((it) => `
+        <div class="inv-item ${it.key ? "key" : ""}">
+          <div class="inv-item-title">${it.name}</div>
+          <div style="color:#cbd5e1;margin-top:2px;">${it.desc}</div>
+        </div>
+      `).join("")}
+    </div>
+  `);
+  document.getElementById("close-inv").onclick = closeModal;
+}
+
+function openMapModal() {
+  openModal(`
+    <div class="modal-title">
+      <span>🗺️ 霧月山莊地圖與快速傳送</span>
+      <button class="px-btn" id="close-map">✕</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+      <button class="skill-btn" data-tp="hall">🏰 主廳急救區<span class="skill-sub">陳博士、綠川、小琪</span></button>
+      <button class="skill-btn" data-tp="lab">🧪 生化實驗室<span class="skill-sub">水浴槽、紅墨水量筒</span></button>
+      <button class="skill-btn" data-tp="greenhouse">🌿 玻璃溫室<span class="skill-sub">鹽水盆栽、睡蓮水池</span></button>
+      <button class="skill-btn" data-tp="forest" ${state.flags.forestUnlocked ? "" : "disabled"}>🌲 後山林場<span class="skill-sub">${state.flags.forestUnlocked ? "已解鎖" : "🔒 需先解決溫室危機"}</span></button>
+    </div>
+  `);
+  document.getElementById("close-map").onclick = closeModal;
+  document.querySelectorAll("[data-tp]").forEach((b) => {
+    b.onclick = () => {
+      const target = b.dataset.tp;
+      if (target === "forest" && !state.flags.forestUnlocked) return;
+      teleportRoom(target, 9.5, 5.5);
+      closeModal();
+    };
+  });
+}
+
+function teleportRoom(roomId, sx, sy) {
+  SFX.play("door");
+  state.room = roomId;
+  state.player.x = sx;
+  state.player.y = sy;
+  state.buddy.x = sx - 0.8;
+  state.buddy.y = sy + 0.4;
+  state.buddy.trail = [];
+  state.fadeAlpha = 1;
+  BGM.playTrackForRoom(roomId);
+  updateHud();
+}
+
+function isWalkable(tx, ty) {
+  const col = Math.floor(tx);
+  const row = Math.floor(ty);
+  const room = ROOMS[state.room];
+
+  // 門洞可走入觸發換場
+  for (const d of room.doors) {
+    if (d.col === col && d.row === row) return true;
+  }
+  if (col <= 0 || col >= MAP_W - 1 || row <= 0 || row >= MAP_H - 1) return false;
+
+  for (const s of room.solids) {
+    if (tx >= s.x && tx <= s.x + s.w && ty >= s.y && ty <= s.y + s.h) return false;
+  }
+  return true;
+}
+
+function findNearestInteractable() {
+  const room = ROOMS[state.room];
+  const candidates = [...room.npcs, ...room.props];
+  let best = null;
+  let bestDist = 1.65;
+  for (const c of candidates) {
+    const d = Math.hypot(c.x - state.player.x, c.y - state.player.y);
+    if (d < bestDist) {
+      bestDist = d;
+      best = c;
+    }
+  }
+  return best;
+}
+
+function triggerInteract() {
+  if (document.getElementById("modal-overlay").classList.contains("visible")) return;
+  if (state.dialogue.active) {
+    advanceDialogue();
+    return;
+  }
+  const target = findNearestInteractable();
+  if (target && INTERACTIONS[target.interact]) {
+    SFX.play("select");
+    INTERACTIONS[target.interact]();
+  }
+}
+
+/* ============================================================================
+   10. 主繪圖引擎（320×180 DQ/FF 風格 16-bit 像素瓦片、拱門、路標與動態場景）
+   ============================================================================ */
+const canvas = document.getElementById("game-canvas");
+const ctx = canvas.getContext("2d");
+ctx.imageSmoothingEnabled = false;
+
+const tileCache = {};
+function makeTile(key, drawFn) {
+  if (tileCache[key]) return tileCache[key];
+  const c = document.createElement("canvas");
+  c.width = TILE;
+  c.height = TILE;
+  const tx = c.getContext("2d");
+  tx.imageSmoothingEnabled = false;
+  drawFn(tx);
+  tileCache[key] = c;
+  return c;
+}
+
+function buildTileCache() {
+  // 主廳石磚牆（DQ 古堡風雙層錯位磚牆）
+  makeTile("wall_hall", (t) => {
+    t.fillStyle = "#3f2e24"; t.fillRect(0, 0, 16, 16);
+    t.fillStyle = "#5c4333";
+    t.fillRect(0, 1, 7, 5); t.fillRect(8, 1, 8, 5);
+    t.fillRect(0, 8, 3, 5); t.fillRect(4, 8, 8, 5); t.fillRect(13, 8, 3, 5);
+    t.fillStyle = "#785946";
+    t.fillRect(0, 1, 7, 1); t.fillRect(8, 1, 8, 1);
+    t.fillRect(4, 8, 8, 1);
+    t.fillStyle = "#1f1510";
+    t.fillRect(0, 6, 16, 2); t.fillRect(0, 14, 16, 2);
+    t.fillRect(7, 1, 1, 5); t.fillRect(3, 8, 1, 5); t.fillRect(12, 8, 1, 5);
+  });
+
+  // 實驗室金屬石板牆
+  makeTile("wall_lab", (t) => {
+    t.fillStyle = "#2b394f"; t.fillRect(0, 0, 16, 16);
+    t.fillStyle = "#3b4d6b"; t.fillRect(1, 1, 14, 12);
+    t.fillStyle = "#52688c"; t.fillRect(1, 1, 14, 2);
+    t.fillStyle = "#172030"; t.fillRect(0, 13, 16, 3);
+    t.fillStyle = "#94a3b8";
+    t.fillRect(3, 3, 1, 1); t.fillRect(12, 3, 1, 1);
+    t.fillRect(3, 10, 1, 1); t.fillRect(12, 10, 1, 1);
+  });
+
+  // 玻璃溫室鐵框玻璃牆
+  makeTile("wall_greenhouse", (t) => {
+    t.fillStyle = "#163b2d"; t.fillRect(0, 0, 16, 16);
+    t.fillStyle = "#1e5e4a"; t.fillRect(2, 2, 5, 11); t.fillRect(9, 2, 5, 11);
+    t.fillStyle = "#5eead4";
+    t.fillRect(3, 3, 2, 1); t.fillRect(3, 4, 1, 2);
+    t.fillRect(10, 3, 2, 1); t.fillRect(10, 4, 1, 2);
+    t.fillStyle = "#0b241b"; t.fillRect(0, 14, 16, 2);
+  });
+
+  // 後山森林樹冠牆（FF/DQ 經典像素樹叢）
+  makeTile("wall_forest", (t) => {
+    t.fillStyle = "#07140d"; t.fillRect(0, 0, 16, 16);
+    t.fillStyle = "#144229";
+    t.fillRect(2, 2, 12, 11); t.fillRect(1, 4, 14, 7);
+    t.fillStyle = "#1f613d";
+    t.fillRect(3, 3, 10, 6); t.fillRect(4, 2, 7, 4);
+    t.fillStyle = "#34945e";
+    t.fillRect(4, 3, 3, 2); t.fillRect(9, 4, 2, 2);
+    t.fillStyle = "#452712"; t.fillRect(6, 13, 4, 3);
+  });
+
+  // 主廳木紋地板（交錯木板拼接）
+  makeTile("floor_hall_a", (t) => {
+    t.fillStyle = "#4a3222"; t.fillRect(0, 0, 16, 16);
+    t.fillStyle = "#593d2a"; t.fillRect(1, 1, 14, 6); t.fillRect(1, 9, 14, 6);
+    t.fillStyle = "#382418"; t.fillRect(0, 7, 16, 1); t.fillRect(0, 15, 16, 1);
+    t.fillRect(7, 0, 1, 7); t.fillRect(12, 8, 1, 7);
+    t.fillStyle = "#694933"; t.fillRect(2, 2, 4, 1); t.fillRect(4, 11, 5, 1);
+  });
+  makeTile("floor_hall_b", (t) => {
+    t.fillStyle = "#452e1f"; t.fillRect(0, 0, 16, 16);
+    t.fillStyle = "#543927"; t.fillRect(1, 1, 14, 6); t.fillRect(1, 9, 14, 6);
+    t.fillStyle = "#382418"; t.fillRect(0, 7, 16, 1); t.fillRect(0, 15, 16, 1);
+    t.fillRect(11, 0, 1, 7); t.fillRect(4, 8, 1, 7);
+  });
+
+  // 實驗室方格磁磚
+  makeTile("floor_lab_a", (t) => {
+    t.fillStyle = "#263347"; t.fillRect(0, 0, 16, 16);
+    t.fillStyle = "#2e3d54"; t.fillRect(1, 1, 14, 14);
+    t.fillStyle = "#3a4c69"; t.fillRect(1, 1, 14, 1); t.fillRect(1, 1, 1, 14);
+    t.fillStyle = "#1a2433"; t.fillRect(0, 15, 16, 1); t.fillRect(15, 0, 1, 16);
+  });
+  makeTile("floor_lab_b", (t) => {
+    t.fillStyle = "#202b3d"; t.fillRect(0, 0, 16, 16);
+    t.fillStyle = "#28354a"; t.fillRect(1, 1, 14, 14);
+    t.fillStyle = "#32435e"; t.fillRect(1, 1, 14, 1);
+    t.fillStyle = "#161e2b"; t.fillRect(0, 15, 16, 1); t.fillRect(15, 0, 1, 16);
+  });
+
+  // 溫室石板草地
+  makeTile("floor_greenhouse_a", (t) => {
+    t.fillStyle = "#16402c"; t.fillRect(0, 0, 16, 16);
+    t.fillStyle = "#1d5239"; t.fillRect(2, 2, 5, 4); t.fillRect(9, 8, 5, 5);
+    t.fillStyle = "#276b4b"; t.fillRect(4, 11, 2, 2); t.fillRect(11, 3, 2, 2);
+  });
+  makeTile("floor_greenhouse_b", (t) => {
+    t.fillStyle = "#143827"; t.fillRect(0, 0, 16, 16);
+    t.fillStyle = "#1f593e"; t.fillRect(3, 4, 3, 2); t.fillRect(10, 11, 3, 2);
+    t.fillStyle = "#2c7a56"; t.fillRect(11, 4, 1, 2); t.fillRect(4, 12, 1, 2);
+  });
+
+  // 後山泥土草徑
+  makeTile("floor_forest_a", (t) => {
+    t.fillStyle = "#122b1b"; t.fillRect(0, 0, 16, 16);
+    t.fillStyle = "#193b25"; t.fillRect(2, 3, 3, 2); t.fillRect(10, 10, 4, 2);
+    t.fillStyle = "#265436"; t.fillRect(5, 11, 2, 1); t.fillRect(12, 4, 1, 2);
+  });
+  makeTile("floor_forest_b", (t) => {
+    t.fillStyle = "#15301f"; t.fillRect(0, 0, 16, 16);
+    t.fillStyle = "#2d2419"; t.fillRect(3, 6, 4, 3); t.fillRect(9, 2, 3, 2);
+    t.fillStyle = "#234f33"; t.fillRect(11, 11, 2, 2);
+  });
+}
+buildTileCache();
+
+function drawPixelTorch(px, py) {
+  const f = Math.floor(state.time * 9) % 2;
+  // 暖光暈
+  ctx.fillStyle = f ? "rgba(251, 191, 36, 0.14)" : "rgba(249, 115, 22, 0.12)";
+  ctx.fillRect(px - 8, py - 6, 20, 20);
+  // 鐵架與木柄
+  ctx.fillStyle = "#78350f"; ctx.fillRect(px + 1, py + 5, 2, 6);
+  ctx.fillStyle = "#475569"; ctx.fillRect(px, py + 7, 4, 2);
+  // 跳動火焰
+  ctx.fillStyle = "#ef4444"; ctx.fillRect(px, py + 2, 4, 4);
+  ctx.fillStyle = "#facc15"; ctx.fillRect(px + 1, py + (f ? 0 : 1), 2, 4);
+  ctx.fillStyle = "#fffbeb"; ctx.fillRect(px + 1, py + 3, 2, 1);
+}
+
+function drawPixelDoorTile(d) {
+  const px = d.col * TILE;
+  const py = d.row * TILE + 2;
+  const locked = d.reqFlag && !state.flags[d.reqFlag];
+  const pulse = Math.sin(state.time * 4.5) > 0;
+
+  // 石砌門框背景
+  ctx.fillStyle = "#1e293b";
+  ctx.fillRect(px, py, TILE, TILE);
+  // 石拱門柱與拱頂
+  ctx.fillStyle = "#94a3b8";
+  ctx.fillRect(px + 1, py + 1, 14, 2);
+  ctx.fillRect(px + 1, py + 2, 2, 14);
+  ctx.fillRect(px + 13, py + 2, 2, 14);
+  // 深色通道 / 木門板
+  ctx.fillStyle = locked ? "#451a03" : "#7c4a21";
+  ctx.fillRect(px + 3, py + 3, 10, 12);
+  // 木紋與鐵條橫帶
+  ctx.fillStyle = locked ? "#290f02" : "#5c3415";
+  ctx.fillRect(px + 7, py + 3, 2, 12);
+  ctx.fillStyle = "#334155";
+  ctx.fillRect(px + 3, py + 6, 10, 2);
+  ctx.fillRect(px + 3, py + 11, 10, 2);
+  // 金色門把或鎖頭
+  if (locked) {
+    ctx.fillStyle = "#ef4444"; ctx.fillRect(px + 6, py + 6, 4, 5);
+    ctx.fillStyle = "#fde047"; ctx.fillRect(px + 7, py + 4, 2, 2);
+  } else {
+    ctx.fillStyle = "#fde047";
+    ctx.fillRect(px + 10, py + 8, 2, 2);
+    // 門檻發光地墊（引導視覺）
+    let matX = px + 3, matY = py + 14;
+    if (d.row === 0) { matX = px + 2; matY = py + TILE; }
+    else if (d.row === MAP_H - 1) { matX = px + 2; matY = py - 5; }
+    else if (d.col === 0) { matX = px + TILE; matY = py + 3; }
+    else if (d.col === MAP_W - 1) { matX = px - 5; matY = py + 3; }
+    ctx.fillStyle = pulse ? "rgba(250, 204, 21, 0.7)" : "rgba(250, 204, 21, 0.38)";
+    if (d.row === 0 || d.row === MAP_H - 1) ctx.fillRect(matX, matY, 12, 3);
+    else ctx.fillRect(matX, matY, 3, 10);
+  }
+}
+
+function drawDoorSignposts() {
+  const doors = ROOMS[state.room].doors;
+  // 將同側相鄰兩格的雙開門合併為一個清楚的路標
+  const seen = new Set();
+  for (const d of doors) {
+    const groupKey = `${d.to}_${d.row === 0 || d.row === MAP_H - 1 ? d.row : d.col}`;
+    if (seen.has(groupKey)) continue;
+    seen.add(groupKey);
+
+    const locked = d.reqFlag && !state.flags[d.reqFlag];
+    let text = d.label;
+    let sx = d.col * TILE + 8;
+    let sy = d.row * TILE + 10;
+
+    if (d.row === 0) {
+      text = `▲ ${d.label.replace("往", "")}`;
+      sx = (d.col + 1) * TILE;
+      sy = 24;
+    } else if (d.row === MAP_H - 1) {
+      text = `▼ ${d.label.replace("往", "")}`;
+      sx = (d.col + 1) * TILE;
+      sy = MAP_H * TILE - 11;
+    } else if (d.col === 0) {
+      text = locked ? "🔒 後山(未解鎖)" : `◀ ${d.label.replace("往", "")}`;
+      sx = 42;
+      sy = d.row * TILE - 2;
+    } else if (d.col === MAP_W - 1) {
+      text = `${d.label.replace("往", "")} ▶`;
+      sx = MAP_W * TILE - 44;
+      sy = d.row * TILE - 2;
+    }
+
+    ctx.font = "bold 7.5px sans-serif";
+    const tw = ctx.measureText(text).width + 8;
+    const bx = Math.round(sx - tw / 2);
+    const by = Math.round(sy - 6);
+
+    ctx.fillStyle = "rgba(10, 14, 26, 0.88)";
+    ctx.fillRect(bx, by, tw, 11);
+    ctx.strokeStyle = locked ? "#ef4444" : "#e5c158";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bx + 0.5, by + 0.5, tw - 1, 10);
+
+    ctx.fillStyle = locked ? "#fca5a5" : "#fde047";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, Math.round(sx), Math.round(sy));
+  }
+}
+
+function drawRoomTiles(theme) {
+  const wallKey = `wall_${theme}`;
+  const floorA = `floor_${theme}_a`;
+  const floorB = `floor_${theme}_b`;
+
+  for (let r = 0; r < MAP_H; r++) {
+    for (let c = 0; c < MAP_W; c++) {
+      const px = c * TILE;
+      const py = r * TILE + 2;
+      const isBorder = (r === 0 || r === MAP_H - 1 || c === 0 || c === MAP_W - 1);
+      if (isBorder) {
+        ctx.drawImage(tileCache[wallKey], px, py);
+      } else {
+        ctx.drawImage(tileCache[(r + c) % 2 === 0 ? floorA : floorB], px, py);
+      }
+    }
+  }
+
+  // 主廳鋪設經典 DQ/FF 紅底金邊皇室地毯引導動線
+  if (theme === "hall") {
+    // 縱向地毯通往北門溫室
+    ctx.fillStyle = "#7f1d1d"; ctx.fillRect(9 * TILE + 2, 1 * TILE + 2, 2 * TILE - 4, 8 * TILE);
+    ctx.fillStyle = "#facc15";
+    ctx.fillRect(9 * TILE + 2, 1 * TILE + 2, 1, 8 * TILE);
+    ctx.fillRect(11 * TILE - 3, 1 * TILE + 2, 1, 8 * TILE);
+    // 橫向地毯連通左右兩門
+    ctx.fillStyle = "#7f1d1d"; ctx.fillRect(1 * TILE, 5 * TILE + 4, 18 * TILE, 12);
+    ctx.fillStyle = "#facc15";
+    ctx.fillRect(1 * TILE, 5 * TILE + 4, 18 * TILE, 1);
+    ctx.fillRect(1 * TILE, 5 * TILE + 15, 18 * TILE, 1);
+    // 牆上火把
+    drawPixelTorch(6 * TILE + 6, 4);
+    drawPixelTorch(13 * TILE + 6, 4);
+  }
+
+  // 繪製拱門與門檻
+  for (const d of ROOMS[state.room].doors) {
+    drawPixelDoorTile(d);
+  }
+
+  // 房間特色道具（16-bit 像素家具與陰影）
+  if (theme === "hall") {
+    // 急救病床（木框＋枕頭＋藍被＋博士眼鏡頭像）
+    ctx.fillStyle = "rgba(0,0,0,0.35)"; ctx.fillRect(9 * TILE - 1, 2 * TILE + 24, 2 * TILE + 2, 4);
+    ctx.fillStyle = "#78350f"; ctx.fillRect(9 * TILE - 1, 2 * TILE + 1, 2 * TILE + 2, 24);
+    ctx.fillStyle = "#f8fafc"; ctx.fillRect(9 * TILE + 1, 2 * TILE + 3, 2 * TILE - 2, 9);
+    ctx.fillStyle = "#0284c7"; ctx.fillRect(9 * TILE + 1, 2 * TILE + 11, 2 * TILE - 2, 12);
+    ctx.fillStyle = "#38bdf8"; ctx.fillRect(9 * TILE + 2, 2 * TILE + 11, 2 * TILE - 4, 3);
+    // 心電儀（動態綠色波形）
+    ctx.fillStyle = "#334155"; ctx.fillRect(11 * TILE + 3, 2 * TILE + 3, 13, 18);
+    ctx.fillStyle = "#090d16"; ctx.fillRect(11 * TILE + 5, 2 * TILE + 5, 9, 8);
+    const beatX = Math.floor((state.time * 12) % 8);
+    ctx.fillStyle = "#22c55e";
+    ctx.fillRect(11 * TILE + 5, 2 * TILE + 9, 9, 1);
+    ctx.fillRect(11 * TILE + 5 + beatX, 2 * TILE + 6, 2, 5);
+    // 紅十字藥櫃
+    ctx.fillStyle = "#94a3b8"; ctx.fillRect(3 * TILE, 1 * TILE + 2, 2 * TILE, 15);
+    ctx.fillStyle = "#f8fafc"; ctx.fillRect(3 * TILE + 2, 1 * TILE + 4, 2 * TILE - 4, 11);
+    ctx.fillStyle = "#ef4444";
+    ctx.fillRect(3 * TILE + 15, 1 * TILE + 6, 2, 6);
+    ctx.fillRect(3 * TILE + 13, 1 * TILE + 8, 6, 2);
+  } else if (theme === "lab") {
+    // 恆溫水浴槽實驗桌
+    ctx.fillStyle = "rgba(0,0,0,0.35)"; ctx.fillRect(9 * TILE, 2 * TILE + 28, 3 * TILE, 4);
+    ctx.fillStyle = "#475569"; ctx.fillRect(9 * TILE, 2 * TILE + 2, 3 * TILE, 26);
+    ctx.fillStyle = "#64748b"; ctx.fillRect(9 * TILE + 1, 2 * TILE + 3, 3 * TILE - 2, 3);
+    ctx.fillStyle = state.flags.labSolved ? "#0284c7" : "#ea580c";
+    ctx.fillRect(9 * TILE + 8, 2 * TILE + 8, 32, 14);
+    // 滾燙蒸氣或泡泡動畫
+    const puff = Math.floor(state.time * 6) % 4;
+    ctx.fillStyle = state.flags.labSolved ? "#bae6fd" : "#fed7aa";
+    ctx.fillRect(9 * TILE + 14, 2 * TILE + 10 - puff, 3, 2);
+    ctx.fillRect(9 * TILE + 28, 2 * TILE + 12 - ((puff + 2) % 4), 3, 2);
+    // 紅墨水量筒架（16cm 滿管 vs 空缺槽）
+    ctx.fillStyle = "#334155"; ctx.fillRect(14 * TILE, 2 * TILE + 2, 2 * TILE, 26);
+    ctx.fillStyle = "#cbd5e1";
+    ctx.fillRect(14 * TILE + 6, 2 * TILE + 5, 7, 19);
+    ctx.fillRect(15 * TILE + 4, 2 * TILE + 5, 7, 19);
+    ctx.fillStyle = "#f43f5e";
+    ctx.fillRect(14 * TILE + 7, 2 * TILE + 7, 5, 16);
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(15 * TILE + 5, 2 * TILE + 7, 5, 14);
+    // 耐酸膠囊桌與茶水桌
+    ctx.fillStyle = "#6b4423";
+    ctx.fillRect(5 * TILE, 7 * TILE + 2, 3 * TILE, 14);
+    ctx.fillRect(13 * TILE, 7 * TILE + 2, 3 * TILE, 14);
+    ctx.fillStyle = "#facc15"; ctx.fillRect(5 * TILE + 8, 7 * TILE + 6, 4, 3);
+    ctx.fillStyle = "#ef4444"; ctx.fillRect(5 * TILE + 14, 7 * TILE + 7, 4, 3);
+    ctx.fillStyle = "#10b981"; ctx.fillRect(13 * TILE + 8, 7 * TILE + 5, 6, 6);
+    ctx.fillStyle = "#9a3412"; ctx.fillRect(14 * TILE + 8, 7 * TILE + 5, 6, 6);
+  } else if (theme === "greenhouse") {
+    // 石砌睡蓮水池（流動波光＋蓮葉＋粉蓮花）
+    ctx.fillStyle = "#475569"; ctx.fillRect(13 * TILE - 1, 3 * TILE + 1, 4 * TILE + 2, 3 * TILE + 2);
+    ctx.fillStyle = "#0369a1"; ctx.fillRect(13 * TILE + 1, 3 * TILE + 3, 4 * TILE - 2, 3 * TILE - 2);
+    const wave = Math.floor(state.time * 4) % 2;
+    ctx.fillStyle = "#38bdf8";
+    ctx.fillRect(13 * TILE + 6 + wave * 3, 3 * TILE + 8, 6, 1);
+    ctx.fillRect(15 * TILE + 4 - wave * 3, 5 * TILE - 2, 7, 1);
+    ctx.fillStyle = "#22c55e";
+    ctx.fillRect(14 * TILE, 4 * TILE, 11, 8);
+    ctx.fillRect(15 * TILE + 4, 4 * TILE + 12, 10, 8);
+    ctx.fillStyle = "#f472b6"; ctx.fillRect(14 * TILE + 4, 4 * TILE + 2, 4, 3);
+    // 實驗盆栽（鹽水枯黃 vs 救活翠綠＋O2氣泡）
+    ctx.fillStyle = "#9a3412"; ctx.fillRect(8 * TILE + 8, 3 * TILE + 15, 16, 12);
+    ctx.fillStyle = "#c2410c"; ctx.fillRect(8 * TILE + 6, 3 * TILE + 13, 20, 4);
+    ctx.fillStyle = state.flags.greenhouseSolved ? "#22c55e" : "#a16207";
+    ctx.fillRect(8 * TILE + 6, 3 * TILE + 4, 20, 10);
+    if (state.flags.greenhouseSolved) {
+      ctx.fillStyle = "#86efac";
+      ctx.fillRect(8 * TILE + 9, 3 * TILE + 2, 5, 4);
+      ctx.fillRect(8 * TILE + 18, 3 * TILE + 3, 5, 4);
+    }
+    // 清水壺
+    if (!state.flags.hasWaterCan) {
+      ctx.fillStyle = "#0284c7"; ctx.fillRect(15 * TILE - 5, 7 * TILE + 3, 10, 8);
+      ctx.fillStyle = "#7dd3fc"; ctx.fillRect(15 * TILE - 8, 7 * TILE + 4, 4, 3);
+      ctx.fillRect(15 * TILE + 5, 7 * TILE + 4, 2, 5);
+    }
+    // CO2 鋼瓶與斷裂單子葉莖
+    ctx.fillStyle = "#64748b"; ctx.fillRect(3 * TILE + 4, 7 * TILE + 2, 12, 14);
+    ctx.fillStyle = "#94a3b8"; ctx.fillRect(3 * TILE + 7, 7 * TILE, 6, 3);
+    ctx.fillStyle = "#4ade80"; ctx.fillRect(9 * TILE + 4, 7 * TILE + 4, 22, 8);
+  } else if (theme === "forest") {
+    // 流動暴雨溪谷與斷橋
+    ctx.fillStyle = "#0369a1"; ctx.fillRect(1 * TILE, 1 * TILE + 2, 2 * TILE, 9 * TILE);
+    const flowY = Math.floor(state.time * 24) % 16;
+    ctx.fillStyle = "#38bdf8";
+    for (let y = 1 * TILE; y < 10 * TILE; y += 16) {
+      ctx.fillRect(1 * TILE + 6, y + flowY, 2, 6);
+      ctx.fillRect(2 * TILE + 4, y + ((flowY + 8) % 16), 2, 6);
+    }
+    ctx.fillStyle = "#78350f"; ctx.fillRect(2 * TILE - 2, 5 * TILE + 2, 16, 14);
+    ctx.fillStyle = "#92400e"; ctx.fillRect(2 * TILE, 5 * TILE + 4, 12, 3);
+    ctx.fillRect(2 * TILE, 5 * TILE + 10, 12, 3);
+    // 環狀剝皮巨木（露出蒼白形成層）
+    ctx.fillStyle = "#451a03"; ctx.fillRect(8 * TILE + 4, 2 * TILE + 2, 24, 28);
+    ctx.fillStyle = "#fde68a"; ctx.fillRect(8 * TILE + 4, 3 * TILE + 4, 24, 7);
+    ctx.fillStyle = "#d97706"; ctx.fillRect(8 * TILE + 6, 3 * TILE + 6, 20, 3);
+    // 樹洞巨木（發光異常氣味）
+    ctx.fillStyle = "#3b1704"; ctx.fillRect(13 * TILE + 4, 2 * TILE + 2, 24, 28);
+    ctx.fillStyle = "#000"; ctx.fillRect(13 * TILE + 12, 3 * TILE + 2, 8, 10);
+    if (!state.flags.snakeJarFound && Math.sin(state.time * 6) > 0) {
+      ctx.fillStyle = "#a3e635"; ctx.fillRect(13 * TILE + 15, 3 * TILE + 6, 2, 2);
+    }
+    // 年輪斷面
+    ctx.fillStyle = "#92400e"; ctx.fillRect(8 * TILE, 8 * TILE + 2, 16, 12);
+    ctx.fillStyle = "#fbbf24"; ctx.fillRect(8 * TILE + 2, 8 * TILE + 3, 12, 9);
+    ctx.fillStyle = "#b45309"; ctx.fillRect(8 * TILE + 5, 8 * TILE + 5, 6, 5);
+  }
+}
+
+let doorCooldown = 0;
+let stepSfxTimer = 0;
+let blipStep = 0;
+
+function update(dt) {
+  state.time += dt;
+  if (state.fadeAlpha > 0) state.fadeAlpha = Math.max(0, state.fadeAlpha - dt * 3.2);
+  if (state.lightningAlpha > 0) state.lightningAlpha = Math.max(0, state.lightningAlpha - dt * 2.5);
+  if (doorCooldown > 0) doorCooldown -= dt;
+
+  // 打字機更新（高速 + 復古文字音效）
+  if (state.dialogue.active && state.dialogue.typing) {
+    const prevN = Math.floor(state.dialogue.charIdx);
+    state.dialogue.charIdx += dt * 115;
+    const n = Math.floor(state.dialogue.charIdx);
+    if (n > prevN) {
+      blipStep++;
+      if (blipStep % 3 === 1) SFX.play("blip");
+    }
+    if (n >= state.dialogue.full.length) {
+      state.dialogue.typing = false;
+      state.dialogue.shown = state.dialogue.full;
+      document.getElementById("dlg-next").textContent = "▼ 繼續";
+    } else {
+      state.dialogue.shown = state.dialogue.full.slice(0, n);
+    }
+    document.getElementById("dlg-text").textContent = state.dialogue.shown;
+  }
+
+  // 對話或彈窗開啟時暫停移動
+  const modalOpen = document.getElementById("modal-overlay").classList.contains("visible");
+  if (state.dialogue.active || modalOpen) return;
+
+  let dx = 0, dy = 0;
+  if (state.keys["ArrowUp"] || state.keys["KeyW"] || state.touchDir === "up") dy -= 1;
+  if (state.keys["ArrowDown"] || state.keys["KeyS"] || state.touchDir === "down") dy += 1;
+  if (state.keys["ArrowLeft"] || state.keys["KeyA"] || state.touchDir === "left") dx -= 1;
+  if (state.keys["ArrowRight"] || state.keys["KeyD"] || state.touchDir === "right") dx += 1;
+
+  state.player.moving = (dx !== 0 || dy !== 0);
+  if (state.player.moving) {
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      state.player.dir = dx > 0 ? "right" : "left";
+    } else {
+      state.player.dir = dy > 0 ? "down" : "up";
+    }
+
+    const len = Math.hypot(dx, dy);
+    const speed = 5.4 * dt;
+    const nx = state.player.x + (dx / len) * speed;
+    const ny = state.player.y + (dy / len) * speed;
+
+    if (isWalkable(nx, state.player.y)) state.player.x = nx;
+    if (isWalkable(state.player.x, ny)) state.player.y = ny;
+
+    state.player.walkTick += dt * 10;
+    stepSfxTimer -= dt;
+    if (stepSfxTimer <= 0) {
+      SFX.play("step");
+      stepSfxTimer = 0.28;
+    }
+
+    // 巴迪跟隨軌跡與面向方向更新
+    state.buddy.trail.push({ x: state.player.x, y: state.player.y });
+    if (state.buddy.trail.length > 14) {
+      const target = state.buddy.trail.shift();
+      const bdx = target.x - state.buddy.x;
+      const bdy = target.y - state.buddy.y;
+      if (Math.hypot(bdx, bdy) > 0.02) {
+        if (Math.abs(bdx) >= Math.abs(bdy)) {
+          state.buddy.dir = bdx > 0 ? "right" : "left";
+        } else {
+          state.buddy.dir = bdy > 0 ? "down" : "up";
+        }
+      }
+      state.buddy.x += bdx * 0.35;
+      state.buddy.y += bdy * 0.35;
+    }
+
+    // 檢查是否踩到門洞
+    if (doorCooldown <= 0) {
+      const pCol = Math.floor(state.player.x);
+      const pRow = Math.floor(state.player.y);
+      for (const d of ROOMS[state.room].doors) {
+        if (d.col === pCol && d.row === pRow) {
+          if (d.reqFlag && !state.flags[d.reqFlag]) {
+            doorCooldown = 0.8;
+            startDialogue([{ speaker: "edward", text: "「通往後山林場的側門卡住了！先去上方【玻璃溫室】處理濃食鹽水危機找找線索！」" }]);
+          } else {
+            doorCooldown = 0.5;
+            teleportRoom(d.to, d.spawnX, d.spawnY);
+          }
+          break;
+        }
+      }
+    }
+  }
+}
+
+function render() {
+  ctx.clearRect(0, 0, 320, 180);
+  const room = ROOMS[state.room];
+  drawRoomTiles(room.theme);
+
+  // 依 Y 座標排序繪製角色與落地陰影
+  const stepFrame = state.player.moving ? (Math.floor(state.player.walkTick) % 2) : 0;
+  const entities = [
+    ...room.npcs.map((n) => ({ id: n.id, x: n.x * TILE, y: n.y * TILE + 2, bob: 0, dir: "down", step: 0 })),
+    { id: "buddy", x: state.buddy.x * TILE, y: state.buddy.y * TILE + 2, bob: state.player.moving ? Math.sin(state.time * 14) * 1.2 : 0, dir: state.buddy.dir, step: 0 },
+    { id: "edward", x: state.player.x * TILE, y: state.player.y * TILE + 2, bob: state.player.moving ? Math.abs(Math.sin(state.player.walkTick)) * -2 : 0, dir: state.player.dir, step: stepFrame }
+  ];
+  entities.sort((a, b) => a.y - b.y);
+  for (const e of entities) {
+    ctx.fillStyle = "rgba(0, 0, 0, 0.38)";
+    ctx.fillRect(Math.round(e.x - 5), Math.round(e.y - 2), 10, 3);
+    drawCharSprite(ctx, e.id, e.x, e.y, 1, e.bob, e.dir, e.step);
+  }
+
+  // 繪製重要物件上的浮動標記與各門洞路標牌
+  const nearest = findNearestInteractable();
+  for (const obj of [...room.npcs, ...room.props]) {
+    if (obj.tag || obj === nearest) {
+      const pulse = Math.sin(state.time * 5) * 1.5;
+      const sx = Math.round(obj.x * TILE);
+      const sy = Math.round(obj.y * TILE - 18 + pulse);
+      ctx.fillStyle = obj === nearest ? "#fde047" : "rgba(253, 224, 71, 0.78)";
+      ctx.font = "bold 9px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(obj === nearest ? "[A]" : obj.tag, sx, sy);
+    }
+  }
+  drawDoorSignposts();
+
+  // 後山雨滴與閃電特效
+  if (state.room === "forest") {
+    ctx.fillStyle = "rgba(148, 163, 184, 0.45)";
+    for (const r of state.rain) {
+      r.x -= r.speed * 0.2 * 0.016;
+      r.y += r.speed * 0.016;
+      if (r.y > 180) { r.y = 0; r.x = Math.random() * 340; }
+      ctx.fillRect(Math.round(r.x), Math.round(r.y), 1, 4);
+    }
+  }
+
+  if (state.lightningAlpha > 0) {
+    ctx.fillStyle = `rgba(255,255,255,${state.lightningAlpha})`;
+    ctx.fillRect(0, 0, 320, 180);
+  }
+  if (state.fadeAlpha > 0) {
+    ctx.fillStyle = `rgba(0,0,0,${state.fadeAlpha})`;
+    ctx.fillRect(0, 0, 320, 180);
+  }
+}
+
+let lastT = 0;
+function loop(ts) {
+  if (!lastT) lastT = ts;
+  const dt = Math.min(0.05, (ts - lastT) / 1000);
+  lastT = ts;
+  update(dt);
+  render();
+  requestAnimationFrame(loop);
+}
+
+/* ============================================================================
+   11. 事件綁定與開局導引
+   ============================================================================ */
+window.addEventListener("keydown", (e) => {
+  state.keys[e.code] = true;
+  if (e.code === "Space" || e.code === "Enter" || e.code === "KeyZ") {
+    e.preventDefault();
+    triggerInteract();
+  } else if (e.code === "KeyI") openInventoryModal();
+  else if (e.code === "KeyM") openMapModal();
+});
+
+window.addEventListener("keyup", (e) => {
+  state.keys[e.code] = false;
+});
+
+document.getElementById("rpg-dialogue").addEventListener("click", advanceDialogue);
+document.getElementById("btn-inv").addEventListener("click", openInventoryModal);
+document.getElementById("btn-map").addEventListener("click", openMapModal);
+document.getElementById("btn-pad").addEventListener("click", (e) => {
+  const show = document.getElementById("touch-controls").classList.toggle("show");
+  e.currentTarget.classList.toggle("active", show);
+});
+document.getElementById("btn-bgm").addEventListener("click", (e) => {
+  const on = BGM.toggle();
+  e.currentTarget.classList.toggle("active", on);
+  e.currentTarget.textContent = on ? "🎵 配樂" : "🔇 靜音";
+});
+document.getElementById("btn-sfx").addEventListener("click", (e) => {
+  SFX.enabled = !SFX.enabled;
+  e.currentTarget.classList.toggle("active", SFX.enabled);
+  e.currentTarget.textContent = SFX.enabled ? "🔊 音效" : "🔇 靜音";
+  if (SFX.enabled) SFX.play("select");
+});
+
+// 首次點擊或按鍵自動解鎖 iPad / 瀏覽器背景音樂
+["pointerdown", "touchstart", "keydown"].forEach((ev) => {
+  window.addEventListener(ev, () => BGM.unlock(), { once: true, passive: true });
+});
+
+// 自動偵測 iPad / 手機觸控裝置（含 iPadOS 桌面版 Safari）
+const isTouchDevice = navigator.maxTouchPoints > 0 || "ontouchstart" in window;
+if (isTouchDevice) {
+  document.getElementById("touch-controls").classList.add("show");
+  document.getElementById("btn-pad").classList.add("active");
+}
+
+// 防止 iPad / iOS Safari 雙點放大或手勢縮放
+let lastTouchEndTs = 0;
+document.addEventListener("touchend", (e) => {
+  if (e.target && e.target.type === "range") return;
+  const now = Date.now();
+  if (now - lastTouchEndTs <= 300) {
+    e.preventDefault();
+  }
+  lastTouchEndTs = now;
+}, { passive: false });
+
+document.addEventListener("gesturestart", (e) => {
+  e.preventDefault();
+}, { passive: false });
+
+document.querySelectorAll(".dpad-btn").forEach((btn) => {
+  const dir = btn.dataset.dir;
+  const start = (e) => {
+    e.preventDefault();
+    state.touchDir = dir;
+    btn.classList.add("pressed");
+  };
+  const end = () => {
+    btn.classList.remove("pressed");
+    if (state.touchDir === dir) state.touchDir = null;
+  };
+  btn.addEventListener("pointerdown", start);
+  btn.addEventListener("pointerup", end);
+  btn.addEventListener("pointercancel", end);
+  btn.addEventListener("pointerleave", end);
+});
+
+document.getElementById("btn-a").addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  triggerInteract();
+});
+document.getElementById("btn-b").addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  openInventoryModal();
+});
+
+// 初始化啟動
+updateHud();
+requestAnimationFrame(loop);
+startDialogue([
+  { speaker: "edward", text: "「午夜暴雨把霧月山莊變成了孤島密室！陳博士倒臥昏迷，但這不是考場——我們要親自走遍山莊、動手操作實驗器材與救人！」" },
+  { speaker: "kiki", text: "「用 WASD 或方向鍵移動，靠近物件按 Space / Enter（或點 A 鍵）調查！先去右側【生化實驗室】看看那台異常的 90°C 水浴槽吧！」" }
+]);
+</script>
+</body>
+</html>
