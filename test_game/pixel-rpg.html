@@ -273,7 +273,7 @@
       to { opacity: 1; }
     }
 
-    /* 觸控 / iPad / 滑鼠虛擬十字鍵與 A/B 按鈕 */
+    /* 觸控 / iPad / 滑鼠虛擬類比搖桿與 A/B 按鈕 */
     #touch-controls {
       position: fixed;
       inset: 0;
@@ -290,21 +290,40 @@
       display: none !important;
     }
 
-    .dpad {
+    .joystick {
       position: fixed;
       left: max(18px, env(safe-area-inset-left));
       bottom: max(18px, env(safe-area-inset-bottom));
       width: 148px;
       height: 148px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(19, 24, 40, 0.68) 0%, rgba(19, 24, 40, 0.88) 100%);
+      border: 2.5px solid rgba(229, 193, 88, 0.85);
+      box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.45);
       pointer-events: auto;
       touch-action: none;
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      grid-template-rows: repeat(3, 1fr);
-      gap: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
     }
 
-    .dpad-btn, .ab-btn {
+    .joystick-knob {
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 32%, #d1d5db 0%, #9ca3af 50%, #6b7280 100%);
+      border: 2.5px solid rgba(229, 231, 235, 0.75);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.55), inset 0 2px 4px rgba(255, 255, 255, 0.35);
+      pointer-events: none;
+      transition: transform 0.12s ease-out;
+    }
+
+    .joystick.active .joystick-knob {
+      transition: none;
+    }
+
+    .ab-btn {
       background: rgba(19, 24, 40, 0.82);
       border: 2.5px solid rgba(229, 193, 88, 0.85);
       color: #fde047;
@@ -315,10 +334,10 @@
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      border-radius: 10px;
+      border-radius: 50%;
     }
 
-    .dpad-btn:active, .dpad-btn.pressed, .ab-btn:active {
+    .ab-btn:active {
       background: rgba(124, 45, 18, 0.95);
       transform: scale(0.95);
     }
@@ -630,7 +649,8 @@
       .battle-skills { grid-template-columns: 1fr; }
       .dlg-portrait-wrap { width: 58px; }
       #dlg-portrait { width: 52px; height: 52px; }
-      .dpad { width: 132px; height: 132px; }
+      .joystick { width: 132px; height: 132px; }
+      .joystick-knob { width: 60px; height: 60px; }
       .ab-btn { width: 58px; height: 58px; }
     }
   </style>
@@ -654,6 +674,7 @@
 
   <!-- 右上角工具列 -->
   <div id="hud-right">
+    <button class="px-btn" id="btn-sniff">🐶 巴迪嗅探</button>
     <button class="px-btn" id="btn-inv">🎒 證物道具</button>
     <button class="px-btn" id="btn-map">🗺️ 地圖</button>
     <button class="px-btn" id="btn-pad">🎮 虛擬手把</button>
@@ -664,18 +685,10 @@
   <div id="toast-wrap"></div>
   <div id="hint-bar">移動: WASD / 方向鍵 ｜ 調查互動: Space / Enter / Z ｜ 巴迪會自動嗅探異常點</div>
 
-  <!-- 虛擬十字鍵與 AB 鍵（支援 iPad / 手機觸控） -->
+  <!-- 虛擬類比搖桿與 AB 鍵（支援 iPad / 手機觸控） -->
   <div id="touch-controls">
-    <div class="dpad">
-      <div></div>
-      <button class="dpad-btn" data-dir="up" aria-label="上">▲</button>
-      <div></div>
-      <button class="dpad-btn" data-dir="left" aria-label="左">◀</button>
-      <div></div>
-      <button class="dpad-btn" data-dir="right" aria-label="右">▶</button>
-      <div></div>
-      <button class="dpad-btn" data-dir="down" aria-label="下">▼</button>
-      <div></div>
+    <div class="joystick" id="joystick" aria-label="方向搖桿">
+      <div class="joystick-knob" id="joystick-knob"></div>
     </div>
     <div class="ab-group">
       <button class="ab-btn" id="btn-b" aria-label="證物道具">🎒</button>
@@ -950,6 +963,57 @@ const SPRITE_HUMAN = [
   "..BBB..BBB.."
 ];
 
+const SPRITE_HUMAN_DOWN_WALK = [
+  "....HHHH....",
+  "...HHHHHH...",
+  "...HSSSSSH..",
+  "...HSBSHBH..",
+  "...HSSSSSH..",
+  "....SSSS....",
+  "..CCCCCCCC..",
+  ".CCCLGGLCCC.",
+  ".CCCLGGLCCC.",
+  ".SSCCCCCCSS.",
+  "...CCCCCC...",
+  "..BB....BB..",
+  "..BBB..BB...",
+  "............"
+];
+
+const SPRITE_HUMAN_RIGHT = [
+  "....HHHH....",
+  "...HHHHHH...",
+  "...HHHHSSH..",
+  "...HHHSSBS..",
+  "...HHHSSSS..",
+  "....SSSS....",
+  "...CCCCCCC..",
+  "...CCCCGLC..",
+  "...CCCSSCC..",
+  "...CCCCCCC..",
+  "...CCCCCC...",
+  "...BB..BB...",
+  "...BB..BB...",
+  "...BBB.BBB.."
+];
+
+const SPRITE_HUMAN_RIGHT_WALK = [
+  "....HHHH....",
+  "...HHHHHH...",
+  "...HHHHSSH..",
+  "...HHHSSBS..",
+  "...HHHSSSS..",
+  "....SSSS....",
+  "...CCCCCCC..",
+  "...CCCCGLC..",
+  "...CCCSSCC..",
+  "...CCCCCCC..",
+  "...CCCCCC...",
+  "..BB....BB..",
+  "..BBB..BB...",
+  "............"
+];
+
 const SPRITE_GLASSES_HUMAN = [
   "....HHHH....",
   "...HHHHHH...",
@@ -1148,6 +1212,17 @@ function drawCharSprite(ctx, charId, px, py, scale = 1, bob = 0, dir = "down", s
       grid = stepFrame ? SPRITE_GLASSES_DOWN_WALK : SPRITE_GLASSES_HUMAN;
       gridKey += stepFrame ? "_dw" : "_d";
     }
+  } else if (charId === "kiki") {
+    if (dir === "up") {
+      grid = stepFrame ? SPRITE_HUMAN_UP_WALK : SPRITE_HUMAN_UP;
+      gridKey += stepFrame ? "_uw" : "_u";
+    } else if (dir === "left" || dir === "right") {
+      grid = stepFrame ? SPRITE_HUMAN_RIGHT_WALK : SPRITE_HUMAN_RIGHT;
+      gridKey += stepFrame ? "_rw" : "_r";
+    } else {
+      grid = stepFrame ? SPRITE_HUMAN_DOWN_WALK : SPRITE_HUMAN;
+      gridKey += stepFrame ? "_dw" : "_d";
+    }
   } else {
     grid = charId === "drChen" ? SPRITE_GLASSES_HUMAN : SPRITE_HUMAN;
   }
@@ -1178,21 +1253,37 @@ const ROOMS = {
     name: "霧月山莊主廳",
     theme: "hall",
     doors: [
+      { col: 5, row: 0, to: "bedroom", spawnX: 9.5, spawnY: 8.6, label: "往博士臥室" },
+      { col: 6, row: 0, to: "bedroom", spawnX: 9.5, spawnY: 8.6, label: "往博士臥室" },
       { col: 9, row: 0, to: "greenhouse", spawnX: 9.5, spawnY: 8.6, label: "往玻璃溫室" },
       { col: 10, row: 0, to: "greenhouse", spawnX: 9.5, spawnY: 8.6, label: "往玻璃溫室" },
+      { col: 14, row: 0, to: "study", spawnX: 9.5, spawnY: 8.6, label: "往二樓書房", reqFlag: "studyUnlocked" },
       { col: 19, row: 5, to: "lab", spawnX: 1.6, spawnY: 5.0, label: "往生化實驗室" },
       { col: 0, row: 5, to: "forest", spawnX: 17.6, spawnY: 5.0, label: "往後山林場", reqFlag: "forestUnlocked" }
     ],
     solids: [
-      { x: 8, y: 2, w: 4, h: 2 },   // 急救床與心電儀
-      { x: 3, y: 1, w: 2, h: 1 },   // 急救藥櫃
       { x: 14, y: 7, w: 1, h: 1 }   // 綠川站位
     ],
     npcs: [
-      { id: "drChen", name: "陳博士（病床）", x: 10.0, y: 3.3, interact: "interactDrChen", tag: "!" },
-      { id: "kiki", name: "小琪", x: 8.0, y: 3.4, interact: "interactKiki" },
       { id: "butler", name: "老管家", x: 12.2, y: 3.4, interact: "interactButler" },
       { id: "midori", name: "綠川富商", x: 14.5, y: 7.4, interact: "interactMidori", tag: "?" }
+    ],
+    props: []
+  },
+  bedroom: {
+    name: "陳博士臥室",
+    theme: "bedroom",
+    doors: [
+      { col: 9, row: 10, to: "hall", spawnX: 5.5, spawnY: 1.5, label: "回主廳" },
+      { col: 10, row: 10, to: "hall", spawnX: 5.5, spawnY: 1.5, label: "回主廳" }
+    ],
+    solids: [
+      { x: 8, y: 2, w: 4, h: 2 },   // 急救床與心電儀
+      { x: 3, y: 1, w: 2, h: 1 }    // 急救藥櫃
+    ],
+    npcs: [
+      { id: "drChen", name: "陳博士（病床）", x: 10.0, y: 3.3, interact: "interactDrChen", tag: "!" },
+      { id: "kiki", name: "小琪（照護中）", x: 8.2, y: 4.3, interact: "interactKiki", onlyBeforeVenomCured: true }
     ],
     props: [
       { id: "med_cabinet", name: "急救藥櫃", x: 4.0, y: 2.0, type: "cabinet", interact: "interactCabinet" }
@@ -1202,11 +1293,13 @@ const ROOMS = {
     name: "生化實驗室",
     theme: "lab",
     doors: [
-      { col: 0, row: 5, to: "hall", spawnX: 17.6, spawnY: 5.0, label: "回主廳" }
+      { col: 0, row: 5, to: "hall", spawnX: 17.6, spawnY: 5.0, label: "回主廳" },
+      { col: 19, row: 5, to: "cellar", spawnX: 1.6, spawnY: 5.0, label: "往地下冷藏庫" }
     ],
     solids: [
       { x: 9, y: 2, w: 3, h: 2 },   // 恆溫水浴槽桌
       { x: 14, y: 2, w: 2, h: 2 },  // 紅墨水量筒架
+      { x: 3, y: 7, w: 1, h: 1 },   // 染血紗布垃圾桶
       { x: 5, y: 7, w: 3, h: 1 },   // 耐酸膠囊桌
       { x: 13, y: 7, w: 3, h: 1 }   // 茶水桌
     ],
@@ -1216,6 +1309,7 @@ const ROOMS = {
     props: [
       { id: "water_bath", name: "90°C 恆溫水浴槽", x: 10.5, y: 3.5, type: "bath", interact: "interactWaterBath", tag: "!" },
       { id: "ink_rack", name: "紅墨水量筒架", x: 15.0, y: 3.5, type: "beaker", interact: "interactInkRack", tag: "🔍" },
+      { id: "shira_trash", name: "染血紗布垃圾桶", x: 3.5, y: 7.5, type: "trash", interact: "interactShiraTrash", tag: "🔍" },
       { id: "capsule_desk", name: "耐酸膠囊與消化筆記", x: 6.5, y: 7.5, type: "desk", interact: "interactCapsuleDesk" },
       { id: "tea_desk", name: "紅茶與綠茶殘渣", x: 14.5, y: 7.5, type: "tea", interact: "interactTeaDesk" }
     ]
@@ -1234,7 +1328,7 @@ const ROOMS = {
       { x: 9, y: 7, w: 2, h: 1 }    // 斷裂單子葉莖
     ],
     npcs: [
-      { id: "akai", name: "赤井學者", x: 4.5, y: 3.5, interact: "interactAkai" }
+      { id: "akai", name: "赤井學者", x: 7.5, y: 6.5, interact: "interactAkai", tag: "!" }
     ],
     props: [
       { id: "wilted_pot", name: "枯萎的實驗盆栽", x: 9.0, y: 4.5, type: "pot", interact: "interactWiltedPot", tag: "!" },
@@ -1262,6 +1356,43 @@ const ROOMS = {
       { id: "tree_hollow", name: "巨木樹洞（異常氣味）", x: 14.0, y: 4.0, type: "hollow", interact: "interactTreeHollow", tag: "!" },
       { id: "seedling_log", name: "幼苗根毛與年輪斷面", x: 8.5, y: 8.2, type: "log", interact: "interactSeedlingLog" }
     ]
+  },
+  study: {
+    name: "二樓陳博士書房",
+    theme: "study",
+    doors: [
+      { col: 9, row: 10, to: "hall", spawnX: 14.0, spawnY: 1.5, label: "回主廳" },
+      { col: 10, row: 10, to: "hall", spawnX: 14.0, spawnY: 1.5, label: "回主廳" }
+    ],
+    solids: [
+      { x: 8, y: 2, w: 4, h: 2 },   // 博士書桌
+      { x: 3, y: 3, w: 2, h: 2 },   // 實驗紀錄櫃
+      { x: 14, y: 3, w: 2, h: 2 }   // 專利保險箱
+    ],
+    npcs: [],
+    props: [
+      { id: "study_log", name: "蒸散調控實驗手稿", x: 10.0, y: 4.0, type: "desk", interact: "interactStudyLog", tag: "!" },
+      { id: "enzyme_log", name: "甲乙丙試管酵素紀錄", x: 4.0, y: 5.0, type: "cabinet", interact: "interactEnzymeLog", tag: "🔍" },
+      { id: "patent_safe", name: "專利拒絕簽署函", x: 15.0, y: 5.0, type: "safe", interact: "interactPatentSafe", tag: "🔍" }
+    ]
+  },
+  cellar: {
+    name: "地下生態冷藏庫",
+    theme: "cellar",
+    doors: [
+      { col: 0, row: 5, to: "lab", spawnX: 17.6, spawnY: 5.0, label: "回生化實驗室" }
+    ],
+    solids: [
+      { x: 9, y: 2, w: 3, h: 2 },   // 4°C 低溫冷藏櫃
+      { x: 4, y: 7, w: 3, h: 1 },   // 心肺循環模型桌
+      { x: 13, y: 7, w: 3, h: 1 }   // 消化腺與養分板
+    ],
+    npcs: [],
+    props: [
+      { id: "cold_locker", name: "4°C 低溫冷藏櫃", x: 10.5, y: 4.0, type: "locker", interact: "interactColdLocker", tag: "!" },
+      { id: "circ_model", name: "心臟與血液循環模型", x: 5.5, y: 7.5, type: "model", interact: "interactCircModel", tag: "🔍" },
+      { id: "diet_board", name: "全能消化腺與養分板", x: 14.5, y: 7.5, type: "board", interact: "interactDietBoard", tag: "🔍" }
+    ]
   }
 };
 
@@ -1271,7 +1402,8 @@ const ROOMS = {
 const state = {
   room: "hall",
   player: { x: 9.5, y: 6.8, dir: "down", walkTick: 0, moving: false },
-  buddy:  { x: 8.5, y: 7.2, dir: "down", trail: [] },
+  kiki:   { x: 8.7, y: 7.1, dir: "down", trail: [] },
+  buddy:  { x: 8.0, y: 7.4, dir: "down", trail: [] },
   lv: 1,
   exp: 0,
   nextExp: 100,
@@ -1284,7 +1416,16 @@ const state = {
     snakeJarFound: false,     // 發現響尾蛇罐與8cm枝條
     venomCured: false,        // 打贏 Boss 1 蛇毒戰
     caseSolved: false,        // 打贏 Boss 2 綠川富商
-    inkMeasured: false
+    inkMeasured: false,
+    shiraMet: false,
+    shiraCleared: false,      // 白石助理傷口支線
+    akaiMet: false,           // 先在溫室遇到赤井學者
+    studyUnlocked: false,     // 解鎖二樓書房 (密碼 374)
+    studySolved: false,       // 書房蒸散數據解謎
+    cellarSolved: false,      // 地下冷藏庫低溫酵素解謎
+    bottleFound: false,       // 巴迪嗅出桌底棕色酵素瓶
+    quizDone: false,          // 破關後博士隨堂考
+    trueEnding: false         // 隱藏真結局全破
   },
   inventory: [
     { id: "gallbladder_note", key: true, name: "📋 博士病歷：五年前切除膽囊", desc: "無膽囊濃縮儲存膽汁，一次攝入高脂奶油濃湯會乳化不全而腹瀉。" }
@@ -1308,7 +1449,7 @@ const state = {
   fadeAlpha: 0,
   time: 0,
   keys: {},
-  touchDir: null,
+  touchVec: { x: 0, y: 0 },
   wrongCount: 0
 };
 
@@ -1349,7 +1490,7 @@ function getQuestText() {
   if (!state.flags.labSolved) return "任務 1：前往右側【生化實驗室】，調校恆溫水浴槽還原蛋白酶線索！";
   if (!state.flags.greenhouseSolved) return "任務 2：前往上方【玻璃溫室】，想辦法拯救遭濃食鹽水潑灑的盆栽！";
   if (!state.flags.snakeJarFound) return "任務 3：從左側開啟的門進入【後山林場】，讓巴迪嗅探樹洞異常氣味！";
-  if (!state.flags.venomCured) return "緊急任務：博士中的是響尾蛇毒！立刻回主廳與【陳博士病床】互動搶救！";
+  if (!state.flags.venomCured) return "緊急任務：博士中的是響尾蛇毒！立刻前往【博士臥室】與陳博士病床互動搶救！";
   if (!state.flags.caseSolved) return "最終任務：證據齊全！在主廳向【綠川富商】發動真相對決！";
   return "全案破獲！可自由探索霧月山莊回顧各處生物線索。";
 }
@@ -1367,7 +1508,7 @@ function updateHud() {
 function syncUiBusyState() {
   const busy = state.dialogue.active || document.getElementById("modal-overlay").classList.contains("visible");
   document.body.classList.toggle("ui-busy", busy);
-  if (busy) state.touchDir = null;
+  if (busy && typeof resetJoystick === "function") resetJoystick();
 }
 
 function startDialogue(lines, onDone = null) {
@@ -1427,7 +1568,12 @@ function advanceDialogue() {
    ============================================================================ */
 const INTERACTIONS = {
   interactDrChen() {
-    if (!state.flags.snakeJarFound) {
+    if (state.flags.caseSolved) {
+      startDialogue([
+        { speaker: "drChen", text: "「暴風雨終於停了！多虧艾德華、小琪和巴迪，山莊的秘密也全部水落石出。」" },
+        { speaker: "drChen", text: "「對了，既然你們對生物科學這麼在行，要不要挑戰看看我的【115A2 生物隨堂考】？」" }
+      ], openChenQuizModal);
+    } else if (!state.flags.snakeJarFound) {
       startDialogue([
         { speaker: "drChen", text: "（陳博士昏迷不醒，脈搏十分微弱，手肘處隱約有針孔瘀青。）" },
         { speaker: "kiki", text: "「幸好心臟肌肉仍在規律收縮舒張產生壓力，推動血液單向流動。快去實驗室與溫室找線索！」" }
@@ -1443,14 +1589,13 @@ const INTERACTIONS = {
     }
   },
 
-  interactKiki() {
-    startDialogue([
-      { speaker: "kiki", text: "「胃液快篩沒有口服毒素！要是經口攝取，瘦肉蛋白質、米飯澱粉與油脂會先被胰液等分解成胺基酸、葡萄糖與脂肪酸，再由小腸絨毛表面積吸收。」" },
-      { speaker: "kiki", text: "「所以毒素肯定是從靜脈直接注入血管的！」" }
-    ]);
-  },
-
   interactButler() {
+    if (state.flags.caseSolved) {
+      startDialogue([
+        { speaker: "butler", text: "「天亮了，對外聯繫也恢復了！大家先喝杯熱茶休息吧，幸好昨晚沒有讓任何人受到傳染或二度傷害。」" }
+      ]);
+      return;
+    }
     startDialogue([
       { speaker: "butler", text: "「外面橋斷了！我已發給大家口罩與酒精消毒——完好無破損的皮膚角質層與呼吸道黏膜，是人體抵禦病原體的第一道防線。」" }
     ]);
@@ -1459,38 +1604,81 @@ const INTERACTIONS = {
   interactCabinet() {
     addItem({ id: "antivenom_kit", key: true, name: "🧪 抗蛇毒血清與靜脈輸液包", desc: "含有現成專一性蛇毒抗體的血清（立即中和毒素），以及可溶於血漿的升壓強心劑。" });
     startDialogue([
-      { speaker: "edward", text: "「主廳藥櫃裡有備用的【抗蛇毒血清與靜脈輸液包】，還有另一支標著『蛇毒疫苗』的試劑，先收進裝備袋！」" }
+      { speaker: "edward", text: "「臥室藥櫃裡有備用的【抗蛇毒血清與靜脈輸液包】，還有另一支標著『蛇毒疫苗』的試劑，先收進裝備袋！」" }
+    ]);
+  },
+
+  interactKiki() {
+    startDialogue([
+      { speaker: "kiki", text: "「陳博士目前脈搏微弱，我得先留在臥室監看心電儀並持續急救！艾德華你先帶巴迪去各處搜證！」" },
+      { speaker: "kiki", text: "「對了，胃液快篩沒有口服毒素！要是經口攝取，蛋白質、澱粉與油脂會被分解後由小腸絨毛吸收——所以毒素肯定是從靜脈直接注入的！」" }
     ]);
   },
 
   interactMidori() {
-    if (!state.flags.venomCured) {
+    if (state.flags.caseSolved) {
+      startDialogue([
+        { speaker: "midori", text: "「怎麼可能……連植物吸水的高度都能算出我幾點進實驗室……我認栽了……」" }
+      ]);
+    } else if (!state.flags.venomCured) {
       startDialogue([
         { speaker: "midori", text: "「哼，我整晚都在客房靜養，剛才聽到警報才出來的。你們別浪費時間在我身上！」" },
         { speaker: "buddy", text: "「汪！汪！」（巴迪對著綠川的衣角狂吠——上面沾著新鮮綠葉碎屑！）" }
       ]);
-    } else if (!state.flags.caseSolved) {
-      startDialogue([
-        { speaker: "midori", text: "「什麼？陳博士竟然醒過來了？！不、不管怎樣，你沒有證據證明是我動的手！」" },
-        { speaker: "edward", text: "「綠川富商，你的每一個藉口都違反了最基本的生物科學！準備好迎接真相對決吧！」" }
-      ], openBossBattle);
     } else {
       startDialogue([
-        { speaker: "midori", text: "「怎麼可能……連植物吸水的高度都能算出我幾點進實驗室……」" }
-      ]);
+        { speaker: "edward", text: "「陳博士已經穩定下來了。小琪，現在我們來正式指認昨晚毒害陳博士的真兇！」" }
+      ], openAccusationModal);
     }
   },
 
   interactShira() {
+    state.flags.shiraMet = true;
+    if (state.flags.caseSolved) {
+      startDialogue([
+        { speaker: "shira", text: "「經過這次事件，我以後一定會更小心操作玻璃器皿與酵素水浴槽……真是驚險的一夜！」" }
+      ]);
+      return;
+    }
+    if (state.flags.shiraCleared) {
+      startDialogue([
+        { speaker: "shira", text: "「謝謝你們幫我洗清嫌疑！這份【複式顯微鏡氣孔觀察紀錄】就交給你們參考吧，希望能幫上忙！」" }
+      ]);
+      return;
+    }
     startDialogue([
-      { speaker: "shira", text: "「嘶……我右手只是剛剛不小心劃傷，因為局部微血管擴張、血流量與組織液增加才紅腫發炎的！」" },
+      { speaker: "shira", text: "「嘶……我右手只是剛剛不小心被碎玻璃劃傷，因為局部微血管擴張、血流量與組織液增加才紅腫發炎的！」" },
       { speaker: "shira", text: "「那邊的恆溫水浴槽被人刻意調到 90°C！試管裡的去漬蛋白酶都快報銷了，你能幫我把水浴槽調回最適條件嗎？」" }
+    ]);
+  },
+
+  interactShiraTrash() {
+    const partner = state.flags.venomCured ? "kiki" : "edward";
+    if (state.flags.shiraCleared) {
+      startDialogue([{ speaker: partner, text: "「垃圾桶裡的染血紗布只是玻璃劃傷，白血球吞噬與局部微血管擴張發炎反應已經幫我們洗清白石助理的嫌疑了。」" }]);
+      return;
+    }
+    state.flags.shiraCleared = true;
+    addItem({ id: "microscope_note", key: true, name: "🔬 複式顯微鏡氣孔觀察紀錄", desc: "巨木葉片氣孔「只分布在下表皮，上表皮無氣孔」，且莖的表面也有氣孔。白石助理傷口僅為玻璃劃傷之第二道防線發炎反應。" });
+    gainExp(35);
+    updateHud();
+    startDialogue([
+      { speaker: partner, text: "「垃圾桶裡有染血紗布與碎玻璃片——白石助理手上是單純割傷，不是蛇咬針孔！」" },
+      { speaker: "edward", text: "「局部微血管擴張、血流與組織液增加導致紅腫發炎，搭配白血球吞噬作用正是人體『第二道防線』。白石的嫌疑解除了！」" },
+      { speaker: "shira", text: "「太感謝了！這份我剛整理的【複式顯微鏡氣孔觀察紀錄】交給你們！」" }
     ]);
   },
 
   interactWaterBath() {
     if (state.flags.labSolved) {
       startDialogue([{ speaker: "edward", text: "「水浴槽已經維持在 37°C 中性最適環境，成功用去漬蛋白酶洗淨血漬、抽出綠川纖維證物了。」" }]);
+      return;
+    }
+    if (!state.flags.shiraMet) {
+      state.flags.shiraMet = true;
+      startDialogue([
+        { speaker: "shira", text: "「等一下，偵探！那台恆溫水浴槽被人刻意調成 90°C 了，裡面的去漬蛋白酶都快失活了，拜託幫我調回最適條件！」" }
+      ], openWaterBathPuzzle);
       return;
     }
     openWaterBathPuzzle();
@@ -1520,13 +1708,30 @@ const INTERACTIONS = {
   },
 
   interactAkai() {
+    state.flags.akaiMet = true;
+    if (state.flags.caseSolved) {
+      startDialogue([
+        { speaker: "akai", text: "「陽光透過溫室玻璃照進來了，植物的氣孔全面張開進行光合作用，這才是我熟悉的霧月山莊啊！」" }
+      ]);
+      return;
+    }
+    if (state.flags.greenhouseSolved) {
+      startDialogue([
+        { speaker: "akai", text: "「多虧你及時用清水沖淡鹽分救活這株植物！巴迪找到的泥腳印一定能帶你去後山林場查明真相！」" }
+      ]);
+      return;
+    }
     startDialogue([
-      { speaker: "akai", text: "「溫室一團亂！有人把整桶『濃食鹽水』潑進中央那盆藥用植物裡，讓它瞬間枯萎、光合作用也停擺了！」" },
-      { speaker: "akai", text: "「快去水池邊拿【清水壺】幫它沖淡鹽分吧，救活它或許能找到兇手逃往後山的線索！」" }
+      { speaker: "akai", text: "「艾德華你來得正好！溫室一團亂——有人把整桶『濃食鹽水』潑進中央那盆藥用植物裡，讓它瞬間枯萎、光合作用也停擺了！」" },
+      { speaker: "akai", text: "「快去右下角水池邊拿【清水壺】幫它沖淡鹽分吧，救活它或許能找到兇手逃往後山的線索！」" }
     ]);
   },
 
   interactWaterCan() {
+    if (!state.flags.akaiMet) {
+      startDialogue([{ speaker: "akai", text: "「等一下！先過來我這裡，讓我告訴你溫室剛剛發生什麼事！」" }]);
+      return;
+    }
     if (state.flags.hasWaterCan) {
       startDialogue([{ speaker: "edward", text: "「清水壺裡已經裝滿清澈的水了。」" }]);
       return;
@@ -1537,6 +1742,10 @@ const INTERACTIONS = {
   },
 
   interactWiltedPot() {
+    if (!state.flags.akaiMet) {
+      startDialogue([{ speaker: "akai", text: "「別亂碰那盆植物！先過來找我【赤井學者】了解溫室的狀況！」" }]);
+      return;
+    }
     if (state.flags.greenhouseSolved) {
       startDialogue([{ speaker: "edward", text: "「保衛細胞重新吸水膨脹、氣孔開啟，植物正加速吸收 CO₂ 釋放氧氣呢！」" }]);
       return;
@@ -1604,13 +1813,60 @@ const INTERACTIONS = {
     startDialogue([
       { speaker: "buddy", text: "「汪嗚——！！」（巴迪在巨木樹洞深處猛力刨土，咬出一個玻璃罐與深色雨衣！）" },
       { speaker: "edward", text: "「天哪……是【劇毒響尾蛇活體標本罐】！還有綠川雨衣裡只染紅【8 公分】的實驗枝條！」" },
-      { speaker: "edward", text: "「毀樹皮只是煙霧彈！博士中的是劇毒蛇毒！我們必須立刻衝回主廳【陳博士病床】展開搶救！」" }
+      { speaker: "edward", text: "「毀樹皮只是煙霧彈！博士中的是劇毒蛇毒！我們必須立刻衝往【博士臥室】展開搶救！」" }
     ]);
   },
 
   interactSeedlingLog() {
     startDialogue([
       { speaker: "edward", text: "「倒臥巨木淺色大管徑的年輪是在溫暖多雨的春夏季形成的；而幼苗白色根毛增加吸水表面積，全靠葉片氣孔蒸散拉力把水往上拉！」" }
+    ]);
+  },
+
+  interactStudyLog() {
+    if (state.flags.studySolved) {
+      startDialogue([{ speaker: "edward", text: "「書房手稿記錄得清清楚楚：全株總蒸散量 18.0 mL，扣掉莖部蒸散量，僅由葉片貢獻了 16.0 mL！」" }]);
+      return;
+    }
+    openStudyLogPuzzle();
+  },
+
+  interactEnzymeLog() {
+    const sp = state.flags.venomCured ? "kiki" : "edward";
+    addItem({ id: "enzyme_control_note", key: false, name: "🧪 唾液澱粉酶對照紀錄", desc: "甲(澱粉+唾液+稀鹽酸)、乙(澱粉+水+稀鹽酸)、丙(澱粉+唾液+水)。乙管是對照組，用來確認稀鹽酸本身是否會直接分解澱粉。" });
+    startDialogue([
+      { speaker: sp, text: "「這是陳博士探討酵素與酸鹼度的實驗紀錄：甲、乙、丙三支試管中，乙管只加澱粉、水與稀鹽酸，是為了確認『稀鹽酸本身是否會直接分解澱粉』的對照組！」" }
+    ]);
+  },
+
+  interactPatentSafe() {
+    addItem({ id: "patent_letter", key: true, name: "📄 專利拒絕簽署函", desc: "陳博士明確拒絕將『解毒酵素專利』低價轉讓給綠川富商的親筆回函，揭示了綠川的犯案動機！" });
+    gainExp(30);
+    startDialogue([
+      { speaker: "edward", text: "「保險箱裡鎖著這封【專利拒絕簽署函】！原來綠川富商想低價強買博士的解毒酵素專利遭到拒絕，才在今晚痛下殺手！」" }
+    ]);
+  },
+
+  interactColdLocker() {
+    if (state.flags.cellarSolved) {
+      startDialogue([{ speaker: "edward", text: "「低溫只會暫時降低酵素活性，回溫仍可恢復；我們已經取出冷藏庫裡的【備用蛇毒空針筒】證物了。」" }]);
+      return;
+    }
+    openColdLockerPuzzle();
+  },
+
+  interactCircModel() {
+    const sp = state.flags.venomCured ? "kiki" : "edward";
+    addItem({ id: "circ_chart", key: false, name: "❤️ 心肺循環路徑圖", desc: "左心房、左心室、肺靜脈內皆流動充氧血；體循環與肺循環交錯推動藥物送達全身。" });
+    startDialogue([
+      { speaker: sp, text: "「看這座模型！左心房、左心室與肺靜脈裡流動的都是『充氧血』；胃液快篩又沒有口服毒物，毒素一定是經由靜脈注射進入循環的！」" }
+    ]);
+  },
+
+  interactDietBoard() {
+    const sp = state.flags.venomCured ? "kiki" : "edward";
+    startDialogue([
+      { speaker: sp, text: "「營養筆記寫著：『胰臟』是全能消化腺，能分泌兼具分解醣類、蛋白質與脂質的酵素，最後在小腸絨毛吸收葡萄糖、胺基酸與脂肪酸及甘油！」" }
     ]);
   }
 };
@@ -1791,7 +2047,7 @@ function openVenomBattle() {
         BGM.playTrackForRoom(state.room);
         startDialogue([
           { speaker: "shira", text: "「太好了！抗蛇毒血清裡的現成抗體立刻中和了毒素，博士的心跳與呼吸全部穩定下來了！」" },
-          { speaker: "edward", text: "「現在全場只剩一個人還在裝蒜——回頭找主廳右下方的【綠川富商】，徹底揭穿他的不在場證明！」" }
+          { speaker: "kiki", text: "「太棒了！博士已經脫離險境，我不用再留守臥室了——艾德華，接下來我跟你一起去調查並揭穿【綠川富商】的謊言！」" }
         ]);
         return;
       }
@@ -1867,10 +2123,20 @@ function openBossBattle() {
         if (dialHour === 22) {
           SFX.play("fanfare");
           state.flags.caseSolved = true;
-          gainExp(120);
+          const allSideDone = state.flags.shiraCleared && state.flags.studySolved && state.flags.cellarSolved;
+          if (allSideDone) state.flags.trueEnding = true;
+          gainExp(allSideDone ? 180 : 120);
           updateHud();
           closeModal();
-          openVictoryScreen();
+          if (allSideDone) {
+            startDialogue([
+              { speaker: "edward", text: "「22:00！這就是你拔離枝條的真正時刻！再加上地下冷藏庫搜出的【備用蛇毒空針筒】，以及書房的【專利拒絕簽署函】——」" },
+              { speaker: "kiki", text: "「你因為強買解毒酵素專利失敗，才在 22:00 趁亂調高水浴槽破壞解藥酵素、再於主廳注射蛇毒！動機與物證全部齊全！」" },
+              { speaker: "midori", text: "「不、不可能……連保險箱的拒絕函和冷藏庫的針筒都被你們找到了……我完全敗給你們的生物推理了！」" }
+            ], openVictoryScreen);
+          } else {
+            openVictoryScreen();
+          }
         } else {
           SFX.play("error");
           state.wrongCount++;
@@ -1955,25 +2221,254 @@ function openBossBattle() {
 
 function openVictoryScreen() {
   BGM.playTrack("victory");
-  const rank = state.wrongCount === 0 ? "★ S 級傳奇像素生物神探 ★" : state.wrongCount <= 2 ? "★ A 級霧月山莊名偵探 ★" : "★ B 級見習生物偵探 ★";
+  const rank = state.flags.trueEnding && state.wrongCount === 0
+    ? "★ SSS 級傳奇全破生物神探（隱藏真結局） ★"
+    : state.wrongCount === 0
+      ? "★ S 級傳奇像素生物神探 ★"
+      : state.wrongCount <= 2
+        ? "★ A 級霧月山莊名偵探 ★"
+        : "★ B 級見習生物偵探 ★";
   openModal(`
-    <div class="modal-title"><span>🏆 全案破獲：八公分的致命時間戳</span></div>
+    <div class="modal-title"><span>🏆 ${state.flags.trueEnding ? "隱藏真結局：霧月山莊的完美破曉" : "全案破獲：八公分的致命時間戳"}</span></div>
     <div style="text-align:center;padding:8px 0;">
       <div style="display:inline-block;background:#7c2d12;border:2px solid #fde047;color:#fde047;padding:4px 14px;font-weight:900;margin-bottom:8px;">${rank}</div>
       <div style="font-size:13px;line-height:1.6;text-align:left;background:#0b0e18;border:1.5px solid #475569;padding:10px;margin-bottom:10px;">
         「兇手的國中生物如果學得夠好，或許就不會留下這麼多破綻了。可惜，生物世界裡沒有僥倖！」<br><br>
         • 偵探等級：<strong>LV.${state.lv}</strong><br>
         • 蒐集證物：<strong>${state.inventory.length} 件</strong><br>
-        • 推理失誤次數：<strong>${state.wrongCount} 次</strong>
+        • 推理失誤次數：<strong>${state.wrongCount} 次</strong><br>
+        • 破關彩蛋：<strong>暴雨已停歇！可回主廳找醒來的陳博士挑戰【115A2 生物隨堂考】</strong>
       </div>
       <div style="display:flex;gap:8px;justify-content:center;">
-        <button class="px-btn active" id="btn-vic-roam">🚶 繼續自由探索</button>
+        <button class="px-btn active" id="btn-vic-roam">🌅 迎接清晨繼續探索</button>
         <button class="px-btn" id="btn-vic-restart">↻ 重新開始冒險</button>
       </div>
     </div>
   `);
   document.getElementById("btn-vic-roam").onclick = closeModal;
   document.getElementById("btn-vic-restart").onclick = () => location.reload();
+}
+
+// --- 支線與新增房間小遊戲 ---
+function openStudyLockModal() {
+  let code = "";
+  const render = (msg = "提示：人類酵素最適溫度（2位數 °C）＋ 實驗室紅墨水上升速率（1位數 cm/hr）") => {
+    openModal(`
+      <div class="modal-title"><span>🔐 二樓書房電子密碼鎖</span><button class="px-btn" id="close-lock">✕</button></div>
+      <div style="font-size:13px;line-height:1.5;margin-bottom:10px;">${msg}</div>
+      <div style="text-align:center;font-size:24px;font-weight:900;letter-spacing:8px;background:#0b0e18;border:2px solid #e5c158;padding:8px;margin-bottom:10px;color:#fde047;">
+        ${code.padEnd(3, "•")}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-width:240px;margin:0 auto;">
+        ${[1,2,3,4,5,6,7,8,9,0].map((n) => `<button class="px-btn lock-num" data-n="${n}">${n}</button>`).join("")}
+        <button class="px-btn" id="lock-clr">清除</button>
+        <button class="px-btn active" id="lock-ok">開鎖</button>
+      </div>
+    `);
+    document.getElementById("close-lock").onclick = closeModal;
+    document.querySelectorAll(".lock-num").forEach((b) => {
+      b.onclick = () => {
+        if (code.length < 3) { SFX.play("select"); code += b.dataset.n; render(msg); }
+      };
+    });
+    document.getElementById("lock-clr").onclick = () => { code = ""; render(msg); };
+    document.getElementById("lock-ok").onclick = () => {
+      if (code === "374") {
+        SFX.play("fanfare");
+        state.flags.studyUnlocked = true;
+        closeModal();
+        teleportRoom("study", 9.5, 8.6);
+        startDialogue([{ speaker: "kiki", text: "「37°C 加上 4 cm/hr，密碼 374 正確！這裡就是陳博士的二樓書房！」" }]);
+      } else {
+        SFX.play("error");
+        code = "";
+        render("❌ 密碼錯誤！請回想：最適溫度 37°C 接上紅墨水速率 4 cm/hr。");
+      }
+    };
+  };
+  render();
+}
+
+function openStudyLogPuzzle() {
+  let msg = "請根據 115A2 博士蒸散實驗數據推算：<br>甲組(完整枝條)減少 <strong>18.5 mL</strong>，丁組(去葉塗凡士林)減少 <strong>2.5 mL</strong>，戊組(玻璃棒對照)減少 <strong>0.5 mL</strong>。<br>請問：<strong>「全株實際總蒸散量」</strong>與<strong>「僅由葉片貢獻的蒸散量」</strong>分別是多少？";
+  const render = () => {
+    openModal(`
+      <div class="modal-title"><span>📓 蒸散調控實驗手稿驗證</span><button class="px-btn" id="close-sl">✕</button></div>
+      <div class="battle-log" style="margin-bottom:10px;">${msg}</div>
+      <div class="battle-skills">
+        <button class="skill-btn" data-ans="a">全株 18.0 mL ／ 葉片 16.0 mL<span class="skill-sub">扣除玻璃棒自然蒸發 0.5 與莖部 2.0</span></button>
+        <button class="skill-btn" data-ans="b">全株 18.5 mL ／ 葉片 16.0 mL<span class="skill-sub">未扣除對照組自然蒸發量</span></button>
+        <button class="skill-btn" data-ans="c">全株 18.0 mL ／ 葉片 15.5 mL<span class="skill-sub">重複扣除了對照組水量</span></button>
+        <button class="skill-btn" data-ans="d">全株 16.0 mL ／ 葉片 13.5 mL<span class="skill-sub">誤把丁組當作對照組</span></button>
+      </div>
+    `);
+    document.getElementById("close-sl").onclick = closeModal;
+    document.querySelectorAll("[data-ans]").forEach((b) => {
+      b.onclick = () => {
+        if (b.dataset.ans === "a") {
+          SFX.play("fanfare");
+          state.flags.studySolved = true;
+          addItem({ id: "transpiration_data", key: true, name: "📓 博士蒸散實驗完整數據", desc: "全株總蒸散量 = 18.5 - 0.5 = 18.0 mL；莖部 = 2.5 - 0.5 = 2.0 mL；僅葉片 = 18.0 - 2.0 = 16.0 mL。" });
+          gainExp(45);
+          updateHud();
+          closeModal();
+          startDialogue([{ speaker: "edward", text: "「完全正確！水面滴植物油並設戊組玻璃棒，就是為了扣除水分自然蒸發 0.5 mL！」" }]);
+        } else {
+          SFX.play("error");
+          state.wrongCount++;
+          msg = "❌ 再算一次！全株 = 甲(18.5) - 戊(0.5)；莖部 = 丁(2.5) - 戊(0.5)；葉片 = 全株 - 莖部。";
+          render();
+        }
+      };
+    });
+  };
+  render();
+}
+
+function openColdLockerPuzzle() {
+  let msg = "冷藏庫溫度被兇手設定為 <strong>4°C</strong>，裡頭鎖著解毒酵素樣本與可疑針筒。<br>請問：相較於實驗室的 90°C 高溫，<strong>4°C 低溫對酵素活性的影響</strong>為何？";
+  const render = () => {
+    openModal(`
+      <div class="modal-title"><span>❄️ 4°C 低溫冷藏櫃解鎖</span><button class="px-btn" id="close-cl">✕</button></div>
+      <div class="battle-log" style="margin-bottom:10px;">${msg}</div>
+      <div class="battle-skills">
+        <button class="skill-btn" data-ans="a">活性暫時降低，回溫 37°C 可恢復<span class="skill-sub">低溫不會永久破壞酵素結構</span></button>
+        <button class="skill-btn" data-ans="b">與 90°C 一樣會永久失去活性<span class="skill-sub">低溫會使蛋白質不可逆變性</span></button>
+        <button class="skill-btn" data-ans="c">活性持續無限制增加<span class="skill-sub">溫度越低反應越快</span></button>
+        <button class="skill-btn" data-ans="d">完全不受溫度影響<span class="skill-sub">酵素在任何溫度活性都相同</span></button>
+      </div>
+    `);
+    document.getElementById("close-cl").onclick = closeModal;
+    document.querySelectorAll("[data-ans]").forEach((b) => {
+      b.onclick = () => {
+        if (b.dataset.ans === "a") {
+          SFX.play("fanfare");
+          state.flags.cellarSolved = true;
+          addItem({ id: "syringe_clue", key: true, name: "💉 備用蛇毒與空針筒", desc: "在 4°C 冷藏櫃發現的犯案針筒，與陳博士手肘針孔吻合！證明低溫僅暫時降低酵素活性。" });
+          gainExp(45);
+          updateHud();
+          closeModal();
+          startDialogue([{ speaker: "edward", text: "「解鎖成功！低溫只是暫時降低酵素活性，不像 90°C 高溫會永久失活。我們也在裡面找到了【備用蛇毒與空針筒】！」" }]);
+        } else {
+          SFX.play("error");
+          state.wrongCount++;
+          msg = "❌ 答錯囉！90°C 高溫才會破壞酵素結構導致永久失活，4°C 低溫只會暫時降低活性。";
+          render();
+        }
+      };
+    });
+  };
+  render();
+}
+
+function openAccusationModal() {
+  let msg = "請根據目前蒐集到的生物證據與不在場證明，指認昨晚毒害陳博士的真兇：";
+  const render = () => {
+    openModal(`
+      <div class="modal-title"><span>⚖️ 真相指認：誰是霧月山莊的真兇？</span><button class="px-btn" id="close-acc">✕</button></div>
+      <div class="battle-log" style="margin-bottom:10px;">${msg}</div>
+      <div class="battle-skills">
+        <button class="skill-btn" data-pick="shira">🧑‍🔬 白石助理<span class="skill-sub">右手包著紗布、神色慌張</span></button>
+        <button class="skill-btn" data-pick="akai">🧑‍🌾 赤井學者<span class="skill-sub">鞋底沾滿溫室泥土</span></button>
+        <button class="skill-btn" data-pick="butler">🤵 老管家<span class="skill-sub">掌握山莊藥櫃與晚餐菜單</span></button>
+        <button class="skill-btn" data-pick="midori">💼 綠川富商<span class="skill-sub">衣角沾葉屑、建議高溫紅茶解毒</span></button>
+      </div>
+    `);
+    document.getElementById("close-acc").onclick = closeModal;
+    document.querySelectorAll("[data-pick]").forEach((b) => {
+      b.onclick = () => {
+        const p = b.dataset.pick;
+        if (p === "midori") {
+          SFX.play("select");
+          closeModal();
+          startDialogue([
+            { speaker: "midori", text: "「什麼？你竟敢指認我？！你有什麼證據證明是我動的手！」" },
+            { speaker: "edward", text: "「綠川富商，你的每一個藉口都違反了最基本的生物科學！準備好迎接真相對決吧！」" }
+          ], openBossBattle);
+        } else {
+          SFX.play("error");
+          state.wrongCount++;
+          if (p === "shira") msg = "❌ 指認錯誤！白石手上的紅腫只是玻璃劃傷引起的局部微血管擴張發炎反應，並非犯案傷口！";
+          else if (p === "akai") msg = "❌ 指認錯誤！赤井在溫室照顧植物鞋底才沾泥，且他主動協助搶救被濃食鹽水弄萎的盆栽！";
+          else msg = "❌ 指認錯誤！老管家一直忙著發口罩與酒精維持第一道防線，沒有犯案動機與關鍵破綻！";
+          render();
+        }
+      };
+    });
+  };
+  render();
+}
+
+function openChenQuizModal() {
+  const qs = [
+    { q: "1. 生物體內的各類酵素（如神經解毒酵素），其主要成分大多數是？", opts: ["蛋白質", "醣類", "脂質", "礦物質"], ans: 0 },
+    { q: "2. 下列人體防禦構造中，哪一項屬於阻擋病原體入侵的「第一道防線」？", opts: ["白血球吞噬作用", "專一性抗體", "完好皮膚角質層與呼吸道黏膜", "淋巴球攻擊"], ans: 2 },
+    { q: "3. 人體哪一個消化腺能分泌兼具分解醣類、蛋白質與脂質酵素的消化液？", opts: ["肝臟", "胃", "胰臟", "膽囊"], ans: 2 },
+    { q: "4. 下列心臟腔室與大血管中，哪一組內部流動的血液全部屬於「充氧血」？", opts: ["右心房、右心室、肺動脈", "左心房、左心室、肺靜脈", "上下大靜脈、右心房、肺動脈", "右心室、主動脈、下大靜脈"], ans: 1 },
+    { q: "5. 植物能將根部水分一路向上拉引到頂端葉片，最主要的動力來源為何？", opts: ["葉片氣孔蒸散作用產生的拉力", "根毛主動推力", "莖部肌肉收縮", "雨水大氣推力"], ans: 0 }
+  ];
+  let idx = 0, score = 0, fb = "答對全部 5 題即可獲頒【光華名偵探徽章】！";
+  const render = () => {
+    if (idx >= qs.length) {
+      const pass = score === qs.length;
+      if (pass) {
+        SFX.play("fanfare");
+        state.flags.quizDone = true;
+        addItem({ id: "detective_badge", key: true, name: "🏅 光華名偵探徽章", desc: "通過陳博士 115A2 生物隨堂考滿分認證的最高榮譽徽章！" });
+        gainExp(100);
+      }
+      openModal(`
+        <div class="modal-title"><span>🎓 115A2 隨堂考結算</span><button class="px-btn" id="close-qz">✕</button></div>
+        <div class="battle-log" style="margin-bottom:10px;">總分：<strong>${score} / ${qs.length}</strong>！<br>${pass ? "🎉 太棒了！你已完全掌握 115A2 所有生物核心觀念！" : "再複習一下山莊裡的線索，下次一定能拿滿分！"}</div>
+        <button class="px-btn active" id="qz-ok">確定</button>
+      `);
+      document.getElementById("close-qz").onclick = closeModal;
+      document.getElementById("qz-ok").onclick = closeModal;
+      return;
+    }
+    const cur = qs[idx];
+    openModal(`
+      <div class="modal-title"><span>🎓 陳博士隨堂考（第 ${idx + 1} / ${qs.length} 題）</span><button class="px-btn" id="close-qz">✕</button></div>
+      <div class="battle-log" style="margin-bottom:10px;">${cur.q}<br><span style="color:#fde047;">${fb}</span></div>
+      <div class="battle-skills">
+        ${cur.opts.map((o, i) => `<button class="skill-btn qz-opt" data-i="${i}">${o}</button>`).join("")}
+      </div>
+    `);
+    document.getElementById("close-qz").onclick = closeModal;
+    document.querySelectorAll(".qz-opt").forEach((b) => {
+      b.onclick = () => {
+        if (Number(b.dataset.i) === cur.ans) { SFX.play("hit"); score++; fb = "⭕ 答對了！"; }
+        else { SFX.play("error"); fb = `❌ 正確答案是：${cur.opts[cur.ans]}`; }
+        idx++;
+        render();
+      };
+    });
+  };
+  render();
+}
+
+function triggerBuddySniff() {
+  if (state.dialogue.active || document.getElementById("modal-overlay").classList.contains("visible")) return;
+  SFX.play("select");
+  if (state.room === "lab" && !state.flags.bottleFound) {
+    state.flags.bottleFound = true;
+    addItem({ id: "brown_bottle", key: true, name: "🟤 棕色解毒酵素原型空瓶", desc: "巴迪在實驗桌底嗅出的空瓶！生物體內各類酵素成分大多數是『蛋白質』。" });
+    gainExp(30);
+    startDialogue([
+      { speaker: "buddy", text: "「汪！汪汪！」（巴迪鑽進實驗桌底下，叼出一個滾落的棕色空瓶！）" },
+      { speaker: state.flags.venomCured ? "kiki" : "edward", text: "「上頭印著『生物催化劑—神經解毒酵素原型』！酵素的成分大多數是蛋白質，裡面的解毒酵素已經被倒光了！」" }
+    ]);
+  } else if (state.room === "hall") {
+    startDialogue([{ speaker: "buddy", text: "「嗅嗅……」（巴迪朝著綠川富商的衣角低吼——上面沾著新鮮葉屑與微弱蛇蛻腥味！）" }]);
+  } else if (state.room === "greenhouse") {
+    startDialogue([{ speaker: "buddy", text: state.flags.greenhouseSolved ? "「汪！」（巴迪聞到盆栽旁通往後山林場的泥土氣味！）" : "「嗚……」（巴迪聞到中央盆栽土壤傳來刺鼻的濃食鹽水味！）" }]);
+  } else if (state.room === "forest") {
+    startDialogue([{ speaker: "buddy", text: state.flags.snakeJarFound ? "「汪！」（樹洞裡的蛇毒氣味已經被我們封存調查完畢了！）" : "「汪嗚——！」（巴迪對著右側巨木樹洞狂叫，裡面一定藏著關鍵證物！）" }]);
+  } else if (state.room === "study") {
+    startDialogue([{ speaker: "buddy", text: "「嗅嗅……」（巴迪在保險箱旁停下，似乎聞到綠川富商來過書房的香水味！）" }]);
+  } else if (state.room === "cellar") {
+    startDialogue([{ speaker: "buddy", text: state.flags.cellarSolved ? "「汪！」（低溫冷藏櫃裡的蛇毒針筒已經被我們找到了！）" : "「嗚……」（巴迪對著 4°C 低溫冷藏櫃低吠，裡面有微弱的蛇毒氣味！）" }]);
+  }
 }
 
 /* ============================================================================
@@ -2004,10 +2499,13 @@ function openMapModal() {
       <button class="px-btn" id="close-map">✕</button>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-      <button class="skill-btn" data-tp="hall">🏰 主廳急救區<span class="skill-sub">陳博士、綠川、小琪</span></button>
+      <button class="skill-btn" data-tp="hall">🏰 山莊主廳<span class="skill-sub">綠川、老管家、各區入口</span></button>
+      <button class="skill-btn" data-tp="bedroom">🛏️ 陳博士臥室<span class="skill-sub">陳博士病床、急救藥櫃</span></button>
       <button class="skill-btn" data-tp="lab">🧪 生化實驗室<span class="skill-sub">水浴槽、紅墨水量筒</span></button>
       <button class="skill-btn" data-tp="greenhouse">🌿 玻璃溫室<span class="skill-sub">鹽水盆栽、睡蓮水池</span></button>
       <button class="skill-btn" data-tp="forest" ${state.flags.forestUnlocked ? "" : "disabled"}>🌲 後山林場<span class="skill-sub">${state.flags.forestUnlocked ? "已解鎖" : "🔒 需先解決溫室危機"}</span></button>
+      <button class="skill-btn" data-tp="study" ${state.flags.studyUnlocked ? "" : "disabled"}>📚 二樓博士書房<span class="skill-sub">${state.flags.studyUnlocked ? "已解鎖" : "🔒 需電子密碼（線索在實驗室）"}</span></button>
+      <button class="skill-btn" data-tp="cellar">❄️ 地下冷藏庫<span class="skill-sub">4°C 低溫櫃、心肺模型</span></button>
     </div>
   `);
   document.getElementById("close-map").onclick = closeModal;
@@ -2015,6 +2513,7 @@ function openMapModal() {
     b.onclick = () => {
       const target = b.dataset.tp;
       if (target === "forest" && !state.flags.forestUnlocked) return;
+      if (target === "study" && !state.flags.studyUnlocked) return;
       teleportRoom(target, 9.5, 5.5);
       closeModal();
     };
@@ -2026,8 +2525,11 @@ function teleportRoom(roomId, sx, sy) {
   state.room = roomId;
   state.player.x = sx;
   state.player.y = sy;
-  state.buddy.x = sx - 0.8;
-  state.buddy.y = sy + 0.4;
+  state.kiki.x = sx - 0.5;
+  state.kiki.y = sy + 0.3;
+  state.kiki.trail = [];
+  state.buddy.x = sx - 1.0;
+  state.buddy.y = sy + 0.5;
   state.buddy.trail = [];
   state.fadeAlpha = 1;
   BGM.playTrackForRoom(roomId);
@@ -2051,9 +2553,13 @@ function isWalkable(tx, ty) {
   return true;
 }
 
+function getActiveRoomNpcs(room) {
+  return room.npcs.filter((n) => !(n.onlyBeforeVenomCured && state.flags.venomCured));
+}
+
 function findNearestInteractable() {
   const room = ROOMS[state.room];
-  const candidates = [...room.npcs, ...room.props];
+  const candidates = [...getActiveRoomNpcs(room), ...room.props];
   let best = null;
   let bestDist = 1.65;
   for (const c of candidates) {
@@ -2198,6 +2704,60 @@ function buildTileCache() {
     t.fillStyle = "#15301f"; t.fillRect(0, 0, 16, 16);
     t.fillStyle = "#2d2419"; t.fillRect(3, 6, 4, 3); t.fillRect(9, 2, 3, 2);
     t.fillStyle = "#234f33"; t.fillRect(11, 11, 2, 2);
+  });
+
+  // 二樓書房書櫃牆與紅木地板
+  makeTile("wall_study", (t) => {
+    t.fillStyle = "#2e1a12"; t.fillRect(0, 0, 16, 16);
+    t.fillStyle = "#4a2c1d"; t.fillRect(1, 1, 14, 13);
+    t.fillStyle = "#dc2626"; t.fillRect(2, 3, 3, 5);
+    t.fillStyle = "#2563eb"; t.fillRect(6, 2, 3, 6);
+    t.fillStyle = "#eab308"; t.fillRect(10, 3, 3, 5);
+    t.fillStyle = "#1f120c"; t.fillRect(0, 8, 16, 2); t.fillRect(0, 14, 16, 2);
+  });
+  makeTile("floor_study_a", (t) => {
+    t.fillStyle = "#5c341f"; t.fillRect(0, 0, 16, 16);
+    t.fillStyle = "#6e3f26"; t.fillRect(1, 1, 14, 6); t.fillRect(1, 9, 14, 6);
+    t.fillStyle = "#422415"; t.fillRect(0, 7, 16, 1); t.fillRect(0, 15, 16, 1);
+  });
+  makeTile("floor_study_b", (t) => {
+    t.fillStyle = "#542f1c"; t.fillRect(0, 0, 16, 16);
+    t.fillStyle = "#663a23"; t.fillRect(1, 1, 14, 6); t.fillRect(1, 9, 14, 6);
+    t.fillStyle = "#422415"; t.fillRect(0, 7, 16, 1); t.fillRect(0, 15, 16, 1);
+  });
+
+  // 地下冷藏庫冰霜石牆與冷色地磚
+  makeTile("wall_cellar", (t) => {
+    t.fillStyle = "#1e293b"; t.fillRect(0, 0, 16, 16);
+    t.fillStyle = "#334155"; t.fillRect(1, 1, 14, 12);
+    t.fillStyle = "#7dd3fc"; t.fillRect(2, 2, 4, 1); t.fillRect(10, 4, 3, 1);
+    t.fillStyle = "#0f172a"; t.fillRect(0, 13, 16, 3);
+  });
+  makeTile("floor_cellar_a", (t) => {
+    t.fillStyle = "#1e3a5f"; t.fillRect(0, 0, 16, 16);
+    t.fillStyle = "#264975"; t.fillRect(1, 1, 14, 14);
+    t.fillStyle = "#38bdf8"; t.fillRect(2, 2, 2, 1);
+  });
+  makeTile("floor_cellar_b", (t) => {
+    t.fillStyle = "#172e4d"; t.fillRect(0, 0, 16, 16);
+    t.fillStyle = "#1f3d63"; t.fillRect(1, 1, 14, 14);
+    t.fillStyle = "#0f172a"; t.fillRect(0, 15, 16, 1);
+  });
+
+  // 博士臥室暖色壁紙與地毯木板
+  makeTile("wall_bedroom", (t) => {
+    t.fillStyle = "#3b2322"; t.fillRect(0, 0, 16, 16);
+    t.fillStyle = "#573533"; t.fillRect(1, 1, 14, 12);
+    t.fillStyle = "#e5c158"; t.fillRect(2, 3, 12, 1);
+    t.fillStyle = "#261615"; t.fillRect(0, 13, 16, 3);
+  });
+  makeTile("floor_bedroom_a", (t) => {
+    t.fillStyle = "#523626"; t.fillRect(0, 0, 16, 16);
+    t.fillStyle = "#63412e"; t.fillRect(1, 1, 14, 6); t.fillRect(1, 9, 14, 6);
+  });
+  makeTile("floor_bedroom_b", (t) => {
+    t.fillStyle = "#4a3022"; t.fillRect(0, 0, 16, 16);
+    t.fillStyle = "#593a29"; t.fillRect(1, 1, 14, 6); t.fillRect(1, 9, 14, 6);
   });
 }
 buildTileCache();
@@ -2349,7 +2909,7 @@ function drawRoomTiles(theme) {
   }
 
   // 房間特色道具（16-bit 像素家具與陰影）
-  if (theme === "hall") {
+  if (theme === "bedroom") {
     // 急救病床（木框＋枕頭＋藍被＋博士眼鏡頭像）
     ctx.fillStyle = "rgba(0,0,0,0.35)"; ctx.fillRect(9 * TILE - 1, 2 * TILE + 24, 2 * TILE + 2, 4);
     ctx.fillStyle = "#78350f"; ctx.fillRect(9 * TILE - 1, 2 * TILE + 1, 2 * TILE + 2, 24);
@@ -2390,10 +2950,13 @@ function drawRoomTiles(theme) {
     ctx.fillRect(14 * TILE + 7, 2 * TILE + 7, 5, 16);
     ctx.fillStyle = "#0f172a";
     ctx.fillRect(15 * TILE + 5, 2 * TILE + 7, 5, 14);
-    // 耐酸膠囊桌與茶水桌
+    // 耐酸膠囊桌與茶水桌與紗布垃圾桶
     ctx.fillStyle = "#6b4423";
     ctx.fillRect(5 * TILE, 7 * TILE + 2, 3 * TILE, 14);
     ctx.fillRect(13 * TILE, 7 * TILE + 2, 3 * TILE, 14);
+    ctx.fillStyle = "#475569"; ctx.fillRect(3 * TILE + 2, 7 * TILE + 2, 12, 14);
+    ctx.fillStyle = "#f8fafc"; ctx.fillRect(3 * TILE + 4, 7 * TILE + 4, 8, 5);
+    ctx.fillStyle = "#ef4444"; ctx.fillRect(3 * TILE + 6, 7 * TILE + 5, 3, 3);
     ctx.fillStyle = "#facc15"; ctx.fillRect(5 * TILE + 8, 7 * TILE + 6, 4, 3);
     ctx.fillStyle = "#ef4444"; ctx.fillRect(5 * TILE + 14, 7 * TILE + 7, 4, 3);
     ctx.fillStyle = "#10b981"; ctx.fillRect(13 * TILE + 8, 7 * TILE + 5, 6, 6);
@@ -2456,6 +3019,26 @@ function drawRoomTiles(theme) {
     ctx.fillStyle = "#92400e"; ctx.fillRect(8 * TILE, 8 * TILE + 2, 16, 12);
     ctx.fillStyle = "#fbbf24"; ctx.fillRect(8 * TILE + 2, 8 * TILE + 3, 12, 9);
     ctx.fillStyle = "#b45309"; ctx.fillRect(8 * TILE + 5, 8 * TILE + 5, 6, 5);
+  } else if (theme === "study") {
+    // 博士書桌、實驗紀錄櫃、專利保險箱
+    ctx.fillStyle = "#78350f"; ctx.fillRect(8 * TILE, 2 * TILE + 2, 4 * TILE, 26);
+    ctx.fillStyle = "#fef3c7"; ctx.fillRect(9 * TILE + 2, 2 * TILE + 7, 14, 10);
+    ctx.fillStyle = "#3b82f6"; ctx.fillRect(10 * TILE + 6, 2 * TILE + 8, 8, 8);
+    ctx.fillStyle = "#5c3415"; ctx.fillRect(3 * TILE, 3 * TILE + 2, 2 * TILE, 26);
+    ctx.fillStyle = "#facc15"; ctx.fillRect(3 * TILE + 6, 3 * TILE + 8, 6, 8);
+    ctx.fillStyle = "#334155"; ctx.fillRect(14 * TILE, 3 * TILE + 2, 2 * TILE, 26);
+    ctx.fillStyle = "#94a3b8"; ctx.fillRect(14 * TILE + 4, 3 * TILE + 6, 24, 18);
+    ctx.fillStyle = "#fde047"; ctx.fillRect(14 * TILE + 14, 3 * TILE + 13, 4, 4);
+  } else if (theme === "cellar") {
+    // 4°C 低溫冷藏櫃、心肺循環模型桌、消化板
+    ctx.fillStyle = "#0ea5e9"; ctx.fillRect(9 * TILE, 2 * TILE + 2, 3 * TILE, 28);
+    ctx.fillStyle = "#e0f2fe"; ctx.fillRect(9 * TILE + 4, 2 * TILE + 6, 40, 18);
+    ctx.fillStyle = "#0284c7"; ctx.fillRect(9 * TILE + 22, 2 * TILE + 6, 2, 18);
+    ctx.fillStyle = "#334155";
+    ctx.fillRect(4 * TILE, 7 * TILE + 2, 3 * TILE, 14);
+    ctx.fillRect(13 * TILE, 7 * TILE + 2, 3 * TILE, 14);
+    ctx.fillStyle = "#ef4444"; ctx.fillRect(5 * TILE + 4, 7 * TILE + 5, 8, 8);
+    ctx.fillStyle = "#facc15"; ctx.fillRect(14 * TILE + 4, 7 * TILE + 5, 10, 8);
   }
 }
 
@@ -2493,12 +3076,15 @@ function update(dt) {
   if (state.dialogue.active || modalOpen) return;
 
   let dx = 0, dy = 0;
-  if (state.keys["ArrowUp"] || state.keys["KeyW"] || state.touchDir === "up") dy -= 1;
-  if (state.keys["ArrowDown"] || state.keys["KeyS"] || state.touchDir === "down") dy += 1;
-  if (state.keys["ArrowLeft"] || state.keys["KeyA"] || state.touchDir === "left") dx -= 1;
-  if (state.keys["ArrowRight"] || state.keys["KeyD"] || state.touchDir === "right") dx += 1;
+  if (state.keys["ArrowUp"] || state.keys["KeyW"]) dy -= 1;
+  if (state.keys["ArrowDown"] || state.keys["KeyS"]) dy += 1;
+  if (state.keys["ArrowLeft"] || state.keys["KeyA"]) dx -= 1;
+  if (state.keys["ArrowRight"] || state.keys["KeyD"]) dx += 1;
+  dx += state.touchVec.x;
+  dy += state.touchVec.y;
 
-  state.player.moving = (dx !== 0 || dy !== 0);
+  const len = Math.hypot(dx, dy);
+  state.player.moving = len > 0.01;
   if (state.player.moving) {
     if (Math.abs(dx) >= Math.abs(dy)) {
       state.player.dir = dx > 0 ? "right" : "left";
@@ -2506,8 +3092,8 @@ function update(dt) {
       state.player.dir = dy > 0 ? "down" : "up";
     }
 
-    const len = Math.hypot(dx, dy);
-    const speed = 5.4 * dt;
+    const scale = Math.min(1, len);
+    const speed = 5.4 * scale * dt;
     const nx = state.player.x + (dx / len) * speed;
     const ny = state.player.y + (dy / len) * speed;
 
@@ -2521,9 +3107,25 @@ function update(dt) {
       stepSfxTimer = 0.28;
     }
 
-    // 巴迪跟隨軌跡與面向方向更新
-    state.buddy.trail.push({ x: state.player.x, y: state.player.y });
-    if (state.buddy.trail.length > 14) {
+    // 救醒博士後小琪加入跟隨；未救醒前小琪留守臥室，由巴迪直接跟隨艾德華
+    if (state.flags.venomCured) {
+      state.kiki.trail.push({ x: state.player.x, y: state.player.y });
+      if (state.kiki.trail.length > 9) {
+        const kTarget = state.kiki.trail.shift();
+        const kdx = kTarget.x - state.kiki.x;
+        const kdy = kTarget.y - state.kiki.y;
+        if (Math.hypot(kdx, kdy) > 0.02) {
+          if (Math.abs(kdx) >= Math.abs(kdy)) state.kiki.dir = kdx > 0 ? "right" : "left";
+          else state.kiki.dir = kdy > 0 ? "down" : "up";
+        }
+        state.kiki.x += kdx * 0.42;
+        state.kiki.y += kdy * 0.42;
+      }
+      state.buddy.trail.push({ x: state.kiki.x, y: state.kiki.y });
+    } else {
+      state.buddy.trail.push({ x: state.player.x, y: state.player.y });
+    }
+    if (state.buddy.trail.length > 10) {
       const target = state.buddy.trail.shift();
       const bdx = target.x - state.buddy.x;
       const bdy = target.y - state.buddy.y;
@@ -2534,8 +3136,8 @@ function update(dt) {
           state.buddy.dir = bdy > 0 ? "down" : "up";
         }
       }
-      state.buddy.x += bdx * 0.35;
-      state.buddy.y += bdy * 0.35;
+      state.buddy.x += bdx * 0.38;
+      state.buddy.y += bdy * 0.38;
     }
 
     // 檢查是否踩到門洞
@@ -2546,7 +3148,11 @@ function update(dt) {
         if (d.col === pCol && d.row === pRow) {
           if (d.reqFlag && !state.flags[d.reqFlag]) {
             doorCooldown = 0.8;
-            startDialogue([{ speaker: "edward", text: "「通往後山林場的側門卡住了！先去上方【玻璃溫室】處理濃食鹽水危機找找線索！」" }]);
+            if (d.reqFlag === "studyUnlocked") {
+              openStudyLockModal();
+            } else {
+              startDialogue([{ speaker: "edward", text: "「通往後山林場的側門卡住了！先去上方【玻璃溫室】處理濃食鹽水危機找找線索！」" }]);
+            }
           } else {
             doorCooldown = 0.5;
             teleportRoom(d.to, d.spawnX, d.spawnY);
@@ -2565,9 +3171,11 @@ function render() {
 
   // 依 Y 座標排序繪製角色與落地陰影
   const stepFrame = state.player.moving ? (Math.floor(state.player.walkTick) % 2) : 0;
+  const activeNpcs = getActiveRoomNpcs(room);
   const entities = [
-    ...room.npcs.map((n) => ({ id: n.id, x: n.x * TILE, y: n.y * TILE + 2, bob: 0, dir: "down", step: 0 })),
+    ...activeNpcs.map((n) => ({ id: n.id, x: n.x * TILE, y: n.y * TILE + 2, bob: 0, dir: "down", step: 0 })),
     { id: "buddy", x: state.buddy.x * TILE, y: state.buddy.y * TILE + 2, bob: state.player.moving ? Math.sin(state.time * 14) * 1.2 : 0, dir: state.buddy.dir, step: 0 },
+    ...(state.flags.venomCured ? [{ id: "kiki", x: state.kiki.x * TILE, y: state.kiki.y * TILE + 2, bob: state.player.moving ? Math.abs(Math.sin(state.player.walkTick + 1)) * -1.8 : 0, dir: state.kiki.dir, step: stepFrame }] : []),
     { id: "edward", x: state.player.x * TILE, y: state.player.y * TILE + 2, bob: state.player.moving ? Math.abs(Math.sin(state.player.walkTick)) * -2 : 0, dir: state.player.dir, step: stepFrame }
   ];
   entities.sort((a, b) => a.y - b.y);
@@ -2579,7 +3187,7 @@ function render() {
 
   // 繪製重要物件上的浮動標記與各門洞路標牌
   const nearest = findNearestInteractable();
-  for (const obj of [...room.npcs, ...room.props]) {
+  for (const obj of [...activeNpcs, ...room.props]) {
     if (obj.tag || obj === nearest) {
       const pulse = Math.sin(state.time * 5) * 1.5;
       const sx = Math.round(obj.x * TILE);
@@ -2592,8 +3200,8 @@ function render() {
   }
   drawDoorSignposts();
 
-  // 後山雨滴與閃電特效
-  if (state.room === "forest") {
+  // 後山雨滴特效（破案後放晴停止）或破曉晨光
+  if (state.room === "forest" && !state.flags.caseSolved) {
     ctx.fillStyle = "rgba(148, 163, 184, 0.45)";
     for (const r of state.rain) {
       r.x -= r.speed * 0.2 * 0.016;
@@ -2601,6 +3209,10 @@ function render() {
       if (r.y > 180) { r.y = 0; r.x = Math.random() * 340; }
       ctx.fillRect(Math.round(r.x), Math.round(r.y), 1, 4);
     }
+  }
+  if (state.flags.caseSolved) {
+    ctx.fillStyle = "rgba(253, 224, 71, 0.08)";
+    ctx.fillRect(0, 0, 320, 180);
   }
 
   if (state.lightningAlpha > 0) {
@@ -2640,6 +3252,7 @@ window.addEventListener("keyup", (e) => {
 });
 
 document.getElementById("rpg-dialogue").addEventListener("click", advanceDialogue);
+document.getElementById("btn-sniff").addEventListener("click", triggerBuddySniff);
 document.getElementById("btn-inv").addEventListener("click", openInventoryModal);
 document.getElementById("btn-map").addEventListener("click", openMapModal);
 document.getElementById("btn-pad").addEventListener("click", (e) => {
@@ -2685,21 +3298,66 @@ document.addEventListener("gesturestart", (e) => {
   e.preventDefault();
 }, { passive: false });
 
-document.querySelectorAll(".dpad-btn").forEach((btn) => {
-  const dir = btn.dataset.dir;
-  const start = (e) => {
-    e.preventDefault();
-    state.touchDir = dir;
-    btn.classList.add("pressed");
-  };
-  const end = () => {
-    btn.classList.remove("pressed");
-    if (state.touchDir === dir) state.touchDir = null;
-  };
-  btn.addEventListener("pointerdown", start);
-  btn.addEventListener("pointerup", end);
-  btn.addEventListener("pointercancel", end);
-  btn.addEventListener("pointerleave", end);
+const joystickEl = document.getElementById("joystick");
+const joystickKnobEl = document.getElementById("joystick-knob");
+let joystickPointerId = null;
+
+function resetJoystick() {
+  joystickPointerId = null;
+  state.touchVec.x = 0;
+  state.touchVec.y = 0;
+  joystickEl.classList.remove("active");
+  joystickKnobEl.style.transform = "translate(0px, 0px)";
+}
+
+function updateJoystickFromPointer(e) {
+  const rect = joystickEl.getBoundingClientRect();
+  const knobRect = joystickKnobEl.getBoundingClientRect();
+  const maxDist = Math.max(16, (rect.width - knobRect.width) / 2);
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  let ox = e.clientX - cx;
+  let oy = e.clientY - cy;
+  const dist = Math.hypot(ox, oy);
+  if (dist > maxDist) {
+    ox = (ox / dist) * maxDist;
+    oy = (oy / dist) * maxDist;
+  }
+  joystickKnobEl.style.transform = `translate(${ox.toFixed(1)}px, ${oy.toFixed(1)}px)`;
+
+  const norm = Math.min(1, dist / maxDist);
+  const deadzone = 0.15;
+  if (norm < deadzone || dist === 0) {
+    state.touchVec.x = 0;
+    state.touchVec.y = 0;
+  } else {
+    const mag = (norm - deadzone) / (1 - deadzone);
+    state.touchVec.x = (ox / dist) * mag;
+    state.touchVec.y = (oy / dist) * mag;
+  }
+}
+
+joystickEl.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  joystickPointerId = e.pointerId;
+  joystickEl.classList.add("active");
+  try {
+    joystickEl.setPointerCapture(e.pointerId);
+  } catch (_) {}
+  updateJoystickFromPointer(e);
+});
+
+joystickEl.addEventListener("pointermove", (e) => {
+  if (e.pointerId !== joystickPointerId) return;
+  e.preventDefault();
+  updateJoystickFromPointer(e);
+});
+
+["pointerup", "pointercancel"].forEach((ev) => {
+  joystickEl.addEventListener(ev, (e) => {
+    if (e.pointerId !== joystickPointerId) return;
+    resetJoystick();
+  });
 });
 
 document.getElementById("btn-a").addEventListener("pointerdown", (e) => {
