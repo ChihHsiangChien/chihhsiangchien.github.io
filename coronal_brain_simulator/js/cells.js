@@ -1,5 +1,5 @@
 /* =========================================================================
- * cells.js — 教科書插圖級細胞形態生成與繪製
+ * cells.js — 解剖插圖級細胞形態生成與繪製
  *
  * 核心技法：每個細胞的胞體、樹突、軸突、突起、終足都建成「同方向多邊形」
  * 並合併為單一 Path2D。繪製時先以墨線色描粗邊、再以本體色填滿，
@@ -335,6 +335,27 @@
     return n.axon;
   }
 
+  function recomputeAxonTimes(ax) {
+    if (!ax || !ax.paths.length) return;
+    computeArrival(ax.paths[0], 0);
+    for (const p of ax.paths) {
+      if (p.parent >= 0) computeArrival(p, timeAtS(ax.paths[p.parent], p.fromS));
+    }
+    ax.maxT = Math.max.apply(null, ax.paths.map((p) => p.tEnd));
+  }
+
+  /** 結構可塑性：將新長出的軸突側枝接回既有軸突並重建無縫剪影 */
+  function attachCollateralPath(n, parentIdx, fromS, pts, synGeo, myelin) {
+    if (!n.axon) return null;
+    const col = makeAxonPath(pts, false, n.virtual ? 2 : n.r, !!myelin, 0);
+    col.parent = parentIdx;
+    col.fromS = fromS;
+    col.synapse = synGeo;
+    n.axon.paths.push(col);
+    recomputeAxonTimes(n.axon);
+    return col;
+  }
+
   function norm(x, y) { const l = Math.hypot(x, y) || 1; return { x: x / l, y: y / l }; }
 
   /** 樹突接觸點：從突觸點沿樹突回溯到胞體的路徑（突觸後電位傳遞用） */
@@ -528,6 +549,20 @@
     const nc = 5;
     for (let i = 0; i < nc; i++) cell.cilia.push({ x: -w * 0.75 + (1.5 * w * i) / (nc - 1), len: rng.range(16, 26), ph: rng.range(0, 1.2) });
     cell.body = g.path(); cell.shade = g.shading(); cell.h = h; cell.w = w;
+    const lbb = g.bbox(6);
+    const ly0 = Math.min(lbb.y0, -h - 28);
+    const cs = Math.cos(e.rot), sn = Math.sin(e.rot);
+    const corners = [
+      [lbb.x0, ly0], [lbb.x1, ly0], [lbb.x0, lbb.y1], [lbb.x1, lbb.y1]
+    ];
+    let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+    for (const [lx, ly] of corners) {
+      const wx = e.x + lx * cs - ly * sn;
+      const wy = e.y + lx * sn + ly * cs;
+      if (wx < bx0) bx0 = wx; if (wy < by0) by0 = wy;
+      if (wx > bx1) bx1 = wx; if (wy > by1) by1 = wy;
+    }
+    cell.bbox = { x0: bx0, y0: by0, x1: bx1, y1: by1 };
     return cell;
   }
 
@@ -622,10 +657,75 @@
     ctx.restore();
   }
 
+  /** 輕量級動態神經元膜電位疊加（配合靜態離屏快取使用，免去每幀剪裁與描邊） */
+  function drawNeuronDynamicOverlay(ctx, n, sim) {
+    if (n.virtual) return;
+    const flash = sim.T - n.lastFire;
+    const isFlashing = flash >= 0 && flash < 0.35;
+    const hasV = Math.abs(n.V) > 0.05;
+    const lowAtp = n.atp < 15;
+    if (!isFlashing && !hasV && !lowAtp) return;
+
+    if (lowAtp) {
+      ctx.fillStyle = 'rgba(130, 120, 105, 0.36)';
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.r * 1.1, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    if (isFlashing) {
+      const k = 1 - flash / 0.35;
+      const rad = n.r * 1.45;
+      const g = ctx.createRadialGradient(n.x, n.y, n.r * 0.2, n.x, n.y, rad);
+      g.addColorStop(0, `rgba(255, 248, 175, ${0.82 * k})`);
+      g.addColorStop(0.65, `rgba(255, 224, 90, ${0.42 * k})`);
+      g.addColorStop(1, 'rgba(255, 224, 90, 0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, rad, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (hasV) {
+      const rad = n.r * 1.25;
+      const a = n.V > 0 ? Math.min(0.45, n.V * 0.4) : Math.min(0.35, -n.V * 0.45);
+      const col = n.V > 0 ? `rgba(255, 140, 40, ${a})` : `rgba(70, 140, 230, ${a})`;
+      const col0 = n.V > 0 ? 'rgba(255, 140, 40, 0)' : 'rgba(70, 140, 230, 0)';
+      const g = ctx.createRadialGradient(n.x, n.y, n.r * 0.25, n.x, n.y, rad);
+      g.addColorStop(0, col);
+      g.addColorStop(1, col0);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, rad, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  /** 預烘單顆微膠細胞離屏 Sprite，巡邏移動時只需一次 drawImage */
+  function bakeMicrogliaSprite(mg) {
+    if (mg._sprite) return mg._sprite;
+    const S = 2;
+    const halfWorld = Math.ceil((mg.rad || 62) + 6);
+    const dim = halfWorld * 2 * S;
+    const c = document.createElement('canvas');
+    c.width = dim;
+    c.height = dim;
+    const g = c.getContext('2d');
+    g.save();
+    g.translate(dim / 2, dim / 2);
+    g.scale(S, S);
+    const vOpt = { o: 1.05, shadow: 4, detail: true };
+    drawGlia(g, mg, PAL.micro, vOpt, { noSoma: true });
+    somaGlow(g, 0, 0, 8, PAL.micro, 1.8);
+    drawNucleus(g, 0, 0, 4.6, 3.1, 0.15, PAL.micro.nucleus, vOpt.o * 0.55, null);
+    g.restore();
+    mg._sprite = { canvas: c, halfWorld };
+    return mg._sprite;
+  }
+
   BS.cells = {
     INK, PAL, LX, LY, NEURON_KINDS, V_UNM, V_MYE,
-    Geom, grow, buildNeuronMorph, buildAxon, pathToSoma, finalizeNeuron,
+    Geom, grow, buildNeuronMorph, buildAxon, attachCollateralPath, recomputeAxonTimes, pathToSoma, finalizeNeuron,
     buildAstrocyte, buildOligodendrocyte, buildOrphanSheaths, buildMicroglia, buildEpendymal,
-    timeAtS, sAtTime, drawSilhouette, strokeShading, somaGlow, drawNucleus, drawNeuron, drawGlia
+    timeAtS, sAtTime, drawSilhouette, strokeShading, somaGlow, drawNucleus, drawNeuron, drawGlia,
+    drawNeuronDynamicOverlay, bakeMicrogliaSprite
   };
 })();

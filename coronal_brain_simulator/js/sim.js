@@ -32,6 +32,9 @@
       spikes: [],           // { neuron, t0, gen, waveId, excit }
       psps: [],             // 突觸後樹突電位脈衝：{ syn, post, excit, t0, dur, amp, gen, waveId }
       somaRipples: [],      // 點擊或放電時胞體擴散視覺波紋
+      growingSprouts: [],   // 結構可塑性：正在生長的軸突側枝與生長錐
+      newSynapseCount: 0,   // 本區累計新生突觸數
+      onSproutComplete: null,
       wastes: [],           // 代謝物：{ x, y, vx, vy, type: 'adenosine'|'amyloid'|'glutamate' }
       csfParticles: [],     // 腦脊髓液／間質液流動微粒
 
@@ -44,6 +47,8 @@
     sim.spikes.length = 0;
     sim.psps.length = 0;
     sim.somaRipples.length = 0;
+    sim.growingSprouts.length = 0;
+    sim.newSynapseCount = 0;
     sim.wastes.length = 0;
     sim.csfParticles.length = 0;
     sim.activeWave = null;
@@ -181,8 +186,28 @@
         const pick = sc.real[Math.floor(Math.random() * sc.real.length)];
         fireNeuron(sim, sc, pick, { forced: false });
       }
+      if (sim.learningTimer < 3.0 && sim.learningTimer > 2.2 && sim.growingSprouts.length === 0) {
+        triggerSprout(sim, sc);
+      }
     }
     sim.bdnfLevel = U.lerp(sim.bdnfLevel, sim.isExercising ? 2.2 : 1.0, 0.04);
+
+    // 結構可塑性：推進正在萌芽生長的軸突側枝與生長錐
+    for (let i = sim.growingSprouts.length - 1; i >= 0; i--) {
+      const sp = sim.growingSprouts[i];
+      const rate = (1 + (sim.bdnfLevel - 1) * 0.4) / sp.dur;
+      sp.progress = Math.min(1, sp.progress + rawDt * rate);
+      if (sp.progress >= 1) {
+        const syn = BS.scene.commitSproutSynapse(sc, sp.pre, sp.post, sp.spec, sim.T);
+        sim.newSynapseCount++;
+        sim.growingSprouts.splice(i, 1);
+        if (BS.render && BS.render.invalidateSceneCache) BS.render.invalidateSceneCache();
+        fireNeuron(sim, sc, sp.pre, { forced: true, isUserClick: true });
+        if (typeof sim.onSproutComplete === 'function') {
+          sim.onSproutComplete(sp.pre, sp.post, syn);
+        }
+      }
+    }
 
     // 1. 血管紅血球流動與中風出血代謝物
     for (const v of sc.vessels) {
@@ -410,10 +435,35 @@
     }
   }
 
+  /** 主動誘導一條尚未相連的興奮性軸突長出側枝，並與下游樹突形成新突觸 */
+  function triggerSprout(sim, sc) {
+    if (!sc || !sc.real || sc.real.length < 2) return null;
+    const candidates = [];
+    for (const pre of sc.real) {
+      if (!pre.excit || !pre.axon || !pre.axon.paths.length) continue;
+      for (const post of sc.real) {
+        if (pre === post) continue;
+        if (pre.outputs.some((s) => s.post === post)) continue;
+        if (sim.growingSprouts.some((g) => g.pre === pre && g.post === post)) continue;
+        const d = U.dist(pre.x, pre.y, post.x, post.y);
+        candidates.push({ pre, post, d });
+      }
+    }
+    if (!candidates.length) return null;
+    candidates.sort((a, b) => a.d - b.d);
+    const pool = candidates.filter((c) => c.d < 640);
+    const chosen = (pool.length ? pool : candidates)[Math.floor(Math.random() * Math.min(4, (pool.length || candidates.length)))];
+    const spec = BS.scene.planSprout(sc, chosen.pre, chosen.post);
+    if (!spec) return null;
+    sim.growingSprouts.push({ pre: chosen.pre, post: chosen.post, spec, progress: 0, dur: 1.7 });
+    return chosen;
+  }
+
   BS.sim = {
     createSim,
     bindScene,
     fireNeuron,
+    triggerSprout,
     step
   };
 })();

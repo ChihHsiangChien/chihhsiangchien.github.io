@@ -1,5 +1,5 @@
 /* =========================================================================
- * main.js — 多尺度互動控制器、UI 狀態切換、點擊檢測與主迴圈
+ * main.js — 多尺度互動控制器、UI 狀態切換、iPad 觸控支援與主迴圈
  * ========================================================================= */
 (function () {
   'use strict';
@@ -9,35 +9,49 @@
   const ctx = canvas.getContext('2d');
   const miniCanvas = document.getElementById('minimap');
   const mctx = miniCanvas ? miniCanvas.getContext('2d') : null;
+  const diagCanvas = document.getElementById('plane-diagram');
+  const dctx = diagCanvas ? diagCanvas.getContext('2d') : null;
 
   let width = 0, height = 0, dpr = 1;
+  let inspectorH = 150, inspectorW = 256, inspectorManualPos = null;
+  let lastInspX = -1, lastInspY = -1;
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
-    width = window.innerWidth;
-    height = window.innerHeight;
+    width = window.visualViewport ? window.visualViewport.width : window.innerWidth;
+    height = window.visualViewport ? window.visualViewport.height : window.innerHeight;
     canvas.width = Math.round(width * dpr);
     canvas.height = Math.round(height * dpr);
+    lastInspX = -1;
+    lastInspY = -1;
   }
   window.addEventListener('resize', resize);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
   resize();
+
+  // 防止 iPadOS / iOS Safari 原生頁面雙指縮放與雙擊放大
+  document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false });
+  document.addEventListener('gesturechange', (e) => e.preventDefault(), { passive: false });
+  canvas.addEventListener('dblclick', (e) => e.preventDefault());
 
   /* ---------------- 核心應用狀態 ---------------- */
   const MIN_ZOOM = 0.85;
   const MAX_ZOOM = 320;
-  const MICRO_BASE_ZOOM = 26; // cam.zoom === 26 時，microZoom === 1.0
+  const MICRO_BASE_ZOOM = 26;
+  const ALL_HIGHLIGHT_KEYS = ['neuron', 'oligodendrocyte', 'astrocyte', 'microglia', 'ependyma', 'capillary'];
 
   const state = {
-    plane: 'anterior',       // 'anterior' | 'hippocampus'
-    stain: 'natural',        // 'natural' | 'nissl'
-    showLabels: true,        // 文字標籤 Toggle
-    showSignals: true,       // 訊號傳導動畫 Toggle
-    highlights: new Set(),   // 細胞種類高光篩選
+    plane: 'anterior',
+    stain: 'natural',
+    showLabels: true,
+    showSignals: true,
+    highlights: new Set(ALL_HIGHLIGHT_KEYS),
+    focusedCell: null,
+    activePreset: 'macro',
 
-    // 攝影機：cam.zoom < 13 以巨觀為主，cam.zoom >= 13 平滑過渡至顯微組織圖版
     cam: {
       zoom: 1.0, targetZoom: 1.0,
-      mx: 0, my: 8, targetMX: 0, targetMY: 8,     // 巨觀世界座標
-      ux: 0, uy: 0, targetUX: 0, targetUY: 0      // 顯微圖版局部座標 (-850..850, -560..560)
+      mx: 0, my: 8, targetMX: 0, targetMY: 8,
+      ux: 0, uy: 0, targetUX: 0, targetUY: 0
     },
 
     sample: { x: -195, y: -155, reg: 2, plane: 'anterior' },
@@ -45,7 +59,7 @@
     hoverReg: 0,
     sceneCache: new Map(),
     currentScene: null,
-    selected: null           // { kind, title, sub, region, desc, color, x, y, r, neuron }
+    selected: null
   };
 
   const sim = Sim.createSim();
@@ -66,7 +80,7 @@
     const key = forceNewSeed ? `${sceneKey(sample)}:${Date.now()}` : sceneKey(sample);
     let sc = state.sceneCache.get(key);
     if (!sc) {
-      const info = S.typeForRegion(reg, sample.x, sample.y, sample.plane) || { type: 'cortex', regionName: '大腦皮質' };
+      const info = S.typeForRegion(reg, sample.x, sample.y, sample.plane) || { type: 'cortex_anterior', regionName: '大腦皮質' };
       const seed = Math.abs((Math.round(sample.x * 131) ^ Math.round(sample.y * 977) ^ (reg * 7919) ^ (forceNewSeed || 0)) | 0) + 17;
       sc = S.generate(info, seed);
       state.sceneCache.set(key, sc);
@@ -74,6 +88,7 @@
     if (state.currentScene !== sc) {
       state.currentScene = sc;
       state.selected = null;
+      state.focusedCell = null;
       hideInspector();
       Sim.bindScene(sim, sc);
     }
@@ -94,8 +109,8 @@
 
   function macroScale() {
     const span = safeHorizontalSpan();
-    const availW = Math.max(340, span.right - span.left);
-    const availH = Math.max(300, height - 150);
+    const availW = Math.max(320, span.right - span.left);
+    const availH = Math.max(260, height - 165);
     return Math.min(availW / 1010, availH / 565) * state.cam.zoom;
   }
   function microZoom() {
@@ -112,14 +127,6 @@
       y: state.cam.my + (sy - height * 0.5) / s
     };
   }
-  function macroToScreen(wx, wy) {
-    const s = macroScale();
-    return {
-      x: width * 0.5 + (wx - state.cam.mx) * s,
-      y: height * 0.5 + (wy - state.cam.my) * s
-    };
-  }
-
   function screenToMicro(sx, sy) {
     const s = microFitScale();
     return {
@@ -134,7 +141,6 @@
       y: height * 0.5 + (wy - state.cam.uy) * s
     };
   }
-
   function isMicroActive() {
     return state.cam.zoom >= 12.5;
   }
@@ -152,11 +158,22 @@
     synapse: '化學突觸（Synaptic Cleft）：軸突終扣內含突觸囊泡，動作電位抵達時釋放神經傳導物質跨越約 20 nm 間隙結合突觸後受體，並由前膜轉運體（如 DAT）回收。'
   };
 
+  function getVesselBBox(v) {
+    if (v._bbox) return v._bbox;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const p of v.pts) {
+      if (p.x < x0) x0 = p.x; if (p.y < y0) y0 = p.y;
+      if (p.x > x1) x1 = p.x; if (p.y > y1) y1 = p.y;
+    }
+    const pad = v.R + 18;
+    v._bbox = { x0: x0 - pad, y0: y0 - pad, x1: x1 + pad, y1: y1 + pad };
+    return v._bbox;
+  }
+
   function pickMicroObject(wx, wy, hitPad) {
     const sc = state.currentScene;
     if (!sc) return null;
 
-    // 1. 若在突觸超微倍率，優先允許點選突觸
     if (microZoom() > 1.8) {
       for (const syn of sc.synapses) {
         if (U.dist(wx, wy, syn.contact.x, syn.contact.y) <= 8 + hitPad) {
@@ -172,7 +189,6 @@
       }
     }
 
-    // 2. 真實神經元胞體（最重要互動目標：點擊激發級聯擴散！）
     let bestNeuron = null, bestND = Infinity;
     for (const n of sc.real) {
       const d = U.dist(wx, wy, n.x, n.y);
@@ -183,7 +199,10 @@
     if (bestNeuron) {
       return {
         kind: 'neuron',
+        id: bestNeuron.id,
         neuron: bestNeuron,
+        entity: bestNeuron,
+        bbox: bestNeuron.bbox,
         title: bestNeuron.kindInfo.title,
         sub: bestNeuron.kindInfo.en,
         color: bestNeuron.excit ? '#f4d06a' : '#c7aee8',
@@ -192,57 +211,61 @@
       };
     }
 
-    // 3. 寡突膠質細胞本體
     for (const o of sc.oligos) {
       if (U.dist(wx, wy, o.x, o.y) <= o.r + 6 + hitPad) {
         return {
-          kind: 'oligodendrocyte', title: '寡突膠質細胞', sub: 'Oligodendrocyte',
+          kind: 'oligodendrocyte', id: o.id, entity: o,
+          title: '寡突膠質細胞', sub: 'Oligodendrocyte',
+          bbox: o.bbox,
           color: '#93d3f3', desc: CELL_DESCRIPTIONS.oligodendrocyte,
           x: o.x, y: o.y, r: o.r
         };
       }
     }
 
-    // 4. 星形膠質細胞本體
     for (const a of sc.astros) {
       if (U.dist(wx, wy, a.x, a.y) <= a.r + 6 + hitPad) {
         return {
-          kind: 'astrocyte', title: '星形膠質細胞', sub: 'Astrocyte',
+          kind: 'astrocyte', id: a.id, entity: a,
+          title: '星形膠質細胞', sub: 'Astrocyte',
+          bbox: a.bbox,
           color: '#9fcf63', desc: CELL_DESCRIPTIONS.astrocyte,
           x: a.x, y: a.y, r: a.r
         };
       }
     }
 
-    // 5. 微膠細胞
     for (const m of sc.micro) {
       if (U.dist(wx, wy, m.x, m.y) <= 18 + hitPad) {
         return {
-          kind: 'microglia', title: '微膠細胞', sub: 'Microglia',
+          kind: 'microglia', id: m.id, entity: m,
+          title: '微膠細胞', sub: 'Microglia',
+          bbox: { x0: m.x - m.rad, y0: m.y - m.rad, x1: m.x + m.rad, y1: m.y + m.rad },
           color: '#a9343f', desc: CELL_DESCRIPTIONS.microglia,
           x: m.x, y: m.y, r: 15
         };
       }
     }
 
-    // 6. 室管膜細胞
     for (const e of sc.epend) {
       if (U.dist(wx, wy, e.x, e.y) <= 19 + hitPad) {
         return {
-          kind: 'ependyma', title: '室管膜細胞', sub: 'Ependymal Cell',
+          kind: 'ependyma', id: e.id, entity: e,
+          title: '室管膜細胞', sub: 'Ependymal Cell',
+          bbox: e.bbox,
           color: '#f3a5b3', desc: CELL_DESCRIPTIONS.ependyma,
           x: e.x, y: e.y, r: 16
         };
       }
     }
 
-    // 7. 微血管
     for (const v of sc.vessels) {
       const nr = U.nearestOnPolyline(v.pts, v.cum, wx, wy);
       if (nr.d <= v.R + 6 + hitPad) {
         const P = U.pointAtS(v.pts, v.cum, nr.s);
         return {
-          kind: 'capillary', vessel: v, vesselS: nr.s,
+          kind: 'capillary', id: v.id, vessel: v, entity: v, vesselS: nr.s,
+          bbox: getVesselBBox(v),
           title: '腦微血管與紅血球', sub: 'Cerebral Capillary & RBCs',
           color: '#de5b4b', desc: CELL_DESCRIPTIONS.capillary,
           x: P.x, y: P.y, r: v.R + 4
@@ -250,20 +273,65 @@
       }
     }
 
-    // 8. 點在神經元樹突／有髓鞘軸突剪影上（Path2D hit test）
     for (const o of sc.oligos) {
       if (ctx.isPointInPath(o.body, wx, wy)) {
         return {
-          kind: 'oligodendrocyte', title: '有髓鞘節段（寡突膠細胞包覆）', sub: 'Myelin Internode',
+          kind: 'oligodendrocyte', id: o.id, entity: o,
+          title: '有髓鞘節段（寡突膠細胞包覆）', sub: 'Myelin Internode',
+          bbox: o.bbox,
           color: '#93d3f3', desc: CELL_DESCRIPTIONS.oligodendrocyte,
-          x: wx, y: wy, r: 10
+          x: o.x, y: o.y, r: o.r
         };
       }
     }
+
+    for (const a of sc.astros) {
+      if (ctx.isPointInPath(a.body, wx, wy)) {
+        return {
+          kind: 'astrocyte', id: a.id, entity: a,
+          title: '星形膠質細胞', sub: 'Astrocyte',
+          bbox: a.bbox,
+          color: '#9fcf63', desc: CELL_DESCRIPTIONS.astrocyte,
+          x: a.x, y: a.y, r: a.r
+        };
+      }
+    }
+
+    for (const m of sc.micro) {
+      const dx = wx - m.x, dy = wy - m.y;
+      if (dx * dx + dy * dy <= m.rad * m.rad) {
+        const cs = Math.cos(-m.rot), sn = Math.sin(-m.rot);
+        if (ctx.isPointInPath(m.body, dx * cs - dy * sn, dx * sn + dy * cs)) {
+          return {
+            kind: 'microglia', id: m.id, entity: m,
+            title: '微膠細胞', sub: 'Microglia',
+            bbox: { x0: m.x - m.rad, y0: m.y - m.rad, x1: m.x + m.rad, y1: m.y + m.rad },
+            color: '#a9343f', desc: CELL_DESCRIPTIONS.microglia,
+            x: m.x, y: m.y, r: 15
+          };
+        }
+      }
+    }
+
+    for (const e of sc.epend) {
+      const dx = wx - e.x, dy = wy - e.y;
+      const cs = Math.cos(-e.rot), sn = Math.sin(-e.rot);
+      if (ctx.isPointInPath(e.body, dx * cs - dy * sn, dx * sn + dy * cs)) {
+        return {
+          kind: 'ependyma', id: e.id, entity: e,
+          title: '室管膜細胞', sub: 'Ependymal Cell',
+          bbox: e.bbox,
+          color: '#f3a5b3', desc: CELL_DESCRIPTIONS.ependyma,
+          x: e.x, y: e.y, r: 16
+        };
+      }
+    }
+
     for (const n of sc.real) {
       if (ctx.isPointInPath(n.body, wx, wy)) {
         return {
-          kind: 'neuron', neuron: n,
+          kind: 'neuron', id: n.id, neuron: n, entity: n,
+          bbox: n.bbox,
           title: n.kindInfo.title, sub: n.kindInfo.en,
           color: n.excit ? '#f4d06a' : '#c7aee8',
           desc: CELL_DESCRIPTIONS.neuron(n),
@@ -286,16 +354,51 @@
   const elCiTitle = document.getElementById('ci-title');
   const elCiRegion = document.getElementById('ci-region');
   const elCiDesc = document.getElementById('ci-desc');
+  const elCiHighlightBtn = document.getElementById('ci-highlight-btn');
   const elCiFireBtn = document.getElementById('ci-fire-btn');
 
   function setStatus(html) {
     if (elStatusMsg) elStatusMsg.innerHTML = html;
   }
 
+  const HIGHLIGHT_BTN_LABEL = {
+    neuron: '此神經元',
+    oligodendrocyte: '此寡突膠質細胞',
+    astrocyte: '此星形膠質細胞',
+    microglia: '此微膠細胞',
+    ependyma: '此室管膜細胞',
+    capillary: '此微血管'
+  };
+
+  function isSameFocused(sel) {
+    return !!(sel && state.focusedCell && state.focusedCell.kind === sel.kind && state.focusedCell.id === sel.id);
+  }
+
+  function syncInspectorHighlightBtn() {
+    if (!elCiHighlightBtn) return;
+    const sel = state.selected;
+    const suffix = sel && sel.id != null ? HIGHLIGHT_BTN_LABEL[sel.kind] : null;
+    if (!suffix) {
+      elCiHighlightBtn.style.display = 'none';
+    } else {
+      elCiHighlightBtn.style.display = 'inline-flex';
+      const isFocused = isSameFocused(sel);
+      elCiHighlightBtn.classList.toggle('active', isFocused);
+      elCiHighlightBtn.textContent = isFocused ? '取消單獨 highlight' : `單獨 highlight ${suffix}`;
+    }
+    if (elInspector && elInspector.classList.contains('visible')) {
+      inspectorW = elInspector.offsetWidth || inspectorW;
+      inspectorH = elInspector.offsetHeight || inspectorH;
+      lastInspX = -1;
+      lastInspY = -1;
+    }
+  }
+
   function showInspector(sel) {
     state.selected = sel;
     if (!sel || !elInspector) return;
     const sc = state.currentScene;
+    inspectorManualPos = null;
     elCiSwatch.style.background = sel.color;
     elCiTitle.textContent = `${sel.title}`;
     elCiRegion.textContent = `${sc ? sc.info.regionName : ''} · ${sel.sub}`;
@@ -304,14 +407,74 @@
       elCiFireBtn.style.display = sel.neuron ? 'inline-flex' : 'none';
     }
     elInspector.classList.add('visible');
+    syncInspectorHighlightBtn();
+    inspectorW = elInspector.offsetWidth || 256;
+    inspectorH = elInspector.offsetHeight || 150;
+    lastInspX = -1;
+    lastInspY = -1;
   }
 
   function hideInspector() {
     state.selected = null;
+    inspectorManualPos = null;
     if (elInspector) elInspector.classList.remove('visible');
   }
 
+  // 支援使用者直接拖曳浮動圖鑑卡標題列微調位置
+  const elCiHead = elInspector ? elInspector.querySelector('.ci-head') : null;
+  if (elCiHead) {
+    let dragCard = null;
+    elCiHead.addEventListener('pointerdown', (e) => {
+      if (e.target && e.target.closest('#ci-close')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const baseX = lastInspX >= 0 ? lastInspX : Math.round(elInspector.getBoundingClientRect().left);
+      const baseY = lastInspY >= 0 ? lastInspY : Math.round(elInspector.getBoundingClientRect().top);
+      dragCard = { id: e.pointerId, sx: e.clientX, sy: e.clientY, bx: baseX, by: baseY };
+      try { elCiHead.setPointerCapture(e.pointerId); } catch (_) {}
+    });
+    elCiHead.addEventListener('pointermove', (e) => {
+      if (!dragCard || e.pointerId !== dragCard.id) return;
+      const cw = inspectorW || 256;
+      const ch = inspectorH || 150;
+      const nx = Math.round(U.clamp(dragCard.bx + (e.clientX - dragCard.sx), 10, width - cw - 10));
+      const ny = Math.round(U.clamp(dragCard.by + (e.clientY - dragCard.sy), 72, height - ch - 46));
+      inspectorManualPos = { x: nx, y: ny };
+      lastInspX = nx;
+      lastInspY = ny;
+      elInspector.style.transform = `translate3d(${nx}px, ${ny}px, 0)`;
+    });
+    const endCardDrag = (e) => {
+      if (dragCard && e.pointerId === dragCard.id) dragCard = null;
+    };
+    elCiHead.addEventListener('pointerup', endCardDrag);
+    elCiHead.addEventListener('pointercancel', endCardDrag);
+  }
+
   document.getElementById('ci-close').addEventListener('click', hideInspector);
+  if (elCiHighlightBtn) {
+    elCiHighlightBtn.addEventListener('click', () => {
+      const sel = state.selected;
+      if (!sel || sel.id == null || !HIGHLIGHT_BTN_LABEL[sel.kind]) return;
+      inspectorManualPos = null;
+      lastInspX = -1;
+      lastInspY = -1;
+      if (isSameFocused(sel)) {
+        state.focusedCell = null;
+        setStatus('已取消單獨 highlight，恢復完整顯微細胞網路顯示。');
+      } else {
+        state.focusedCell = { kind: sel.kind, id: sel.id };
+        if (!state.highlights.has(sel.kind)) {
+          state.highlights.add(sel.kind);
+          syncHighlights();
+        }
+        setStatus(sel.kind === 'neuron'
+          ? `已單獨 highlight「<b>${sel.title}</b>」：可完整追蹤此細胞的胞體、樹突、軸突與側枝分佈（按 Esc 或再次點擊可恢復）。`
+          : `已單獨 highlight「<b>${sel.title}</b>」：其餘細胞已淡化，可清楚追蹤完整構造與分佈（按 Esc 或再次點擊可恢復）。`);
+      }
+      syncInspectorHighlightBtn();
+    });
+  }
   if (elCiFireBtn) {
     elCiFireBtn.addEventListener('click', () => {
       if (state.selected && state.selected.neuron && state.currentScene) {
@@ -327,26 +490,41 @@
       syncToggleButtons();
     }
     Sim.fireNeuron(sim, state.currentScene, n, { forced: true, isUserClick: true });
-    setStatus(`⚡ 已刺激「<b>${n.kindInfo.title}</b>」產生動作電位！觀察訊號沿軸突與側枝跳躍傳導並擴散至下游細胞（<b>快速連點同一細胞</b>可體驗時間總和，跨過更多下游閾值）。`);
+    lastStatsAt = -1000;
+    setStatus(`已刺激「<b>${n.kindInfo.title}</b>」產生動作電位：訊號沿軸突與側枝跳躍傳導並擴散至下游細胞（<b>快速連點同一細胞</b>可體驗時間總和）。`);
   }
+
+  sim.onSproutComplete = (pre, post) => {
+    lastStatsAt = -1000;
+    setStatus(`新突觸成形：「<b>${pre.kindInfo.title}</b>」已長出新側枝連接至「<b>${post.kindInfo.title}</b>」，並隨即傳出第一波動作電位！`);
+  };
 
   /* ---------------- 飛行跳轉預設區域 ---------------- */
   const PRESETS = {
-    macro:     { macro: true, x: 0,    y: 8,    zoom: 1.0,  msg: '📖 已返回 <b>1x 全腦冠狀切面</b>：點擊任意腦區或滾輪放大即可進入教科書級細胞插畫世界。' },
-    cortex:    { x: -198, y: -154, reg: 2, zoom: 28,  ux: 0, uy: 0, msg: '🔬 <b>大腦皮質灰質</b>：可見無縫連續的錐體神經元、頂端樹突棘、籃狀抑制性中間神經元與血管周星形膠細胞終足。點擊任意神經元觀察級聯傳導！' },
-    hippo:     { x: 108,  y: 108,  reg: 8, zoom: 28,  ux: 0, uy: 0, plane: 'hippocampus', msg: '🔬 <b>海馬迴 CA 錐體細胞層</b>：錐體細胞整齊成帶排列，點選一顆錐體神經元可清楚觀察訊號沿側枝向鄰近錐體細胞橫向擴散！' },
-    striatum:  { x: -120, y: 15,   reg: 6, zoom: 28,  ux: 0, uy: 0, msg: '🔬 <b>基底核（紋狀體）</b>：中型多棘抑制性神經元（淡紫）、大型膽鹼性中間神經元與穿越的鉛筆狀有髓鞘纖維束。' },
-    thalamus:  { x: -34,  y: 22,   reg: 6, zoom: 28,  ux: 0, uy: 0, plane: 'hippocampus', msg: '🔬 <b>視丘中繼核團</b>：叢狀樹突視丘中繼神經元接收上行傳入纖維並向皮質投射。' },
-    callosum:  { x: 0,    y: -68,  reg: 4, zoom: 28,  ux: 0, uy: 0, msg: '🔬 <b>胼胝體橫向白質束</b>：密集平行排列的有髓鞘神經纖維、蘭氏結跳躍放電與束間寡突膠質細胞。' },
-    capsule:   { x: 82,   y: 12,   reg: 7, zoom: 28,  ux: 0, uy: 0, msg: '🔬 <b>內囊垂直白質通道</b>：上下行皮質脊髓與視丘皮質有髓鞘軸突束。' },
-    radiata:   { x: 192,  y: -120, reg: 3, zoom: 28,  ux: 0, uy: 0, msg: '🔬 <b>中央白質（輻射冠）</b>：扇形放射走行的有髓鞘投射纖維與纖維型星形膠質細胞。' },
-    ventricle: { x: -30,  y: -30,  reg: 5, zoom: 28,  ux: 0, uy: 20, msg: '🔬 <b>側腦室壁與室管膜</b>：粉紅色室管膜細胞頂端紅纖毛節律擺動推動腦脊髓液（開啟「深度睡眠」可觀察排毒沖刷！）。' },
-    synapse:   { synapseZoom: true, msg: '🔍 <b>超微突觸間隙特寫</b>：觀察突觸前終扣內的突觸囊泡、多巴胺回收轉運體（DAT）、擴散中的傳導物質微粒與突觸後受體結合！' }
+    macro:     { macro: true, x: 0,    y: 8,    zoom: 1.0,  msg: '已返回 <b>1x 全腦冠狀切面</b>：點擊任意腦區或滾輪縮放即可進入顯微細胞插畫視野。' },
+    cortex:    { x: -198, y: -154, reg: 2, zoom: 28,  ux: 0, uy: 0, msg: '<b>大腦皮質深層迴路</b>：切換左側「前連合」與「視丘／海馬迴」層面，可對比前額大型錐體束與頂葉高密度顆粒星狀神經元。' },
+    hippo:     { x: 108,  y: 108,  reg: 8, zoom: 28,  ux: 0, uy: 0, plane: 'hippocampus', msg: '<b>海馬迴 CA 錐體細胞層</b>：已切換至視丘／海馬迴層面，錐體細胞成帶排列，點選細胞可觀察訊號沿側枝橫向擴散。' },
+    striatum:  { x: -120, y: 15,   reg: 6, zoom: 28,  ux: 0, uy: 0, plane: 'anterior', msg: '<b>基底核（紋狀體）</b>：已切換至前連合層面，可見 GABA 中型多棘神經元、大型膽鹼性中間神經元與穿越的鉛筆狀纖維束。' },
+    thalamus:  { x: -34,  y: 22,   reg: 6, zoom: 28,  ux: 0, uy: 0, plane: 'hippocampus', msg: '<b>視丘中繼核團</b>：已切換至視丘／海馬迴層面，叢狀樹突視丘中繼神經元接收上行傳入纖維並向皮質投射。' },
+    callosum:  { x: 0,    y: -68,  reg: 4, zoom: 28,  ux: 0, uy: 0, msg: '<b>胼胝體橫向白質束</b>：密集平行排列的有髓鞘神經纖維、蘭氏結跳躍放電與束間寡突膠質細胞。' },
+    capsule:   { x: 82,   y: 12,   reg: 7, zoom: 28,  ux: 0, uy: 0, msg: '<b>內囊垂直白質通道</b>：上下行皮質脊髓與視丘皮質有髓鞘軸突束。' },
+    radiata:   { x: 192,  y: -120, reg: 3, zoom: 28,  ux: 0, uy: 0, msg: '<b>中央白質（輻射冠）</b>：扇形放射走行的有髓鞘投射纖維與纖維型星形膠質細胞。' },
+    ventricle: { x: -30,  y: -30,  reg: 5, zoom: 28,  ux: 0, uy: 20, msg: '<b>側腦室壁與室管膜</b>：粉紅色室管膜細胞頂端纖毛節律擺動推動腦脊髓液（開啟「深度睡眠」可觀察排毒沖刷）。' },
+    synapse:   { synapseZoom: true, msg: '<b>超微突觸間隙特寫</b>：可觀察突觸前終扣內的突觸囊泡、轉運體（DAT）、擴散中的傳導物質微粒與突觸後受體結合。' }
   };
+
+  function syncPresetButtons() {
+    document.querySelectorAll('[data-preset]').forEach((b) => {
+      b.classList.toggle('active', b.dataset.preset === state.activePreset);
+    });
+  }
 
   function goToPreset(key) {
     const p = PRESETS[key];
     if (!p) return;
+    state.activePreset = key;
+    syncPresetButtons();
+
     if (p.synapseZoom) {
       if (!isMicroActive()) {
         loadSceneForSample(state.sample);
@@ -368,8 +546,10 @@
     if (p.plane && state.plane !== p.plane) {
       state.plane = p.plane;
       syncPlaneButtons();
+      drawPlaneDiagram();
     }
     if (p.macro) {
+      state.focusedCell = null;
       hideInspector();
       state.cam.targetMX = p.x;
       state.cam.targetMY = p.y;
@@ -393,16 +573,18 @@
     if (reg === 0) return false;
     state.sample = { x: wx, y: wy, reg, plane: state.plane };
     const sc = loadSceneForSample(state.sample);
+    state.activePreset = '';
+    syncPresetButtons();
     state.cam.targetMX = wx;
     state.cam.targetMY = wy;
     state.cam.targetUX = 0;
     state.cam.targetUY = 0;
     state.cam.targetZoom = targetZoom || 28;
-    setStatus(`🔬 已進入「<b>${sc.info.regionName}</b>」顯微插圖視野 —— 點擊任意<b>神經元</b>可觀察動作電位擴散至其他細胞！`);
+    setStatus(`已進入「<b>${sc.info.regionName}</b>」顯微插圖視野 —— 點擊任意<b>神經元</b>可觀察動作電位擴散至其他細胞。`);
     return true;
   }
 
-  /* ---------------- 滑鼠與觸控手勢 ---------------- */
+  /* ---------------- 滑鼠與 iPad 觸控手勢 ---------------- */
   const pointers = new Map();
   let isDragging = false;
   let movedDist = 0;
@@ -423,8 +605,7 @@
 
   canvas.addEventListener('pointermove', (e) => {
     if (!pointers.has(e.pointerId)) {
-      // 巨觀下未按住滑鼠時更新解剖分區預覽
-      if (!isMicroActive()) {
+      if (!isMicroActive() && e.pointerType !== 'touch') {
         const mw = screenToMacro(e.clientX, e.clientY);
         state.hoverMacro = mw;
         state.hoverReg = M.getRegionAt(mw.x, mw.y, state.plane);
@@ -462,16 +643,22 @@
     }
   });
 
-  canvas.addEventListener('pointerup', (e) => {
+  function clearPointer(e) {
     pointers.delete(e.pointerId);
     if (pointers.size < 2) lastPinchDist = 0;
-    if (pointers.size === 0) {
-      if (isDragging && movedDist < 6) {
-        handleStageClick(e.clientX, e.clientY);
-      }
-      isDragging = false;
+    if (pointers.size === 0) isDragging = false;
+  }
+
+  canvas.addEventListener('pointerup', (e) => {
+    const tapTol = e.pointerType === 'touch' ? 14 : 6;
+    const wasTap = pointers.size === 1 && isDragging && movedDist < tapTol;
+    clearPointer(e);
+    if (wasTap) {
+      handleStageClick(e.clientX, e.clientY, e.pointerType);
     }
   });
+
+  canvas.addEventListener('pointercancel', clearPointer);
 
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
@@ -485,7 +672,6 @@
     if (Math.abs(newZoom - oldZoom) < 1e-4) return;
 
     if (oldZoom < 12.5 && newZoom >= 12.5) {
-      // 從巨觀放大跨入顯微：鎖定滑鼠所在的腦區載入對應顯微場景！
       const mw = screenToMacro(sx, sy);
       const reg = M.getRegionAt(mw.x, mw.y, state.plane);
       if (reg > 0) {
@@ -520,8 +706,7 @@
     }
   }
 
-  function handleStageClick(sx, sy) {
-    // 1. 巨觀視角：點擊標籤或腦區直接進入該腦區的顯微插畫圖版
+  function handleStageClick(sx, sy, pointerType) {
     if (!isMicroActive()) {
       const mw = screenToMacro(sx, sy);
       if (state.showLabels) {
@@ -533,11 +718,10 @@
           }
         }
       }
-      if (enterMicroAtMacroPoint(mw.x, mw.y, 28)) return;
+      enterMicroAtMacroPoint(mw.x, mw.y, 28);
       return;
     }
 
-    // 2. 顯微視角：先檢查是否處於臨床中風血管點擊模式
     const uw = screenToMicro(sx, sy);
     const sc = state.currentScene;
     if (!sc) return;
@@ -549,35 +733,48 @@
           const P = U.pointAtS(v.pts, v.cum, nr.s);
           if (sim.interactionMode === 'ischemic') {
             v.clot = v.clot ? null : { s: nr.s, x: P.x, y: P.y };
-            setStatus('🩸 <b>缺血性血管栓塞</b>：紅血球受阻停滯，鄰近神經元 ATP 開始下降並出現缺氧異常放電！');
+            setStatus('<b>缺血性血管栓塞</b>：紅血球受阻停滯，鄰近神經元 ATP 開始下降並出現缺氧異常放電。');
           } else {
             v.hem = v.hem ? null : { s: nr.s, x: P.x, y: P.y };
-            setStatus('💥 <b>出血性血管破裂</b>：血液外滲並釋放大量興奮毒性麩胺酸（橘紅微粒），微膠細胞正趕往清除！');
+            setStatus('<b>出血性血管破裂</b>：血液外滲並釋放大量興奮毒性麩胺酸（橘紅微粒），微膠細胞正趕往清除。');
           }
           setPathologyMode('stimulate');
           return;
         }
       }
-      setStatus('🩸 請點擊畫面中的<b>紅色微血管</b>以觸發血管栓塞或破裂！');
+      setStatus('請點擊畫面中的<b>紅色微血管</b>以觸發血管栓塞或破裂。');
       return;
     }
 
-    // 3. 一般顯微互動：點選神經元觸發跨細胞級聯擴散，或點選膠細胞／血管／突觸查看說明
-    const hitPad = Math.max(4, 10 / Math.max(0.6, microZoom()));
+    const touchExtra = pointerType === 'touch' ? 8 : 0;
+    const hitPad = Math.max(4, (10 + touchExtra) / Math.max(0.6, microZoom()));
     const picked = pickMicroObject(uw.x, uw.y, hitPad);
     if (picked) {
       showInspector(picked);
       if (picked.neuron) {
         triggerUserNeuronCascade(picked.neuron);
       } else {
-        setStatus(`🔎 已選取「<b>${picked.title}</b>」— ${picked.desc}`);
+        setStatus(`已選取「<b>${picked.title}</b>」— ${picked.desc}`);
       }
     } else {
       hideInspector();
     }
   }
 
-  /* ---------------- 小地圖點擊導覽 ---------------- */
+  /* ---------------- 側面切線示意圖 & 導覽小地圖 ---------------- */
+  function drawPlaneDiagram() {
+    if (!dctx || !diagCanvas) return;
+    M.drawSagittalCutDiagram(dctx, diagCanvas.width, diagCanvas.height, state.plane, state.stain);
+  }
+
+  if (diagCanvas) {
+    diagCanvas.addEventListener('click', (e) => {
+      const rect = diagCanvas.getBoundingClientRect();
+      const rx = (e.clientX - rect.left) / rect.width;
+      switchPlane(rx < 0.47 ? 'anterior' : 'hippocampus');
+    });
+  }
+
   if (miniCanvas) {
     miniCanvas.addEventListener('click', (e) => {
       const rect = miniCanvas.getBoundingClientRect();
@@ -590,14 +787,22 @@
     });
   }
 
+  let lastMinimapKey = '';
+  let lastMinimapVis = false;
+
   function drawMinimap() {
     if (!mctx || !miniCanvas) return;
     const wrap = document.getElementById('minimap-wrap');
-    if (!isMicroActive()) {
-      if (wrap) wrap.classList.remove('visible');
-      return;
+    const vis = isMicroActive();
+    if (vis !== lastMinimapVis) {
+      lastMinimapVis = vis;
+      if (wrap) wrap.classList.toggle('visible', vis);
     }
-    if (wrap) wrap.classList.add('visible');
+    if (!vis) return;
+
+    const mmKey = `${state.plane}:${state.stain}:${Math.round(state.sample.x)}:${Math.round(state.sample.y)}`;
+    if (mmKey === lastMinimapKey) return;
+    lastMinimapKey = mmKey;
 
     const mw = miniCanvas.width, mh = miniCanvas.height;
     mctx.clearRect(0, 0, mw, mh);
@@ -617,7 +822,7 @@
     mctx.restore();
   }
 
-  /* ---------------- UI 按鈕與快捷鍵綁定 ---------------- */
+  /* ---------------- UI 按鈕、切面切換與快捷鍵綁定 ---------------- */
   function syncToggleButtons() {
     const btnLbl = document.getElementById('btn-toggle-labels');
     const btnSig = document.getElementById('btn-toggle-signals');
@@ -626,20 +831,20 @@
 
     if (btnLbl) {
       btnLbl.classList.toggle('active', state.showLabels);
-      btnLbl.innerHTML = state.showLabels ? '🏷️ 標籤：開' : '🏷️ 標籤：關';
+      btnLbl.textContent = state.showLabels ? '標籤：開' : '標籤：關';
     }
     if (btnSig) {
       btnSig.classList.toggle('active', state.showSignals);
-      btnSig.innerHTML = state.showSignals ? '⚡ 訊號：開' : '⚡ 訊號：關';
+      btnSig.textContent = state.showSignals ? '訊號：開' : '訊號：關';
     }
     if (btnAuto) {
       btnAuto.classList.toggle('active', sim.spontaneous);
-      btnAuto.innerHTML = sim.spontaneous ? '🔄 自發：開' : '🔄 自發：靜止';
+      btnAuto.textContent = sim.spontaneous ? '自發：開' : '自發：靜止';
     }
     if (btnSlow) {
       const isSlow = sim.speed < 0.6;
       btnSlow.classList.toggle('active', isSlow);
-      btnSlow.innerHTML = isSlow ? '🐢 0.35x' : '⏱️ 1.0x';
+      btnSlow.textContent = isSlow ? '慢動作 0.35x' : '速度 1.0x';
     }
   }
 
@@ -649,33 +854,58 @@
     });
   }
 
+  function switchPlane(nextPlane) {
+    if (!nextPlane) return;
+    state.plane = nextPlane;
+    syncPlaneButtons();
+    drawPlaneDiagram();
+
+    if (isMicroActive()) {
+      state.sample.plane = state.plane;
+      const newReg = M.getRegionAt(state.sample.x, state.sample.y, state.plane) || 2;
+      const prevReg = state.sample.reg;
+      state.sample.reg = newReg;
+      const sc = loadSceneForSample(state.sample);
+      if (newReg !== prevReg) {
+        setStatus(`切面已切換至「<b>${state.plane === 'anterior' ? '前連合層面' : '視丘／海馬迴層面'}</b>」，此座標對應解剖區變更為「<b>${sc.info.regionName}</b>」。`);
+        return;
+      }
+      setStatus(`切面已切換至「<b>${state.plane === 'anterior' ? '前連合層面' : '視丘／海馬迴層面'}</b>」，目前顯示「<b>${sc.info.title}</b>」。`);
+      return;
+    }
+
+    setStatus(state.plane === 'anterior'
+      ? '已切換冠狀切面至「<b>前連合層面</b>」（含前額皮質、尾狀核、豆狀核與前連合）。'
+      : '已切換冠狀切面至「<b>視丘與海馬迴層面</b>」（含頂葉皮質、深部視丘核團與海馬迴 CA 錐體層）。');
+  }
+
   document.getElementById('btn-toggle-labels').addEventListener('click', () => {
     state.showLabels = !state.showLabels;
     syncToggleButtons();
-    setStatus(state.showLabels ? '🏷️ 已開啟解剖與細胞結構引線標籤（快捷鍵 L）。' : '🏷️ 已隱藏文字標籤，可純粹欣賞教科書解剖手繪插圖（快捷鍵 L）。');
+    setStatus(state.showLabels ? '已開啟解剖與細胞結構引線標籤（快捷鍵 L）。' : '已隱藏文字標籤，可純粹檢視解剖手繪插圖（快捷鍵 L）。');
   });
 
   document.getElementById('btn-toggle-signals').addEventListener('click', () => {
     state.showSignals = !state.showSignals;
     sim.enabled = state.showSignals;
     syncToggleButtons();
-    setStatus(state.showSignals ? '⚡ 已開啟神經訊號傳導與突觸級聯動畫（快捷鍵 S）。' : '⚡ 已暫停訊號傳導顯示，呈現靜態解剖組織插圖（快捷鍵 S）。');
+    setStatus(state.showSignals ? '已開啟神經訊號傳導與突觸級聯動畫（快捷鍵 S）。' : '已暫停訊號傳導顯示，呈現靜態解剖組織插圖（快捷鍵 S）。');
   });
 
   document.getElementById('btn-toggle-spont').addEventListener('click', () => {
     sim.spontaneous = !sim.spontaneous;
     syncToggleButtons();
     setStatus(sim.spontaneous
-      ? '🔄 已恢復背景生理自發放電。'
-      : '🎯 已關閉背景自發放電：網路進入安靜待命狀態，現在<b>點擊任一神經元</b>即可觀察純粹由該細胞引發的跨細胞擴散波！');
+      ? '已恢復背景生理自發放電。'
+      : '已關閉背景自發放電：網路進入靜息待命狀態，現在<b>點擊任一神經元</b>即可觀察純粹由該細胞引發的跨細胞擴散波。');
   });
 
   document.getElementById('btn-toggle-slow').addEventListener('click', () => {
     sim.speed = sim.speed < 0.6 ? 1.0 : 0.35;
     syncToggleButtons();
     setStatus(sim.speed < 0.6
-      ? '🐢 已切換為 <b>0.35x 慢動作模式</b>：可仔細觀察蘭氏結跳躍傳導、突觸囊泡釋放與樹突 EPSP 向胞體匯聚！'
-      : '⏱️ 已恢復 1.0x 標準傳導觀察速度。');
+      ? '已切換為 <b>0.35x 慢動作模式</b>：可仔細觀察蘭氏結跳躍傳導、突觸囊泡釋放與樹突 EPSP 向胞體匯聚。'
+      : '已恢復 1.0x 標準傳導觀察速度。');
   });
 
   document.getElementById('btn-resample').addEventListener('click', () => {
@@ -684,22 +914,11 @@
       return;
     }
     loadSceneForSample(state.sample, Math.floor(Math.random() * 100000) + 1);
-    setStatus('🎲 已重新抽樣此腦區的局部神經元與血管微環境構圖！');
+    setStatus('已重新抽樣此腦區的局部神經元與血管微環境構圖。');
   });
 
   document.querySelectorAll('[data-plane]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      state.plane = btn.dataset.plane;
-      syncPlaneButtons();
-      if (isMicroActive()) {
-        state.sample.plane = state.plane;
-        state.sample.reg = M.getRegionAt(state.sample.x, state.sample.y, state.plane) || 2;
-        loadSceneForSample(state.sample);
-      }
-      setStatus(state.plane === 'anterior'
-        ? '🧠 已切換冠狀切面至「<b>前連合層面</b>」（含尾狀核、殼核、蒼白球、前連合）。'
-        : '🧠 已切換冠狀切面至「<b>視丘與海馬迴層面</b>」（含深部視丘核團與顳葉海馬迴 CA 錐體層）。');
-    });
+    btn.addEventListener('click', () => switchPlane(btn.dataset.plane));
   });
 
   document.querySelectorAll('[data-stain]').forEach((btn) => {
@@ -707,22 +926,29 @@
       document.querySelectorAll('[data-stain]').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       state.stain = btn.dataset.stain;
+      drawPlaneDiagram();
       setStatus(state.stain === 'natural'
-        ? '🎨 已切換為「<b>經典教科書插畫配色</b>」（暖羊皮紙底與手繪墨線立體著色）。'
-        : '🎨 已切換為「<b>Nissl + LFB 組織學染色對比</b>」。');
+        ? '已切換為「<b>自然手繪插畫配色</b>」（暖羊皮紙底與墨線立體著色）。'
+        : '已切換為「<b>Nissl + LFB 組織學染色對比</b>」。');
     });
   });
 
-  // 細胞種類高光複選
+  // 細胞顯示與 highlight 篩選（單一按鈕在「全數隱藏」與「全數選取」間 Toggle）
   const hlBoxes = document.querySelectorAll('[data-highlight]');
-  const btnClearHl = document.getElementById('clear-highlight-btn');
+  const btnToggleAllHl = document.getElementById('toggle-highlight-all-btn');
+
   function syncHighlights() {
     hlBoxes.forEach((cb) => {
       cb.checked = state.highlights.has(cb.dataset.highlight);
       cb.closest('.legend-item').classList.toggle('selected', cb.checked);
     });
-    if (btnClearHl) btnClearHl.disabled = state.highlights.size === 0;
+    if (btnToggleAllHl) {
+      const allOn = state.highlights.size === ALL_HIGHLIGHT_KEYS.length;
+      btnToggleAllHl.textContent = allOn ? '全數隱藏' : '全數選取';
+      btnToggleAllHl.classList.toggle('active', !allOn && state.highlights.size === 0);
+    }
   }
+
   hlBoxes.forEach((cb) => {
     cb.addEventListener('change', () => {
       if (cb.checked) state.highlights.add(cb.dataset.highlight);
@@ -730,40 +956,59 @@
       syncHighlights();
     });
   });
-  if (btnClearHl) {
-    btnClearHl.addEventListener('click', () => {
-      state.highlights.clear();
+
+  if (btnToggleAllHl) {
+    btnToggleAllHl.addEventListener('click', () => {
+      state.focusedCell = null;
+      if (state.highlights.size === ALL_HIGHLIGHT_KEYS.length) {
+        state.highlights.clear();
+        setStatus('已全數隱藏顯微細胞與血管圖層；可單獨勾選想觀察的細胞，或再次點擊「全數選取」。');
+      } else {
+        ALL_HIGHLIGHT_KEYS.forEach((k) => state.highlights.add(k));
+        setStatus('已全數選取並顯示所有細胞、髓鞘與微血管圖層。');
+      }
       syncHighlights();
+      syncInspectorHighlightBtn();
     });
   }
 
-  // 生理與臨床病理控制（整合自 brain_cells）
+  // 生理與臨床病理控制
   document.getElementById('btn-sleep').addEventListener('click', (e) => {
     sim.isSleeping = !sim.isSleeping;
     e.currentTarget.classList.toggle('active', sim.isSleeping);
-    e.currentTarget.innerHTML = sim.isSleeping ? '☀️ 喚醒大腦（結束排毒）' : '🌙 深度睡眠（類淋巴排毒）';
+    e.currentTarget.textContent = sim.isSleeping ? '喚醒大腦（結束排毒）' : '深度睡眠（類淋巴排毒）';
     setStatus(sim.isSleeping
-      ? '🌙 <b>深度睡眠啟動</b>：綠色星形膠細胞收縮打開細胞間隙，腦脊髓液（藍流線）與室管膜纖毛加速沖刷紫色腺苷與類澱粉蛋白斑塊！'
-      : '☀️ <b>清醒模式</b>：星形膠細胞終足恢復緊密包覆微血管，支援高頻突觸傳導。');
+      ? '<b>深度睡眠啟動</b>：星形膠細胞收縮打開細胞間隙，腦脊髓液與室管膜纖毛加速沖刷紫色腺苷與類澱粉蛋白斑塊。'
+      : '<b>清醒模式</b>：星形膠細胞終足恢復緊密包覆微血管，支援高頻突觸傳導。');
   });
 
   document.getElementById('btn-exercise').addEventListener('click', (e) => {
     sim.isExercising = !sim.isExercising;
     e.currentTarget.classList.toggle('active', sim.isExercising);
     setStatus(sim.isExercising
-      ? '🏃 <b>有氧運動模式</b>：微血管紅血球流速加快並提升 <b>BDNF 神經滋養因子</b>，強化突觸傳遞效率使級聯擴散更容易跨過閾值！'
-      : '🏃 已結束有氧運動加成，BDNF 逐漸回歸基準值。');
+      ? '<b>有氧運動模式</b>：微血管紅血球流速加快並提升 <b>BDNF 神經滋養因子</b>，促進突觸強化與新纖維萌芽。'
+      : '已結束有氧運動加成，BDNF 逐漸回歸基準值。');
   });
 
   document.getElementById('btn-caffeine').addEventListener('click', () => {
     sim.caffeineTimer = 25;
-    setStatus('☕ <b>咖啡因競爭性拮抗</b>：藍色虛線環標示腺苷受體被暫時阻斷，消除疲勞抑制、提升放電靈敏度（但底層紫色腺苷睡眠債仍持續累積）。');
+    setStatus('<b>咖啡因競爭性拮抗</b>：藍色虛線環標示腺苷受體被暫時阻斷，消除疲勞抑制、提升放電靈敏度（底層紫色腺苷仍持續累積）。');
   });
 
   document.getElementById('btn-learn').addEventListener('click', () => {
     if (!isMicroActive()) goToPreset('cortex');
     sim.learningTimer = 4.5;
-    setStatus('⚡ <b>同步激發學習（Hebbian LTP）</b>：高頻率共同放電正強化突觸權重（長時程增益），使後續點擊單一神經元更容易引發跨多階細胞的連鎖擴散！');
+    setStatus('<b>同步激發學習（Hebbian LTP）</b>：高頻率共同放電正強化突觸受體厚度並誘導新突觸連結，後續點擊單一神經元更容易擴散至下游細胞。');
+  });
+
+  document.getElementById('btn-sprout').addEventListener('click', () => {
+    if (!isMicroActive()) goToPreset('cortex');
+    const pair = Sim.triggerSprout(sim, state.currentScene);
+    if (pair) {
+      setStatus(`<b>結構可塑性啟動</b>：觀察「<b>${pair.pre.kindInfo.title}</b>」軸突長出帶絲狀偽足的<b>生長錐（Growth Cone）</b>，正朝向「<b>${pair.post.kindInfo.title}</b>」樹突延伸並形成新突觸。`);
+    } else {
+      setStatus('目前局部神經元之間皆已建立突觸連結，可點擊「重抽構圖」生成新的神經迴路。');
+    }
   });
 
   const sliderDat = document.getElementById('slider-dat');
@@ -774,7 +1019,7 @@
       if (sim.datRate > 1.65) {
         lblDat.textContent = `過快回收 (${sim.datRate.toFixed(1)}x)`;
         lblDat.style.color = '#c62828';
-        setStatus('⚠️ <b>ADHD 高回收模擬</b>：前膜轉運體過快抽離突觸間隙傳導物質，導致下游 EPSP 減弱、訊號擴散容易中斷（可點「🔍 突觸特寫」觀察）。');
+        setStatus('<b>ADHD 高回收模擬</b>：前膜轉運體過快抽離突觸間隙傳導物質，導致下游 EPSP 減弱、訊號擴散容易中斷（可點「突觸間隙特寫」觀察）。');
       } else if (sim.datRate < 0.7) {
         lblDat.textContent = `延長滯留 (${sim.datRate.toFixed(1)}x)`;
         lblDat.style.color = '#2e7d32';
@@ -791,7 +1036,7 @@
     document.getElementById('btn-hemorrhage').classList.toggle('active', sim.interactionMode === 'hemorrhage');
     if (sim.interactionMode !== 'stimulate') {
       if (!isMicroActive()) goToPreset('cortex');
-      setStatus('🩸 請直接點擊畫面中的<b>紅色微血管</b>以模擬血栓栓塞或血管破裂出血！');
+      setStatus('請直接點擊畫面中的<b>紅色微血管</b>以模擬血栓栓塞或血管破裂出血。');
     }
   }
   document.getElementById('btn-ischemic').addEventListener('click', () => setPathologyMode('ischemic'));
@@ -806,7 +1051,7 @@
       if (sc && sc.archY && wy < sc.archY(wx) + 50) continue;
       sim.wastes.push({ x: wx, y: wy, vx: (Math.random() - 0.5) * 5, vy: (Math.random() - 0.5) * 5, type: 'amyloid' });
     }
-    setStatus('🧪 <b>類澱粉蛋白斑塊堆積</b>：深酒紅色<b>微膠細胞</b>已啟動趨化吞噬，亦可開啟「🌙 深度睡眠」透過腦脊髓液沖刷清除！');
+    setStatus('<b>類澱粉蛋白斑塊堆積</b>：深酒紅色<b>微膠細胞</b>已啟動趨化吞噬，亦可開啟「深度睡眠」透過腦脊髓液沖刷清除。');
   });
 
   document.getElementById('btn-repair').addEventListener('click', () => {
@@ -817,7 +1062,7 @@
     }
     sim.wastes.length = 0;
     setPathologyMode('stimulate');
-    setStatus('✨ <b>組織修復完成</b>：已清除所有血管栓塞、出血與代謝斑塊，神經元能量恢復 100%。');
+    setStatus('<b>組織修復完成</b>：已清除所有血管栓塞、出血與代謝斑塊，神經元能量恢復 100%。');
   });
 
   // 預設區域按鈕與對數縮放滑桿
@@ -838,12 +1083,22 @@
     });
   }
 
-  // 左右面板收合控制
+  // 左右面板收合控制（iPad / 平板窄螢幕預設收合以保留最大化操作空間與底部導覽列）
+  const leftDrawer = document.getElementById('left-drawer');
+  const rightDrawer = document.getElementById('right-drawer');
+  if (width <= 1080) {
+    if (leftDrawer) leftDrawer.classList.add('collapsed');
+    if (rightDrawer) rightDrawer.classList.add('collapsed');
+  }
   document.getElementById('btn-collapse-left').addEventListener('click', () => {
-    document.getElementById('left-drawer').classList.toggle('collapsed');
+    if (leftDrawer) leftDrawer.classList.toggle('collapsed');
+    lastInspX = -1;
+    lastInspY = -1;
   });
   document.getElementById('btn-collapse-right').addEventListener('click', () => {
-    document.getElementById('right-drawer').classList.toggle('collapsed');
+    if (rightDrawer) rightDrawer.classList.toggle('collapsed');
+    lastInspX = -1;
+    lastInspY = -1;
   });
 
   // 鍵盤快捷鍵
@@ -854,6 +1109,11 @@
     else if (e.key === 'a' || e.key === 'A') document.getElementById('btn-toggle-spont').click();
     else if (e.key === 'Escape') {
       if (state.selected) hideInspector();
+      else if (state.focusedCell != null) {
+        state.focusedCell = null;
+        syncInspectorHighlightBtn();
+        setStatus('已取消單獨 highlight，恢復完整顯微細胞網路顯示。');
+      }
       else if (isMicroActive()) goToPreset('macro');
     }
   });
@@ -861,8 +1121,10 @@
   loadSceneForSample(state.sample);
   syncToggleButtons();
   syncPlaneButtons();
+  syncHighlights();
+  syncPresetButtons();
+  drawPlaneDiagram();
 
-  // 支援從網址參數（例如由 brain_cells 跳轉 ?preset=cortex）直接開啟指定腦區
   const initPreset = new URLSearchParams(window.location.search).get('preset');
   if (initPreset && PRESETS[initPreset]) {
     goToPreset(initPreset);
@@ -871,23 +1133,17 @@
   /* ---------------- 比例尺繪製 ---------------- */
   function drawScaleBar(ctx) {
     ctx.save();
-    let worldPerUm, unitLabel;
-    let pxPerUnit;
+    let pxPerUnit, unitLabel;
     if (!isMicroActive()) {
-      // 全腦寬度約 140 mm ≈ 670 macro units => 1 mm ≈ 4.78 macro units
-      pxPerUnit = macroScale() * 4.78; // px per mm
+      pxPerUnit = macroScale() * 4.78;
       const targetMm = U.niceNumber(95 / pxPerUnit);
-      const barPx = targetMm * pxPerUnit;
       unitLabel = `${targetMm} mm`;
-      drawBarGraphic(ctx, barPx, unitLabel);
+      drawBarGraphic(ctx, targetMm * pxPerUnit, unitLabel);
     } else {
-      // 顯微圖版：錐體細胞胞體直徑 ~22 μm ≈ 34 micro units => 1 μm ≈ 1.55 micro units
-      worldPerUm = 1.55;
-      pxPerUnit = microFitScale() * worldPerUm; // px per μm
+      pxPerUnit = microFitScale() * 1.55;
       const targetUm = U.niceNumber(95 / pxPerUnit);
-      const barPx = targetUm * pxPerUnit;
       unitLabel = targetUm >= 1000 ? `${(targetUm / 1000).toFixed(1)} mm` : `${targetUm} μm`;
-      drawBarGraphic(ctx, barPx, unitLabel);
+      drawBarGraphic(ctx, targetUm * pxPerUnit, unitLabel);
     }
     ctx.restore();
   }
@@ -895,7 +1151,7 @@
   function drawBarGraphic(ctx, barPx, label) {
     const x1 = width - 22;
     const x0 = x1 - barPx;
-    const y = height - 48;
+    const y = width <= 1180 ? height - 92 : height - 48;
 
     ctx.fillStyle = 'rgba(255, 251, 240, 0.88)';
     ctx.strokeStyle = '#24180f';
@@ -919,69 +1175,226 @@
     ctx.fillText(label, (x0 + x1) * 0.5, y - 6);
   }
 
-  /* ---------------- 更新 HUD 生理指標 ---------------- */
+  /* ---------------- 更新 HUD 生理指標（固定寬度 + 節流防跳動） ---------------- */
   const elAtp = document.getElementById('val-atp');
   const elAdeno = document.getElementById('val-adeno');
   const elWaste = document.getElementById('val-waste');
   const elWave = document.getElementById('val-wave');
+  const lastHud = {};
+  let lastStatsAt = -1000;
 
-  function updateHUD() {
-    const z = state.cam.zoom;
-    elZoomVal.textContent = `${z < 10 ? z.toFixed(1) : Math.round(z)}x`;
+  function setTextIfChanged(el, key, text) {
+    if (el && lastHud[key] !== text) {
+      lastHud[key] = text;
+      el.textContent = text;
+    }
+  }
 
-    const sc = state.currentScene;
-    if (!isMicroActive()) {
-      elScaleBadge.textContent = '巨觀冠狀解剖視野';
-      const r = state.hoverReg || M.getRegionAt(state.cam.mx, state.cam.my, state.plane);
-      elRegionName.textContent = M.REGION_LABELS[r] || '全腦冠狀切面（點擊腦區放大）';
-    } else {
-      const mz = microZoom();
-      elScaleBadge.textContent = mz > 2.2 ? '超微突觸與樹突棘視野' : '教科書細胞組織插畫視野';
-      elRegionName.textContent = sc ? `${sc.info.regionName} · ${sc.info.title}` : '';
+  function rectOverlapArea(a, b) {
+    const ix = Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0));
+    const iy = Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0));
+    return ix * iy;
+  }
+
+  function computeInspectorPosition(sel, cw, ch) {
+    if (inspectorManualPos) {
+      return {
+        left: Math.round(U.clamp(inspectorManualPos.x, 10, width - cw - 10)),
+        top: Math.round(U.clamp(inspectorManualPos.y, 72, height - ch - 46))
+      };
     }
 
-    if (elZoomSlider) {
-      const ratio = Math.log(z / MIN_ZOOM) / Math.log(MAX_ZOOM / MIN_ZOOM);
-      elZoomSlider.value = Math.round(ratio * 100);
+    const span = safeHorizontalSpan();
+    const safeL = Math.max(12, span.left);
+    const safeR = Math.min(width - 12, span.right);
+    const safeT = width <= 900 ? 124 : (width <= 1180 ? 92 : 80);
+    const safeB = height - (width <= 1180 ? 118 : 98);
+    const minX = safeL;
+    const maxX = Math.max(safeL, safeR - cw);
+    const minY = safeT;
+    const maxY = Math.max(safeT, safeB - ch);
+
+    const sp = microToScreen(sel.x, sel.y);
+    const somaPad = Math.max(28, (sel.r || 14) * microFitScale() + 22);
+    const somaRect = { x0: sp.x - somaPad, y0: sp.y - somaPad, x1: sp.x + somaPad, y1: sp.y + somaPad };
+
+    let arborRect = somaRect;
+    if (sel.bbox) {
+      const p0 = microToScreen(sel.bbox.x0, sel.bbox.y0);
+      const p1 = microToScreen(sel.bbox.x1, sel.bbox.y1);
+      arborRect = { x0: p0.x - 16, y0: p0.y - 16, x1: p1.x + 16, y1: p1.y + 16 };
     }
 
-    if (sc && sc.real.length) {
-      const avgAtp = sc.real.reduce((s, n) => s + n.atp, 0) / sc.real.length;
-      if (elAtp) elAtp.textContent = `${Math.round(avgAtp)}%`;
-      const adeno = sim.wastes.filter((w) => w.type === 'adenosine').length;
-      const adPct = Math.min(100, Math.round((adeno / 80) * 100));
-      if (elAdeno) elAdeno.textContent = sim.caffeineTimer > 0 ? `${adPct}% (阻斷)` : `${adPct}%`;
-      const plaque = sim.wastes.filter((w) => w.type !== 'adenosine').length;
-      if (elWaste) elWaste.textContent = `${Math.min(100, Math.round((plaque / 50) * 100))}%`;
-      if (elWave) {
-        if (sim.activeWave) {
-          const cnt = sim.activeWave.recruited.size;
-          elWave.textContent = `${cnt}/${sc.real.length} 細胞 (G${sim.activeWave.maxGen})`;
-        } else {
-          elWave.textContent = `點擊神經元測試`;
-        }
+    const minimapRect = (safeL < 160 && isMicroActive() && width > 900)
+      ? { x0: 8, y0: height - 215, x1: 164, y1: height - 78 }
+      : null;
+
+    // 避開收合後的左右抽屜切換按鈕，避免卡片蓋住「切面與細胞圖例」或「生理與病理實驗」
+    const btnL = document.getElementById('btn-collapse-left');
+    const btnR = document.getElementById('btn-collapse-right');
+    const toggleRects = [];
+    if (btnL && leftDrawer && leftDrawer.classList.contains('collapsed')) {
+      const r = btnL.getBoundingClientRect();
+      toggleRects.push({ x0: r.left - 8, y0: r.top - 8, x1: r.right + 8, y1: r.bottom + 10 });
+    }
+    if (btnR && rightDrawer && rightDrawer.classList.contains('collapsed')) {
+      const r = btnR.getBoundingClientRect();
+      toggleRects.push({ x0: r.left - 8, y0: r.top - 8, x1: r.right + 8, y1: r.bottom + 10 });
+    }
+    const rightToggleDropY = toggleRects.length ? Math.max(...toggleRects.map((t) => t.y1)) : safeT;
+
+    const cands = [
+      // 安全畫布角落（含避開收合鈕下緣的角落）
+      { x: minX, y: minY, isCorner: true },
+      { x: minX, y: Math.max(minY, rightToggleDropY), isCorner: true },
+      { x: maxX, y: minY, isCorner: true },
+      { x: maxX, y: Math.max(minY, rightToggleDropY), isCorner: true },
+      { x: maxX, y: maxY, isCorner: true },
+      { x: minimapRect ? Math.min(maxX, Math.max(minX, 172)) : minX, y: maxY, isCorner: true },
+      // arborRect 四外側
+      { x: arborRect.x1 + 16, y: sp.y - ch * 0.5, isCorner: false },
+      { x: arborRect.x0 - cw - 16, y: sp.y - ch * 0.5, isCorner: false },
+      { x: sp.x - cw * 0.5, y: arborRect.y0 - ch - 16, isCorner: false },
+      { x: sp.x - cw * 0.5, y: arborRect.y1 + 16, isCorner: false },
+      // somaRect 四外側（較近的備選）
+      { x: somaRect.x1 + 20, y: sp.y - ch * 0.5, isCorner: false },
+      { x: somaRect.x0 - cw - 20, y: sp.y - ch * 0.5, isCorner: false },
+      { x: sp.x - cw * 0.5, y: somaRect.y0 - ch - 20, isCorner: false },
+      { x: sp.x - cw * 0.5, y: somaRect.y1 + 20, isCorner: false }
+    ];
+
+    const isFocused = isSameFocused(sel);
+    let best = { x: maxX, y: maxY };
+    let bestScore = Infinity;
+
+    for (const c of cands) {
+      const cx = U.clamp(c.x, minX, maxX);
+      const cy = U.clamp(c.y, minY, maxY);
+      const rect = { x0: cx, y0: cy, x1: cx + cw, y1: cy + ch };
+      const somaOv = rectOverlapArea(rect, somaRect);
+      const arborOv = rectOverlapArea(rect, arborRect);
+      const miniOv = minimapRect ? rectOverlapArea(rect, minimapRect) : 0;
+      let toggleOv = 0;
+      for (const tr of toggleRects) toggleOv += rectOverlapArea(rect, tr);
+      const dist = Math.hypot((cx + cw * 0.5) - sp.x, (cy + ch * 0.5) - sp.y);
+
+      const score = isFocused
+        ? (somaOv * 500 + toggleOv * 400 + miniOv * 150 + arborOv * 30 - (c.isCorner ? 1200 : 0) - dist * 0.25)
+        : (somaOv * 500 + toggleOv * 400 + miniOv * 150 + arborOv * 15 + dist * 0.12);
+
+      if (score < bestScore) {
+        bestScore = score;
+        best = { x: cx, y: cy };
       }
     }
 
-    // 浮動資訊卡片跟隨選取目標
+    return { left: Math.round(best.x), top: Math.round(best.y) };
+  }
+
+  function updateHUD(now) {
+    const z = state.cam.zoom;
+    const zStr = `${z < 10 ? z.toFixed(1) : Math.round(z)}x`;
+    setTextIfChanged(elZoomVal, 'zoom', zStr);
+
+    const sc = state.currentScene;
+    if (!isMicroActive()) {
+      setTextIfChanged(elScaleBadge, 'badge', '巨觀冠狀解剖視野');
+      const r = state.hoverReg || M.getRegionAt(state.cam.mx, state.cam.my, state.plane);
+      setTextIfChanged(elRegionName, 'region', M.REGION_LABELS[r] || '全腦冠狀切面（點擊腦區放大）');
+    } else {
+      const mz = microZoom();
+      setTextIfChanged(elScaleBadge, 'badge', mz > 2.2 ? '超微突觸與樹突棘視野' : '顯微細胞組織插畫視野');
+      setTextIfChanged(elRegionName, 'region', sc ? `${sc.info.regionName} · ${sc.info.title}` : '');
+    }
+
+    if (elZoomSlider) {
+      const sVal = Math.round((Math.log(z / MIN_ZOOM) / Math.log(MAX_ZOOM / MIN_ZOOM)) * 100);
+      if (lastHud.slider !== sVal) {
+        lastHud.slider = sVal;
+        elZoomSlider.value = sVal;
+      }
+    }
+
+    if (sc && sc.real.length && now - lastStatsAt >= 150) {
+      lastStatsAt = now;
+      let atpSum = 0;
+      for (let i = 0; i < sc.real.length; i++) atpSum += sc.real[i].atp;
+      setTextIfChanged(elAtp, 'atp', `${Math.round(atpSum / sc.real.length)}%`);
+
+      let adeno = 0, plaque = 0;
+      for (let i = 0; i < sim.wastes.length; i++) {
+        if (sim.wastes[i].type === 'adenosine') adeno++;
+        else plaque++;
+      }
+      const adPct = Math.min(100, Math.round((adeno / 80) * 100));
+      setTextIfChanged(elAdeno, 'adeno', sim.caffeineTimer > 0 ? `${adPct}% 阻斷` : `${adPct}%`);
+      setTextIfChanged(elWaste, 'waste', `${Math.min(100, Math.round((plaque / 50) * 100))}%`);
+      const waveText = sim.activeWave
+        ? `${sim.activeWave.recruited.size}/${sc.real.length} (G${sim.activeWave.maxGen})`
+        : '待激發';
+      setTextIfChanged(elWave, 'wave', waveText);
+    }
+
     if (state.selected && isMicroActive() && elInspector) {
-      const sp = microToScreen(state.selected.x, state.selected.y);
-      const cw = 280;
-      const ch = elInspector.offsetHeight || 130;
-      const left = U.clamp(sp.x + 22, 14, width - cw - 14);
-      const top = U.clamp(sp.y - ch * 0.5, 76, height - ch - 52);
-      elInspector.style.left = `${left}px`;
-      elInspector.style.top = `${top}px`;
+      if (state.selected.kind === 'microglia' && state.selected.entity) {
+        const m = state.selected.entity;
+        state.selected.x = m.x;
+        state.selected.y = m.y;
+        state.selected.bbox = { x0: m.x - m.rad, y0: m.y - m.rad, x1: m.x + m.rad, y1: m.y + m.rad };
+      }
+      const pos = computeInspectorPosition(state.selected, inspectorW || 256, inspectorH || 150);
+      if (pos.left !== lastInspX || pos.top !== lastInspY) {
+        lastInspX = pos.left;
+        lastInspY = pos.top;
+        elInspector.style.transform = `translate3d(${pos.left}px, ${pos.top}px, 0)`;
+      }
     }
   }
 
   /* ---------------- 主動畫與雙尺度無縫渲染迴圈 ---------------- */
+  let cachedPageGrad = null;
+  let cachedPageGradKey = '';
+
+  function getPageGrad() {
+    const key = `${width}:${height}:${state.stain}`;
+    if (cachedPageGrad && cachedPageGradKey === key) return cachedPageGrad;
+    const g = ctx.createRadialGradient(width * 0.5, height * 0.45, 60, width * 0.5, height * 0.5, Math.max(width, height) * 0.75);
+    if (state.stain === 'nissl') {
+      g.addColorStop(0, '#f4f6fb');
+      g.addColorStop(1, '#dce3f0');
+    } else {
+      g.addColorStop(0, '#fdf7e7');
+      g.addColorStop(1, '#eadab8');
+    }
+    cachedPageGrad = g;
+    cachedPageGradKey = key;
+    return g;
+  }
+
+  const PERF_WIN = 60;
+  const perfRenderBuf = new Float64Array(PERF_WIN);
+  const perfDtBuf = new Float64Array(PERF_WIN);
+  let perfIdx = 0;
+  let perfCount = 0;
+  const showPerfHud = new URLSearchParams(window.location.search).get('perf') === '1';
+  let perfEl = null;
+  if (showPerfHud) {
+    perfEl = document.createElement('span');
+    perfEl.id = 'perf-telemetry';
+    perfEl.style.cssText = 'font-family:Consolas,monospace;color:#80cbc4;font-weight:700;margin-left:8px;';
+    const sb = document.getElementById('status-bar');
+    if (sb) sb.appendChild(perfEl);
+  }
+  let lastPerfDomAt = -1000;
+  window.__BS_PERF = { avgRenderMs: 0, maxRenderMs: 0, fps: 0, cacheMode: 'macro' };
+
   let lastNow = performance.now();
   function frame(now) {
-    const rawDt = Math.min(0.05, (now - lastNow) / 1000);
+    const frameStart = performance.now();
+    const dtMs = Math.max(0.1, now - lastNow);
+    const rawDt = Math.min(0.05, dtMs / 1000);
     lastNow = now;
 
-    // 攝影機平滑阻尼插值
     const k = 0.16;
     state.cam.zoom += (state.cam.targetZoom - state.cam.zoom) * k;
     state.cam.mx += (state.cam.targetMX - state.cam.mx) * k;
@@ -996,23 +1409,13 @@
     ctx.save();
     ctx.scale(dpr, dpr);
 
-    // 經典解剖圖鑑暖米白羊皮紙背景
-    const pageGrad = ctx.createRadialGradient(width * 0.5, height * 0.45, 60, width * 0.5, height * 0.5, Math.max(width, height) * 0.75);
-    if (state.stain === 'nissl') {
-      pageGrad.addColorStop(0, '#f4f6fb');
-      pageGrad.addColorStop(1, '#dce3f0');
-    } else {
-      pageGrad.addColorStop(0, '#fdf7e7');
-      pageGrad.addColorStop(1, '#eadab8');
-    }
-    ctx.fillStyle = pageGrad;
+    ctx.fillStyle = getPageGrad();
     ctx.fillRect(0, 0, width, height);
 
     const z = state.cam.zoom;
     const macroAlpha = 1 - U.smoothstep(9.0, 16.5, z);
     const microAlpha = U.smoothstep(8.5, 15.5, z);
 
-    // 1. 巨觀全腦冠狀切面層
     if (macroAlpha > 0.01) {
       ctx.save();
       ctx.globalAlpha = macroAlpha;
@@ -1032,11 +1435,23 @@
       ctx.restore();
     }
 
-    // 2. 顯微教科書細胞插畫圖版層
     if (microAlpha > 0.01 && state.currentScene) {
+      const us = microFitScale();
+      const halfVW = (width * 0.5) / us;
+      const halfVH = (height * 0.5) / us;
+      const viewRect = {
+        x0: state.cam.ux - halfVW,
+        y0: state.cam.uy - halfVH,
+        x1: state.cam.ux + halfVW,
+        y1: state.cam.uy + halfVH
+      };
+      const cameraSettled = !isDragging &&
+        Math.abs(state.cam.zoom - state.cam.targetZoom) / Math.max(0.1, state.cam.zoom) < 0.008 &&
+        Math.abs(state.cam.ux - state.cam.targetUX) < 0.8 &&
+        Math.abs(state.cam.uy - state.cam.targetUY) < 0.8;
+
       ctx.save();
       ctx.globalAlpha = microAlpha;
-      const us = microFitScale();
       ctx.translate(width * 0.5, height * 0.5);
       ctx.scale(us, us);
       ctx.translate(-state.cam.ux, -state.cam.uy);
@@ -1045,13 +1460,17 @@
         stain: state.stain,
         showSignals: state.showSignals,
         highlights: state.highlights,
-        selected: state.selected
+        focusedCell: state.focusedCell,
+        selected: state.selected,
+        viewRect,
+        worldPxScale: us,
+        dpr,
+        cameraSettled
       });
       ctx.restore();
 
-      // 螢幕空間清晰引線標籤與擴散代數標記
       if (microAlpha > 0.65) {
-        R.drawMicroLabelsScreen(ctx, state.currentScene, sim, microToScreen, width, height, microZoom(), state.showLabels, safeHorizontalSpan());
+        R.drawMicroLabelsScreen(ctx, state.currentScene, sim, microToScreen, width, height, microZoom(), state.showLabels, safeHorizontalSpan(), state.cam.ux, state.cam.uy);
       }
     }
 
@@ -1059,7 +1478,31 @@
     ctx.restore();
 
     drawMinimap();
-    updateHUD();
+    updateHUD(now);
+
+    const renderMs = performance.now() - frameStart;
+    perfRenderBuf[perfIdx] = renderMs;
+    perfDtBuf[perfIdx] = dtMs;
+    perfIdx = (perfIdx + 1) % PERF_WIN;
+    if (perfCount < PERF_WIN) perfCount++;
+    if (perfCount > 0) {
+      let sumR = 0, maxR = 0, sumDt = 0;
+      for (let i = 0; i < perfCount; i++) {
+        const r = perfRenderBuf[i];
+        sumR += r;
+        if (r > maxR) maxR = r;
+        sumDt += perfDtBuf[i];
+      }
+      window.__BS_PERF.avgRenderMs = +(sumR / perfCount).toFixed(2);
+      window.__BS_PERF.maxRenderMs = +maxR.toFixed(2);
+      window.__BS_PERF.fps = +(1000 / (sumDt / perfCount)).toFixed(1);
+      window.__BS_PERF.cacheMode = microAlpha > 0.5 ? R.getCacheMode() : 'macro';
+      if (perfEl && now - lastPerfDomAt >= 250) {
+        lastPerfDomAt = now;
+        perfEl.textContent = `PERF ${window.__BS_PERF.cacheMode} | avg ${window.__BS_PERF.avgRenderMs}ms | max ${window.__BS_PERF.maxRenderMs}ms | ${window.__BS_PERF.fps}fps`;
+      }
+    }
+
     requestAnimationFrame(frame);
   }
 

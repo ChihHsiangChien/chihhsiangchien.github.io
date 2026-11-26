@@ -1,5 +1,5 @@
 /* =========================================================================
- * macro.js — 教科書解剖插畫風格：全腦冠狀切面（1x 巨觀視圖 + 區域遮罩 + 解剖標籤）
+ * macro.js — 解剖插畫風格：全腦冠狀切面（1x 巨觀視圖 + 區域遮罩 + 解剖標籤）
  * ========================================================================= */
 (function () {
   'use strict';
@@ -199,12 +199,22 @@
     return list;
   }
 
-  /**
-   * 繪製教科書插畫風格冠狀切面
-   * opt: { plane, stain, showLabels, hoverWorld, activeSample, zoom }
-   */
-  function draw(ctx, opt) {
-    const isNissl = opt.stain === 'nissl';
+  const macroCache = new Map();
+
+  function getBakedBrain(plane, stain) {
+    const key = `${plane}:${stain}`;
+    const cached = macroCache.get(key);
+    if (cached) return cached;
+
+    const c = document.createElement('canvas');
+    c.width = 1680;
+    c.height = 1320;
+    const g = c.getContext('2d');
+    g.save();
+    g.translate(840, 660);
+    g.scale(2, 2);
+
+    const isNissl = stain === 'nissl';
     const pal = isNissl ? {
       cortex1: '#9f8ac8', cortex2: '#8670b6', white: '#cce4f4', callosum: '#b3d7ef',
       nuclei: '#8e78bc', pallidum: '#a795cf', capsule: '#bfe0f5', hippo: '#8c74bd',
@@ -215,217 +225,234 @@
       ventricle: '#a9d3ec', fiberLine: 'rgba(148,108,65,0.22)'
     };
 
-    ctx.save();
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
+    g.lineJoin = 'round';
+    g.lineCap = 'round';
 
     // 1. 羊皮紙上的立體投影與外層軟腦膜墨線
-    ctx.save();
-    ctx.shadowColor = 'rgba(62, 38, 16, 0.28)';
-    ctx.shadowBlur = 26;
-    ctx.shadowOffsetX = 6;
-    ctx.shadowOffsetY = 10;
-    ctx.fillStyle = pal.cortex1;
-    tracePoly(ctx, outerPts);
-    ctx.fill();
-    ctx.restore();
+    g.save();
+    g.shadowColor = 'rgba(62, 38, 16, 0.28)';
+    g.shadowBlur = 26;
+    g.shadowOffsetX = 6;
+    g.shadowOffsetY = 10;
+    g.fillStyle = pal.cortex1;
+    tracePoly(g, outerPts);
+    g.fill();
+    g.restore();
 
     // 2. 皮質深層 (Layers IV-VI)
-    ctx.fillStyle = pal.cortex2;
-    tracePoly(ctx, midPts);
-    ctx.fill();
+    g.fillStyle = pal.cortex2;
+    tracePoly(g, midPts);
+    g.fill();
 
     // 皮質分層細虛線 (Baillarger 條紋感)
-    ctx.strokeStyle = 'rgba(60,32,18,0.18)';
-    ctx.lineWidth = 0.7;
-    ctx.setLineDash([3, 3]);
-    tracePoly(ctx, midPts);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    g.strokeStyle = 'rgba(60,32,18,0.18)';
+    g.lineWidth = 0.7;
+    g.setLineDash([3, 3]);
+    tracePoly(g, midPts);
+    g.stroke();
+    g.setLineDash([]);
 
     // 3. 中央白質與墨線交界
-    ctx.fillStyle = pal.white;
-    tracePoly(ctx, innerWhitePts);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(54,32,16,0.42)';
-    ctx.lineWidth = 0.9;
-    ctx.stroke();
+    g.fillStyle = pal.white;
+    tracePoly(g, innerWhitePts);
+    g.fill();
+    g.strokeStyle = 'rgba(54,32,16,0.42)';
+    g.lineWidth = 0.9;
+    g.stroke();
 
     // 放射狀白質纖維手繪排線紋理
-    ctx.save();
-    tracePoly(ctx, innerWhitePts);
-    ctx.clip();
-    ctx.strokeStyle = pal.fiberLine;
-    ctx.lineWidth = 0.85;
+    g.save();
+    tracePoly(g, innerWhitePts);
+    g.clip();
+    g.strokeStyle = pal.fiberLine;
+    g.lineWidth = 0.85;
     for (let i = 0; i < 108; i++) {
       const ang = (i / 108) * Math.PI * 2;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(ang) * 38, Math.sin(ang) * 28);
-      ctx.quadraticCurveTo(
+      g.beginPath();
+      g.moveTo(Math.cos(ang) * 38, Math.sin(ang) * 28);
+      g.quadraticCurveTo(
         Math.cos(ang + 0.1) * 175,
         Math.sin(ang - 0.08) * 135,
         Math.cos(ang) * 330,
         Math.sin(ang) * 250
       );
-      ctx.stroke();
+      g.stroke();
     }
-    ctx.restore();
+    g.restore();
 
     // 4. 胼胝體與前連合
-    ctx.fillStyle = pal.callosum;
-    ctx.strokeStyle = 'rgba(44,26,14,0.65)';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    callosumPath(ctx);
-    ctx.fill();
-    ctx.stroke();
+    g.fillStyle = pal.callosum;
+    g.strokeStyle = 'rgba(44,26,14,0.65)';
+    g.lineWidth = 1.2;
+    g.beginPath();
+    callosumPath(g);
+    g.fill();
+    g.stroke();
 
     // 胼胝體橫向平行纖維細線
-    ctx.save();
-    ctx.beginPath(); callosumPath(ctx); ctx.clip();
-    ctx.strokeStyle = pal.fiberLine;
-    ctx.lineWidth = 0.75;
+    g.save();
+    g.beginPath(); callosumPath(g); g.clip();
+    g.strokeStyle = pal.fiberLine;
+    g.lineWidth = 0.75;
     for (let dy = -6; dy <= 8; dy += 3.5) {
-      ctx.beginPath();
-      ctx.moveTo(-115, -60 + dy);
-      ctx.bezierCurveTo(-55, -82 + dy, 55, -82 + dy, 115, -60 + dy);
-      ctx.stroke();
+      g.beginPath();
+      g.moveTo(-115, -60 + dy);
+      g.bezierCurveTo(-55, -82 + dy, 55, -82 + dy, 115, -60 + dy);
+      g.stroke();
     }
-    ctx.restore();
+    g.restore();
 
-    if (opt.plane === 'anterior') {
-      ctx.fillStyle = pal.callosum;
-      ctx.strokeStyle = 'rgba(44,26,14,0.6)';
-      ctx.lineWidth = 1.0;
-      ctx.beginPath();
-      ctx.ellipse(0, 26, 98, 6.5, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
+    if (plane === 'anterior') {
+      g.fillStyle = pal.callosum;
+      g.strokeStyle = 'rgba(44,26,14,0.6)';
+      g.lineWidth = 1.0;
+      g.beginPath();
+      g.ellipse(0, 26, 98, 6.5, 0, 0, Math.PI * 2);
+      g.fill();
+      g.stroke();
     }
 
     // 5. 深部灰質核團、內囊與海馬迴
     for (const dir of [-1, 1]) {
       // 內囊
-      ctx.fillStyle = pal.capsule;
-      ctx.beginPath(); internalCapPath(ctx, dir); ctx.fill();
+      g.fillStyle = pal.capsule;
+      g.beginPath(); internalCapPath(g, dir); g.fill();
 
       // 尾狀核頭
-      ctx.fillStyle = pal.nuclei;
-      ctx.strokeStyle = 'rgba(44,26,14,0.65)';
-      ctx.lineWidth = 1.1;
-      ctx.beginPath();
-      ctx.ellipse(dir * 54, -22, 16, 24, dir * -0.25, 0, Math.PI * 2);
-      ctx.fill(); ctx.stroke();
+      g.fillStyle = pal.nuclei;
+      g.strokeStyle = 'rgba(44,26,14,0.65)';
+      g.lineWidth = 1.1;
+      g.beginPath();
+      g.ellipse(dir * 54, -22, 16, 24, dir * -0.25, 0, Math.PI * 2);
+      g.fill(); g.stroke();
 
       // 橫跨內囊的紋狀體灰質橋 (Pontes grisei caudatolenticulares)
-      ctx.strokeStyle = pal.nuclei;
-      ctx.lineWidth = 2.8;
+      g.strokeStyle = pal.nuclei;
+      g.lineWidth = 2.8;
       for (let b = -22; b <= 32; b += 11) {
-        ctx.beginPath();
-        ctx.moveTo(dir * 65, b);
-        ctx.lineTo(dir * 96, b + 8);
-        ctx.stroke();
+        g.beginPath();
+        g.moveTo(dir * 65, b);
+        g.lineTo(dir * 96, b + 8);
+        g.stroke();
       }
 
       // 豆狀核：殼核 + 外/內蒼白球
-      ctx.fillStyle = pal.nuclei;
-      ctx.strokeStyle = 'rgba(44,26,14,0.65)';
-      ctx.lineWidth = 1.15;
-      ctx.beginPath();
-      ctx.ellipse(dir * 124, 12, 30, 44, dir * 0.15, 0, Math.PI * 2);
-      ctx.fill(); ctx.stroke();
+      g.fillStyle = pal.nuclei;
+      g.strokeStyle = 'rgba(44,26,14,0.65)';
+      g.lineWidth = 1.15;
+      g.beginPath();
+      g.ellipse(dir * 124, 12, 30, 44, dir * 0.15, 0, Math.PI * 2);
+      g.fill(); g.stroke();
 
-      ctx.fillStyle = pal.pallidum;
-      ctx.strokeStyle = 'rgba(44,26,14,0.45)';
-      ctx.lineWidth = 0.9;
-      ctx.beginPath();
-      ctx.ellipse(dir * 107, 16, 15, 28, dir * 0.12, 0, Math.PI * 2);
-      ctx.fill(); ctx.stroke();
+      g.fillStyle = pal.pallidum;
+      g.strokeStyle = 'rgba(44,26,14,0.45)';
+      g.lineWidth = 0.9;
+      g.beginPath();
+      g.ellipse(dir * 107, 16, 15, 28, dir * 0.12, 0, Math.PI * 2);
+      g.fill(); g.stroke();
 
       // 屏狀核 (Claustrum)
-      ctx.strokeStyle = pal.nuclei;
-      ctx.lineWidth = 3.2;
-      ctx.beginPath();
-      ctx.arc(dir * 141, 12, 35, dir === 1 ? -0.62 : Math.PI - 0.62, dir === 1 ? 0.62 : Math.PI + 0.62);
-      ctx.stroke();
+      g.strokeStyle = pal.nuclei;
+      g.lineWidth = 3.2;
+      g.beginPath();
+      g.arc(dir * 141, 12, 35, dir === 1 ? -0.62 : Math.PI - 0.62, dir === 1 ? 0.62 : Math.PI + 0.62);
+      g.stroke();
 
-      if (opt.plane === 'hippocampus') {
+      if (plane === 'hippocampus') {
         // 視丘
-        ctx.fillStyle = pal.nuclei;
-        ctx.strokeStyle = 'rgba(44,26,14,0.68)';
-        ctx.lineWidth = 1.15;
-        ctx.beginPath();
-        ctx.ellipse(dir * 34, 22, 27, 37, dir * -0.1, 0, Math.PI * 2);
-        ctx.fill(); ctx.stroke();
+        g.fillStyle = pal.nuclei;
+        g.strokeStyle = 'rgba(44,26,14,0.68)';
+        g.lineWidth = 1.15;
+        g.beginPath();
+        g.ellipse(dir * 34, 22, 27, 37, dir * -0.1, 0, Math.PI * 2);
+        g.fill(); g.stroke();
 
         // 海馬迴雙 C 互鎖結構 (CA1-CA3 + 齒狀回)
-        ctx.save();
-        ctx.translate(dir * 108, 108);
-        ctx.scale(dir, 1);
-        ctx.fillStyle = pal.hippo;
-        ctx.strokeStyle = 'rgba(44,26,14,0.72)';
-        ctx.lineWidth = 1.1;
-        ctx.beginPath();
-        ctx.arc(0, 0, 23, 0.18, Math.PI * 1.78);
-        ctx.arc(4, 2, 12.5, Math.PI * 1.78, 0.18, true);
-        ctx.closePath();
-        ctx.fill(); ctx.stroke();
+        g.save();
+        g.translate(dir * 108, 108);
+        g.scale(dir, 1);
+        g.fillStyle = pal.hippo;
+        g.strokeStyle = 'rgba(44,26,14,0.72)';
+        g.lineWidth = 1.1;
+        g.beginPath();
+        g.arc(0, 0, 23, 0.18, Math.PI * 1.78);
+        g.arc(4, 2, 12.5, Math.PI * 1.78, 0.18, true);
+        g.closePath();
+        g.fill(); g.stroke();
 
         // 齒狀回顆粒細胞帶
-        ctx.strokeStyle = isNissl ? '#4e3188' : '#8c4332';
-        ctx.lineWidth = 2.0;
-        ctx.beginPath();
-        ctx.arc(5, 2, 9, 0.5, Math.PI * 1.55);
-        ctx.stroke();
-        ctx.restore();
+        g.strokeStyle = isNissl ? '#4e3188' : '#8c4332';
+        g.lineWidth = 2.0;
+        g.beginPath();
+        g.arc(5, 2, 9, 0.5, Math.PI * 1.55);
+        g.stroke();
+        g.restore();
       }
     }
 
     // 6. 側腦室（清澈水藍 CSF + 粉紅室管膜鑲邊 + 紅色脈絡叢）
     for (const dir of [-1, 1]) {
-      const vGrad = ctx.createLinearGradient(0, -56, 0, -8);
+      const vGrad = g.createLinearGradient(0, -56, 0, -8);
       vGrad.addColorStop(0, '#8cc0e4');
       vGrad.addColorStop(1, '#cde6f7');
-      ctx.fillStyle = vGrad;
-      ctx.beginPath(); ventriclePath(ctx, dir); ctx.fill();
+      g.fillStyle = vGrad;
+      g.beginPath(); ventriclePath(g, dir); g.fill();
 
-      ctx.strokeStyle = '#d96b7c';
-      ctx.lineWidth = 1.9;
-      ctx.stroke();
-      ctx.strokeStyle = INK;
-      ctx.lineWidth = 1.0;
-      ctx.stroke();
+      g.strokeStyle = '#d96b7c';
+      g.lineWidth = 1.9;
+      g.stroke();
+      g.strokeStyle = INK;
+      g.lineWidth = 1.0;
+      g.stroke();
 
       // 脈絡叢絨毛團 (Choroid plexus)
-      ctx.fillStyle = '#d94841';
-      ctx.strokeStyle = INK;
-      ctx.lineWidth = 0.85;
+      g.fillStyle = '#d94841';
+      g.strokeStyle = INK;
+      g.lineWidth = 0.85;
       for (let k = -1; k <= 1; k++) {
-        ctx.beginPath();
-        ctx.arc(dir * (22 + k * 3.5), -21 + Math.abs(k) * 1.5, 3.4, 0, Math.PI * 2);
-        ctx.fill(); ctx.stroke();
+        g.beginPath();
+        g.arc(dir * (22 + k * 3.5), -21 + Math.abs(k) * 1.5, 3.4, 0, Math.PI * 2);
+        g.fill(); g.stroke();
       }
     }
     // 透明隔 (Septum pellucidum)
-    ctx.strokeStyle = INK;
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(0, -56);
-    ctx.lineTo(0, -22);
-    ctx.stroke();
+    g.strokeStyle = INK;
+    g.lineWidth = 1.4;
+    g.beginPath();
+    g.moveTo(0, -56);
+    g.lineTo(0, -22);
+    g.stroke();
 
     // 7. 腦溝與外輪廓手繪墨線
-    ctx.strokeStyle = INK;
-    ctx.lineWidth = 1.5;
+    g.strokeStyle = INK;
+    g.lineWidth = 1.5;
     for (const s of sulciLines) {
-      ctx.beginPath();
-      ctx.moveTo(s.x0, s.y0);
-      ctx.quadraticCurveTo(s.cx, s.cy, s.x1, s.y1);
-      ctx.stroke();
+      g.beginPath();
+      g.moveTo(s.x0, s.y0);
+      g.quadraticCurveTo(s.cx, s.cy, s.x1, s.y1);
+      g.stroke();
     }
-    ctx.lineWidth = 2.2;
-    tracePoly(ctx, outerPts);
-    ctx.stroke();
+    g.lineWidth = 2.2;
+    tracePoly(g, outerPts);
+    g.stroke();
+
+    g.restore();
+    macroCache.set(key, c);
+    return c;
+  }
+
+  /**
+   * 繪製解剖插畫風格冠狀切面（靜態層使用離屏快取）
+   * opt: { plane, stain, showLabels, hoverWorld, activeSample, zoom }
+   */
+  function draw(ctx, opt) {
+    ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+
+    // 1-7. 靜態解剖冠狀切面（離屏快取一次繪出）
+    const baked = getBakedBrain(opt.plane, opt.stain);
+    ctx.drawImage(baked, -420, -330, 840, 660);
 
     // 8. 顯微取樣框標記（顯示目前載入/滑鼠指向的顯微組織位置）
     if (opt.activeSample) {
@@ -461,7 +488,7 @@
       ctx.restore();
     }
 
-    // 9. 教科書引線解剖標籤（可 Toggle 開關）
+    // 9. 引線解剖標籤（可 Toggle 開關）
     if (opt.showLabels && opt.zoom < 4.2) {
       const alpha = Math.max(0, Math.min(1, 1 - (opt.zoom - 2.4) / 1.6));
       ctx.save();
@@ -509,11 +536,175 @@
     ctx.restore();
   }
 
+  /**
+   * 繪製大腦側面／矢狀示意圖，清楚標示「A 前連合層面」與「B 視丘／海馬迴層面」的冠狀切割位置
+   */
+  function drawSagittalCutDiagram(ctx, w, h, plane, stain) {
+    const isNissl = stain === 'nissl';
+    ctx.save();
+    ctx.clearRect(0, 0, w, h);
+
+    // 羊皮紙底色
+    ctx.fillStyle = isNissl ? '#eff3fb' : '#fbf2db';
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.save();
+    ctx.translate(w * 0.5, h * 0.52);
+    const s = Math.min(w / 240, h / 118);
+    ctx.scale(s, s);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+
+    // 1. 腦幹（橋腦＋延腦）
+    ctx.fillStyle = isNissl ? '#d8d2ea' : '#ecd9bd';
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(-6, 16);
+    ctx.bezierCurveTo(-10, 26, -6, 37, 2, 42);
+    ctx.lineTo(10, 54);
+    ctx.lineTo(22, 54);
+    ctx.lineTo(18, 30);
+    ctx.lineTo(14, 14);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // 2. 小腦（含小腦葉細紋）
+    ctx.fillStyle = isNissl ? '#c3b5df' : '#dfbe9f';
+    ctx.beginPath();
+    ctx.moveTo(16, 14);
+    ctx.bezierCurveTo(38, 12, 66, 20, 62, 36);
+    ctx.bezierCurveTo(56, 48, 28, 49, 16, 36);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(44, 26, 14, 0.35)';
+    ctx.lineWidth = 0.85;
+    for (let k = 0; k < 4; k++) {
+      ctx.beginPath();
+      ctx.moveTo(22, 21 + k * 5);
+      ctx.quadraticCurveTo(42, 23 + k * 5.2, 58 - k * 2, 25 + k * 4.5);
+      ctx.stroke();
+    }
+
+    // 3. 大腦半球側面輪廓（左為額葉前緣，右為枕葉後緣）
+    ctx.fillStyle = isNissl ? '#b39fd6' : '#e6bda6';
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.65;
+    ctx.beginPath();
+    ctx.moveTo(-82, 12);
+    ctx.bezierCurveTo(-92, -16, -64, -44, -10, -47);
+    ctx.bezierCurveTo(46, -50, 86, -24, 86, 4);
+    ctx.bezierCurveTo(86, 18, 66, 20, 40, 17);
+    ctx.bezierCurveTo(22, 15, 10, 22, -4, 24);
+    ctx.bezierCurveTo(-24, 28, -46, 24, -52, 16);
+    ctx.bezierCurveTo(-66, 18, -78, 18, -82, 12);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // 外側裂 (Sylvian fissure) 與中央溝示意線
+    ctx.strokeStyle = 'rgba(44, 26, 14, 0.5)';
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.moveTo(-48, 8);
+    ctx.quadraticCurveTo(-18, 4, 14, -10);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-4, -46);
+    ctx.quadraticCurveTo(-10, -28, -14, -10);
+    ctx.stroke();
+
+    // 4. 半透明內部標的構造（胼胝體、前連合、視丘、海馬迴）
+    ctx.fillStyle = isNissl ? 'rgba(130, 186, 228, 0.65)' : 'rgba(255, 249, 232, 0.72)';
+    ctx.strokeStyle = 'rgba(44, 26, 14, 0.45)';
+    ctx.lineWidth = 0.85;
+    // 胼胝體弧線
+    ctx.beginPath();
+    ctx.moveTo(-36, -12);
+    ctx.bezierCurveTo(-26, -28, 22, -28, 34, -10);
+    ctx.bezierCurveTo(22, -18, -20, -18, -32, -8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // 前連合點 (Anterior commissure)
+    ctx.fillStyle = '#e65100';
+    ctx.beginPath();
+    ctx.arc(-20, -2, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 視丘與海馬迴輪廓
+    ctx.fillStyle = isNissl ? 'rgba(120, 96, 175, 0.55)' : 'rgba(196, 122, 98, 0.55)';
+    ctx.beginPath();
+    ctx.ellipse(6, -4, 12, 8, -0.15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = isNissl ? '#5c3c99' : '#9c422c';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(-4, 14);
+    ctx.quadraticCurveTo(10, 14, 20, 2);
+    ctx.stroke();
+
+    // 5. 兩條冠狀切線：A 前連合 (-20) vs B 視丘／海馬迴 (+10)
+    const cuts = [
+      { id: 'anterior', x: -20, label: 'A 前連合' },
+      { id: 'hippocampus', x: 10, label: 'B 視丘海馬' }
+    ];
+    for (const c of cuts) {
+      const active = c.id === plane;
+      if (active) {
+        ctx.fillStyle = 'rgba(198, 40, 40, 0.14)';
+        ctx.fillRect(c.x - 5, -52, 10, 98);
+      }
+      ctx.save();
+      ctx.strokeStyle = active ? '#c62828' : 'rgba(93, 64, 55, 0.55)';
+      ctx.lineWidth = active ? 2.1 : 1.1;
+      if (!active) ctx.setLineDash([3, 2.5]);
+      ctx.beginPath();
+      ctx.moveTo(c.x, -51);
+      ctx.lineTo(c.x, 42);
+      ctx.stroke();
+      ctx.restore();
+
+      // 頂部三角指標
+      if (active) {
+        ctx.fillStyle = '#c62828';
+        ctx.beginPath();
+        ctx.moveTo(c.x, -49);
+        ctx.lineTo(c.x - 4.2, -55);
+        ctx.lineTo(c.x + 4.2, -55);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      ctx.font = active ? '800 8.5px "Microsoft JhengHei", sans-serif' : '700 8px "Microsoft JhengHei", sans-serif';
+      ctx.fillStyle = active ? '#b71c1c' : '#6d4c3d';
+      ctx.textAlign = c.id === 'anterior' ? 'right' : 'left';
+      ctx.fillText(c.label, c.x + (c.id === 'anterior' ? -4 : 4), 48);
+    }
+
+    // 方向字標
+    ctx.font = '700 8px "Microsoft JhengHei", sans-serif';
+    ctx.fillStyle = '#5d4037';
+    ctx.textAlign = 'left';
+    ctx.fillText('前額', -106, -34);
+    ctx.textAlign = 'right';
+    ctx.fillText('枕葉', 106, -34);
+    ctx.fillText('小腦', 88, 45);
+
+    ctx.restore();
+    ctx.restore();
+  }
+
   BS.macro = {
     getRegionAt,
     REGION_LABELS,
     getCallouts,
     draw,
+    drawSagittalCutDiagram,
     outerPts
   };
 })();

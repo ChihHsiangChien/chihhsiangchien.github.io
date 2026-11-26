@@ -8,30 +8,37 @@
   const HW = W / 2, HH = H / 2;
 
   const SCENE_INFO = {
-    cortex: { title: '大腦皮質灰質', sub: '錐體神經元、星狀神經元與抑制性籃狀細胞構成的局部迴路' },
-    hippocampus: { title: '海馬迴 CA 區錐體細胞層', sub: '錐體細胞排列成帶，側枝（Schaffer 側枝樣）連接相鄰細胞的頂樹突' },
-    striatum: { title: '紋狀體（基底核）', sub: 'GABA 中型多棘神經元、膽鹼性中間神經元與穿越的鉛筆纖維束' },
-    thalamus: { title: '視丘核團', sub: '視丘中繼神經元接收上行傳入纖維，並受網狀核抑制性神經元調控' },
-    whitematter: { title: '白質纖維束', sub: '平行排列的有髓鞘軸突、束間寡突膠質細胞與纖維型星形膠質細胞' },
-    ventricle: { title: '側腦室壁', sub: '室管膜細胞以纖毛推動腦脊髓液，下方為室管膜下神經組織' }
+    cortex_superficial: { title: '皮質淺層微迴路（第 I–III 層）', sub: '密集水平星狀聯絡神經元與外錐體細胞交織的橫向聯合網路' },
+    cortex_anterior: { title: '前額／運動皮質深層（第 IV–VI 層）', sub: '大型 Betz 樣厚簇錐體神經元為主，具長投射有髓鞘軸突束' },
+    cortex_posterior: { title: '頂葉感覺聯合皮質（第 IV–VI 層）', sub: '中小型錐體細胞與高密度第 IV 層顆粒星狀神經元接收視丘感覺輸入' },
+    hippocampus: { title: '海馬迴 CA 區錐體細胞層', sub: '錐體細胞整齊成帶排列，側枝（Schaffer 側枝樣）橫向連接相鄰頂樹突' },
+    striatum: { title: '紋狀體（基底核）', sub: 'GABA 中型多棘神經元（抑制性為主）、膽鹼性中間神經元與穿越的鉛筆纖維束' },
+    thalamus: { title: '視丘中繼核團', sub: '叢狀樹突視丘中繼神經元接收上行感覺傳入纖維，並受抑制性神經元調控' },
+    whitematter: { title: '白質有髓鞘纖維束', sub: '平行排列的有髓鞘軸突、束間寡突膠質細胞與纖維型星形膠質細胞' },
+    ventricle: { title: '側腦室壁與室管膜', sub: '室管膜細胞以纖毛推動腦脊髓液循環，下方為室管膜下神經組織' }
   };
 
   function typeForRegion(reg, x, y, plane) {
     switch (reg) {
-      case 1: return { type: 'cortex', regionName: '大腦皮質（第 I–III 層）' };
-      case 2: return { type: 'cortex', regionName: '大腦皮質（第 IV–VI 層）' };
+      case 1: return { type: 'cortex_superficial', regionName: '大腦皮質淺層（第 I–III 層）' };
+      case 2: return plane === 'hippocampus'
+        ? { type: 'cortex_posterior', regionName: '頂葉聯合皮質深層（第 IV–VI 層）' }
+        : { type: 'cortex_anterior', regionName: '前額／運動皮質深層（第 IV–VI 層）' };
       case 3: {
         let a = Math.atan2(y, x);
         if (a > Math.PI / 2) a -= Math.PI; if (a < -Math.PI / 2) a += Math.PI;
         a = U.clamp(a, -0.75, 0.75);
-        return { type: 'whitematter', regionName: '中央白質（輻射冠）', fiberAngle: a };
+        return { type: 'whitematter', regionName: '中央白質（輻射冠）', fiberAngle: a, laneGap: 48 };
       }
-      case 4: return { type: 'whitematter', regionName: Math.abs(y - 26) < 12 ? '前連合' : '胼胝體', fiberAngle: 0 };
+      case 4: {
+        const isAC = Math.abs(y - 26) < 14;
+        return { type: 'whitematter', regionName: isAC ? '前連合橫向纖維束' : '胼胝體連合纖維束', fiberAngle: 0, laneGap: isAC ? 44 : 36 };
+      }
       case 5: return { type: 'ventricle', regionName: '側腦室壁（室管膜）' };
       case 6: return plane === 'hippocampus' && Math.abs(x) < 64 && y > -10
-        ? { type: 'thalamus', regionName: '視丘' } : { type: 'striatum', regionName: '基底核（紋狀體）' };
-      case 7: return { type: 'whitematter', regionName: '內囊', fiberAngle: Math.PI / 2 };
-      case 8: return { type: 'hippocampus', regionName: '海馬迴' };
+        ? { type: 'thalamus', regionName: '視丘核團' } : { type: 'striatum', regionName: '基底核（紋狀體）' };
+      case 7: return { type: 'whitematter', regionName: '內囊垂直投射束', fiberAngle: Math.PI / 2, laneGap: 38 };
+      case 8: return { type: 'hippocampus', regionName: '海馬迴結構' };
       default: return null;
     }
   }
@@ -212,6 +219,7 @@
       const yv = T === 'hippocampus' ? -250 : rng.range(220, 380);
       sc.vessels.push(makeVessel(rng, { x: -HW + 75, y: yv }, { x: -400, y: yv + rng.range(-120, 120) }, { x: 300, y: yv + rng.range(-120, 120) }, { x: HW + 120, y: yv + rng.range(-150, 150) }, 10));
     }
+    sc.vessels.forEach((v, i) => { v.id = i; });
 
     /* ---- 2. 神經元配置 ---- */
     const okSoma = (m) => (p) => inFrame(p.x, p.y, m) && !nearVessel(sc, p.x, p.y, 34);
@@ -219,13 +227,31 @@
     let targetFor = null;   // n => [{post, opt}]
     let myelinCollaterals = false;
 
-    if (T === 'cortex') {
-      const pyr = place(rng, 8, () => ({ x: rng.range(-720, 720), y: rng.range(-120, 380) }), okSoma(90), 150, []);
-      pyr.forEach((p) => addNeuron({ kind: 'pyramidal', x: p.x, y: p.y, r: rng.range(16, 19.5), orient: -Math.PI / 2 + rng.range(-0.12, 0.12),
-        apicalLen: U.clamp((p.y + HH - 70) * rng.range(0.78, 0.94), 200, 560) }));
-      const st = place(rng, 3, () => ({ x: rng.range(-700, 700), y: rng.range(-330, 150) }), okSoma(110), 140, pyr);
-      st.forEach((p) => addNeuron({ kind: 'stellate', x: p.x, y: p.y, r: rng.range(13, 15) }));
+    if (T === 'cortex_superficial') {
+      const pyr = place(rng, 4, () => ({ x: rng.range(-700, 700), y: rng.range(10, 360) }), okSoma(90), 180, []);
+      pyr.forEach((p) => addNeuron({ kind: 'pyramidal', x: p.x, y: p.y, r: rng.range(12.5, 14.5), orient: -Math.PI / 2 + rng.range(-0.1, 0.1),
+        apicalLen: U.clamp((p.y + HH - 70) * rng.range(0.65, 0.85), 180, 380) }));
+      const st = place(rng, 6, () => ({ x: rng.range(-720, 720), y: rng.range(-360, 260) }), okSoma(100), 140, pyr);
+      st.forEach((p) => addNeuron({ kind: 'stellate', x: p.x, y: p.y, r: rng.range(12, 14.5) }));
+      const bk = place(rng, 3, () => ({ x: rng.range(-700, 700), y: rng.range(-280, 320) }), okSoma(110), 140, pyr.concat(st));
+      bk.forEach((p) => addNeuron({ kind: 'basket', x: p.x, y: p.y, r: rng.range(11.5, 13) }));
+      exitFor = (n) => n.kind === 'pyramidal' ? { exit: { x: n.x + rng.range(-100, 100), y: HH + 120 }, exitAngle: Math.PI / 2 } : null;
+    } else if (T === 'cortex_anterior') {
+      const pyr = place(rng, 9, () => ({ x: rng.range(-720, 720), y: rng.range(-120, 380) }), okSoma(90), 145, []);
+      pyr.forEach((p) => addNeuron({ kind: 'pyramidal', x: p.x, y: p.y, r: rng.range(17.5, 21), orient: -Math.PI / 2 + rng.range(-0.1, 0.1),
+        apicalLen: U.clamp((p.y + HH - 60) * rng.range(0.82, 0.95), 240, 580) }));
+      const st = place(rng, 2, () => ({ x: rng.range(-680, 680), y: rng.range(-330, 120) }), okSoma(110), 160, pyr);
+      st.forEach((p) => addNeuron({ kind: 'stellate', x: p.x, y: p.y, r: rng.range(13, 14.5) }));
       const bk = place(rng, 3, () => ({ x: rng.range(-700, 700), y: rng.range(-200, 360) }), okSoma(110), 130, pyr.concat(st));
+      bk.forEach((p) => addNeuron({ kind: 'basket', x: p.x, y: p.y, r: rng.range(12, 13.5) }));
+      exitFor = (n) => n.kind === 'pyramidal' ? { exit: { x: n.x + rng.range(-120, 120), y: HH + 120 }, exitAngle: Math.PI / 2 } : null;
+    } else if (T === 'cortex_posterior') {
+      const pyr = place(rng, 6, () => ({ x: rng.range(-720, 720), y: rng.range(-60, 380) }), okSoma(90), 165, []);
+      pyr.forEach((p) => addNeuron({ kind: 'pyramidal', x: p.x, y: p.y, r: rng.range(15, 17.5), orient: -Math.PI / 2 + rng.range(-0.14, 0.14),
+        apicalLen: U.clamp((p.y + HH - 70) * rng.range(0.75, 0.9), 200, 500) }));
+      const st = place(rng, 5, () => ({ x: rng.range(-720, 720), y: rng.range(-340, 180) }), okSoma(105), 140, pyr);
+      st.forEach((p) => addNeuron({ kind: 'stellate', x: p.x, y: p.y, r: rng.range(12.5, 14.5) }));
+      const bk = place(rng, 3, () => ({ x: rng.range(-700, 700), y: rng.range(-220, 360) }), okSoma(110), 130, pyr.concat(st));
       bk.forEach((p) => addNeuron({ kind: 'basket', x: p.x, y: p.y, r: rng.range(12, 13.5) }));
       exitFor = (n) => n.kind === 'pyramidal' ? { exit: { x: n.x + rng.range(-120, 120), y: HH + 120 }, exitAngle: Math.PI / 2 } : null;
     } else if (T === 'hippocampus') {
@@ -278,8 +304,9 @@
       myelinCollaterals = false;
     } else if (T === 'whitematter') {
       const th = info.fiberAngle || 0;
+      const gap = info.laneGap || 44;
       const lanes = [];
-      for (let v = -330; v <= 330; v += 44 + rng.range(-6, 6)) lanes.push(v);
+      for (let v = -330; v <= 330; v += gap + rng.range(-5, 5)) lanes.push(v);
       // 兩端真實神經元
       const ends = [];
       const pickLanes = [lanes[1], lanes[Math.floor(lanes.length / 2)], lanes[lanes.length - 2]];
@@ -416,6 +443,7 @@
       if (cands.length) cands[0].o.sheaths.push(e.it); else orphans.push(e.it);
     }
     sc.oligos = oliList.filter((o) => o.sheaths.length > 0).map((o) => C.buildOligodendrocyte(o, rng));
+    sc.oligos.forEach((o, i) => { o.id = i; });
     sc.orphans = C.buildOrphanSheaths(orphans);
 
     /* ---- 6. 星形膠質細胞 ---- */
@@ -431,12 +459,14 @@
     }, (p) => inFrame(p.x, p.y, 70) && !nearVessel(sc, p.x, p.y, 40) && (!sc.archY || p.y > sc.archY(p.x) + 90), 150,
     real.map((n) => ({ x: n.x, y: n.y, minD: 75 })).concat(oliPos.map((o) => ({ x: o.x, y: o.y, minD: 45 }))));
     sc.astros = astPos.map((p) => C.buildAstrocyte({ x: p.x, y: p.y, r: rng.range(9.5, 11.5) }, rng, sc.vessels, T === 'whitematter'));
+    sc.astros.forEach((a, i) => { a.id = i; });
 
     /* ---- 7. 微膠細胞 ---- */
     const micPos = place(rng, 4, () => ({ x: rng.range(-700, 700), y: rng.range(-440, 440) }),
       (p) => inFrame(p.x, p.y, 80) && !nearVessel(sc, p.x, p.y, 30) && (!sc.archY || p.y > sc.archY(p.x) + 80), 220,
       real.map((n) => ({ x: n.x, y: n.y, minD: 70 })));
     sc.micro = micPos.map((p) => C.buildMicroglia(p, rng));
+    sc.micro.forEach((m, i) => { m.id = i; });
 
     /* ---- 8. 室管膜與腦室 ---- */
     if (sc.archY) {
@@ -450,6 +480,7 @@
         sc.epend.push(C.buildEpendymal({ x: x - Math.sin(rot) * 17, y: y + Math.cos(rot) * 17, rot, w }, rng));
         x += (2 * w + 0.6) * Math.cos(rot);
       }
+      sc.epend.forEach((e, i) => { e.id = i; });
       const vp = new Path2D();
       vp.moveTo(-HW - 50, -HH - 50);
       for (let xx = -HW - 50; xx <= HW + 50; xx += 20) pts.push({ x: xx, y: sc.archY(xx) });
@@ -479,5 +510,104 @@
     return sc;
   }
 
-  BS.scene = { typeForRegion, generate, SCENE_INFO, W, H };
+  /** 規劃從 pre 既有軸突長出一條新側枝並於 post 樹突形成突觸 */
+  function planSprout(sc, pre, post) {
+    if (!pre || !post || !pre.axon || !pre.axon.paths.length || post.virtual) return null;
+    const rng = new U.RNG(((sc.seed ^ (pre.id * 919) ^ (post.id * 1777) ^ sc.synapses.length) >>> 0) + 1);
+    const main = pre.axon.paths[0];
+
+    // 1. 尋找 post 樹突上尚未被佔用的理想接觸點
+    let best = null, bestScore = Infinity;
+    for (const b of post.branches) {
+      for (let i = 2; i < b.pts.length - 1; i += 2) {
+        if (b.depth === 0 && b.cum[i] < post.r + 22) continue;
+        const p = b.pts[i];
+        if (post.usedContacts.some((u) => Math.hypot(u.x - p.x, u.y - p.y) < 16)) continue;
+        const d = U.dist(p.x, p.y, pre.x, pre.y);
+        if (d < bestScore) { bestScore = d; best = { b, i }; }
+      }
+    }
+    let contact, bouton, psPts, br = null, idx = 0;
+    if (best) {
+      br = best.b; idx = best.i;
+      const p = br.pts[idx];
+      const a = Math.atan2(br.pts[idx + 1].y - br.pts[idx - 1].y, br.pts[idx + 1].x - br.pts[idx - 1].x);
+      const nx = -Math.sin(a), ny = Math.cos(a);
+      const side = Math.sign((pre.x - p.x) * nx + (pre.y - p.y) * ny) || 1;
+      const hw = br.hw[idx];
+      contact = { x: p.x + nx * side * hw, y: p.y + ny * side * hw };
+      bouton = { x: p.x + nx * side * (hw + 4.5), y: p.y + ny * side * (hw + 4.5) };
+      psPts = C.pathToSoma(post, br, idx);
+    } else {
+      const ang = Math.atan2(pre.y - post.y, pre.x - post.x) + rng.range(-0.5, 0.5);
+      contact = { x: post.x + Math.cos(ang) * post.r, y: post.y + Math.sin(ang) * post.r };
+      bouton = { x: post.x + Math.cos(ang) * (post.r + 4.5), y: post.y + Math.sin(ang) * (post.r + 4.5) };
+      psPts = [contact, { x: post.x, y: post.y }];
+    }
+
+    // 2. 在 pre 主軸突上找最適合萌芽的蘭氏結或中段起點
+    let bestS = main.len * 0.5, bestD = Infinity;
+    const sMin = pre.virtual ? 40 : pre.r + 36;
+    const sMax = Math.max(sMin + 1, main.len - 36);
+    for (let k = 0; k <= 20; k++) {
+      const s = sMin + ((sMax - sMin) * k) / 20;
+      const p = U.pointAtS(main.pts, main.cum, s);
+      const d = U.dist(p.x, p.y, bouton.x, bouton.y);
+      if (d < bestD) { bestD = d; bestS = s; }
+    }
+    if (main.nodes.length) {
+      let nb = main.nodes[0];
+      for (const nd of main.nodes) if (Math.abs(nd - bestS) < Math.abs(nb - bestS)) nb = nd;
+      if (Math.abs(nb - bestS) < 90) bestS = nb;
+    }
+
+    const B = U.pointAtS(main.pts, main.cum, bestS);
+    const toT = Math.atan2(bouton.y - B.y, bouton.x - B.x);
+    let da = toT - B.a;
+    while (da > Math.PI) da -= Math.PI * 2;
+    while (da < -Math.PI) da += Math.PI * 2;
+    const startA = B.a + U.clamp(da, -1.0, 1.0);
+    const D = U.dist(B.x, B.y, bouton.x, bouton.y);
+    const ap = { x: bouton.x - contact.x, y: bouton.y - contact.y };
+    const apl = Math.hypot(ap.x, ap.y) || 1;
+    const p1 = { x: B.x + Math.cos(startA) * Math.min(75, D * 0.38), y: B.y + Math.sin(startA) * Math.min(75, D * 0.38) };
+    const p2 = { x: bouton.x + (ap.x / apl) * Math.min(70, D * 0.35), y: bouton.y + (ap.y / apl) * Math.min(70, D * 0.35) };
+    const pts = U.cubicPts({ x: B.x, y: B.y }, p1, p2, bouton, Math.max(8, Math.round(D / 8)));
+    const cum = U.cumLengths(pts);
+    const psCum = U.cumLengths(psPts);
+    return {
+      parentIdx: 0, fromS: bestS, pts, cum, len: cum[cum.length - 1],
+      contact, bouton, br, idx, psPts, psCum, psLen: psCum[psCum.length - 1]
+    };
+  }
+
+  /** 將完成生長的芽生側枝正式併入軸突剪影與突觸網路 */
+  function commitSproutSynapse(sc, pre, post, spec, T) {
+    const rng = new U.RNG(((sc.seed ^ sc.synapses.length * 7919) >>> 0) + 1);
+    post.usedContacts.push(spec.contact);
+    const syn = {
+      id: sc.synapses.length, pre, post, excit: pre.excit,
+      contact: spec.contact, bouton: spec.bouton,
+      geo: { bouton: spec.bouton, contact: spec.contact },
+      branch: spec.br, idx: spec.idx,
+      psPts: spec.psPts, psCum: spec.psCum, psLen: spec.psLen,
+      weight: pre.excit ? 1.28 : 1.05,
+      baseWeight: pre.excit ? 1.28 : 1.05,
+      vesicles: [], nt: [], bound: 0, lastRelease: -10, path: null,
+      isNew: true, bornAt: T || 0
+    };
+    for (let k = 0; k < 8; k++) {
+      const a = rng.range(0, Math.PI * 2), rr = Math.sqrt(rng.next()) * 2.1;
+      syn.vesicles.push({ u: -0.7 + Math.cos(a) * rr * 0.9, w: Math.sin(a) * rr });
+    }
+    const path = C.attachCollateralPath(pre, spec.parentIdx, spec.fromS, spec.pts, syn.geo, false);
+    syn.path = path;
+    sc.synapses.push(syn);
+    post.inputs.push(syn);
+    pre.outputs.push(syn);
+    C.finalizeNeuron(pre, rng);
+    return syn;
+  }
+
+  BS.scene = { typeForRegion, generate, planSprout, commitSproutSynapse, SCENE_INFO, W, H };
 })();
