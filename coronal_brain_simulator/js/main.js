@@ -155,7 +155,8 @@
     microglia: '微膠細胞：中樞神經系統常駐免疫吞噬細胞，以分枝突起持續巡邏微環境，主動趨化吞噬類澱粉蛋白斑塊與細胞碎片。',
     ependyma: '室管膜細胞：排列於腦室壁的單層纖毛上皮細胞，頂端纖毛節律擺動推動腦脊髓液（CSF）循環，基底突起錨定於腦實質。',
     capillary: '腦微血管與雙凹紅血球：由緊密連接的內皮細胞構成，外部由星形膠細胞終足包覆形成血腦障壁（BBB），紅血球單列變形通過以供應氧氣與葡萄糖。',
-    synapse: '化學突觸（Synaptic Cleft）：軸突終扣內含突觸囊泡，動作電位抵達時釋放神經傳導物質跨越約 20 nm 間隙結合突觸後受體，並由前膜轉運體（如 DAT）回收。'
+    synapse: '化學突觸（Synaptic Cleft）：軸突終扣內含突觸囊泡，動作電位抵達時釋放神經傳導物質跨越約 20 nm 間隙結合突觸後受體，並由前膜轉運體（如 DAT）回收。',
+    axonFiber: '有髓鞘投射軸突（白質纖維）：由寡突膠質細胞分節包覆絕緣髓鞘，動作電位於蘭氏結間進行高速跳躍傳導，將神經訊號遠距傳送至對側半球或皮質下結構。'
   };
 
   function getVesselBBox(v) {
@@ -340,6 +341,20 @@
       }
     }
 
+    for (const n of sc.neurons) {
+      if (!n.virtual || !n.passThrough) continue;
+      if (ctx.isPointInPath(n.body, wx, wy)) {
+        return {
+          kind: 'neuron', id: n.id, neuron: n, entity: n,
+          bbox: n.bbox,
+          title: '有髓鞘白質神經纖維', sub: 'Myelinated Projection Axon',
+          color: '#f4d06a',
+          desc: CELL_DESCRIPTIONS.axonFiber,
+          x: wx, y: wy, r: 10
+        };
+      }
+    }
+
     return null;
   }
 
@@ -491,7 +506,10 @@
     }
     Sim.fireNeuron(sim, state.currentScene, n, { forced: true, isUserClick: true });
     lastStatsAt = -1000;
-    setStatus(`已刺激「<b>${n.kindInfo.title}</b>」產生動作電位：訊號沿軸突與側枝跳躍傳導並擴散至下游細胞（<b>快速連點同一細胞</b>可體驗時間總和）。`);
+    const title = n.kindInfo ? n.kindInfo.title : '有髓鞘白質神經纖維';
+    setStatus(n.virtual
+      ? `已刺激「<b>${title}</b>」產生動作電位：訊號沿有髓鞘投射纖維與蘭氏結高速跳躍傳導。`
+      : `已刺激「<b>${title}</b>」產生動作電位：訊號沿軸突與側枝跳躍傳導並擴散至下游細胞（<b>快速連點同一細胞</b>可體驗時間總和）。`);
   }
 
   sim.onSproutComplete = (pre, post) => {
@@ -507,7 +525,7 @@
     striatum:  { x: -120, y: 15,   reg: 6, zoom: 28,  ux: 0, uy: 0, plane: 'anterior', msg: '<b>基底核（紋狀體）</b>：已切換至前連合層面，可見 GABA 中型多棘神經元、大型膽鹼性中間神經元與穿越的鉛筆狀纖維束。' },
     thalamus:  { x: -34,  y: 22,   reg: 6, zoom: 28,  ux: 0, uy: 0, plane: 'hippocampus', msg: '<b>視丘中繼核團</b>：已切換至視丘／海馬迴層面，叢狀樹突視丘中繼神經元接收上行傳入纖維並向皮質投射。' },
     callosum:  { x: 0,    y: -68,  reg: 4, zoom: 28,  ux: 0, uy: 0, msg: '<b>胼胝體橫向白質束</b>：密集平行排列的有髓鞘神經纖維、蘭氏結跳躍放電與束間寡突膠質細胞。' },
-    capsule:   { x: 82,   y: 12,   reg: 7, zoom: 28,  ux: 0, uy: 0, msg: '<b>內囊垂直白質通道</b>：上下行皮質脊髓與視丘皮質有髓鞘軸突束。' },
+    capsule:   { x: 74,   y: 12,   reg: 7, zoom: 28,  ux: 0, uy: 0, msg: '<b>內囊斜行白質通道</b>：沿內囊向腦幹收斂的上下行有髓鞘投射軸突束，方向與巨觀切面一致。' },
     radiata:   { x: 192,  y: -120, reg: 3, zoom: 28,  ux: 0, uy: 0, msg: '<b>中央白質（輻射冠）</b>：扇形放射走行的有髓鞘投射纖維與纖維型星形膠質細胞。' },
     ventricle: { x: -30,  y: -30,  reg: 5, zoom: 28,  ux: 0, uy: 20, msg: '<b>側腦室壁與室管膜</b>：粉紅色室管膜細胞頂端纖毛節律擺動推動腦脊髓液（開啟「深度睡眠」可觀察排毒沖刷）。' },
     synapse:   { synapseZoom: true, msg: '<b>超微突觸間隙特寫</b>：可觀察突觸前終扣內的突觸囊泡、轉運體（DAT）、擴散中的傳導物質微粒與突觸後受體結合。' }

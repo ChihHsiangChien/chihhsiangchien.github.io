@@ -25,19 +25,21 @@
         ? { type: 'cortex_posterior', regionName: '頂葉聯合皮質深層（第 IV–VI 層）' }
         : { type: 'cortex_anterior', regionName: '前額／運動皮質深層（第 IV–VI 層）' };
       case 3: {
-        let a = Math.atan2(y, x);
-        if (a > Math.PI / 2) a -= Math.PI; if (a < -Math.PI / 2) a += Math.PI;
-        a = U.clamp(a, -0.75, 0.75);
-        return { type: 'whitematter', regionName: '中央白質（輻射冠）', fiberAngle: a, laneGap: 48 };
+        const a = BS.macro.getWhiteMatterAngle(x, y, 3, plane);
+        return { type: 'whitematter', regionName: '中央白質（輻射冠）', fiberAngle: a, laneGap: 46 };
       }
       case 4: {
         const isAC = Math.abs(y - 26) < 14;
-        return { type: 'whitematter', regionName: isAC ? '前連合橫向纖維束' : '胼胝體連合纖維束', fiberAngle: 0, laneGap: isAC ? 44 : 36 };
+        const a = BS.macro.getWhiteMatterAngle(x, y, 4, plane);
+        return { type: 'whitematter', regionName: isAC ? '前連合橫向纖維束' : '胼胝體連合纖維束', fiberAngle: a, laneGap: isAC ? 42 : 36 };
       }
       case 5: return { type: 'ventricle', regionName: '側腦室壁（室管膜）' };
       case 6: return plane === 'hippocampus' && Math.abs(x) < 64 && y > -10
-        ? { type: 'thalamus', regionName: '視丘核團' } : { type: 'striatum', regionName: '基底核（紋狀體）' };
-      case 7: return { type: 'whitematter', regionName: '內囊垂直投射束', fiberAngle: Math.PI / 2, laneGap: 38 };
+        ? { type: 'thalamus', regionName: '視丘核團' } : { type: 'striatum', regionName: '基底核（紋狀體）', macroX: x, macroY: y };
+      case 7: {
+        const a = BS.macro.getWhiteMatterAngle(x, y, 7, plane);
+        return { type: 'whitematter', regionName: '內囊斜行投射束', fiberAngle: a, laneGap: 38 };
+      }
       case 8: return { type: 'hippocampus', regionName: '海馬迴結構' };
       default: return null;
     }
@@ -292,25 +294,43 @@
         const tgt = realList.filter((m) => m.excit || !isTh).sort((a, b) => Math.abs(a.x - x) + Math.abs(a.y - v.y) * 0.3 - (Math.abs(b.x - x) + Math.abs(b.y - v.y) * 0.3)).slice(0, 2);
         v.fixedTargets = tgt;
       }
-      // 穿越的有髓鞘纖維束（鉛筆纖維）
-      const bx = rng.sign() * rng.range(150, 450);
+      // 穿越紋狀體的有髓鞘鉛筆纖維束（沿同側內囊斜行方向排列）
+      const penAng = BS.macro.getWhiteMatterAngle(info.macroX != null ? info.macroX : -120, 12, 7, 'anterior');
+      const vCenter = rng.sign() * rng.range(120, 320);
       for (let i = 0; i < 4; i++) {
-        const v = addNeuron({ kind: 'virtual', x: bx + i * 15 - 22, y: -HH - 60 });
-        v.axonAngle = Math.PI / 2; v.passThrough = true;
+        const vv = vCenter + i * 16 - 24;
+        const rg = laneRange(vv, penAng, -80);
+        if (!rg) continue;
+        const stPt = lanePt(rg[0], vv, penAng);
+        const v = addNeuron({ kind: 'virtual', x: stPt.x, y: stPt.y });
+        v.axonAngle = penAng; v.passThrough = true;
         v.route = [];
-        for (let y = -HH - 50; y <= HH + 80; y += 20) v.route.push({ x: bx + i * 15 - 22 + Math.sin(y * 0.004 + i) * 30, y });
+        for (let k = 0; k <= 32; k++) {
+          const u = U.lerp(rg[0], rg[1], k / 32);
+          v.route.push(lanePt(u, vv + Math.sin(u * 0.004 + i) * 14, penAng));
+        }
       }
-      exitFor = (n) => n.passThrough ? { exit: n.route[n.route.length - 1], exitAngle: Math.PI / 2 } : null;
+      exitFor = (n) => n.passThrough ? { exit: n.route[n.route.length - 1], exitAngle: n.axonAngle } : null;
       myelinCollaterals = false;
     } else if (T === 'whitematter') {
       const th = info.fiberAngle || 0;
       const gap = info.laneGap || 44;
+      const vMax = HW * Math.abs(Math.sin(th)) + HH * Math.abs(Math.cos(th)) - 50;
       const lanes = [];
-      for (let v = -330; v <= 330; v += gap + rng.range(-5, 5)) lanes.push(v);
-      // 兩端真實神經元
+      for (let v = -vMax; v <= vMax; v += gap + rng.range(-4, 4)) {
+        const rg = laneRange(v, th, -120);
+        if (rg && (rg[1] - rg[0]) >= 320) lanes.push(v);
+      }
+      // 兩端真實神經元（僅置於貫穿中央的 2 條長走道，保留純粹緊密平行的白質束主體）
       const ends = [];
-      const pickLanes = [lanes[1], lanes[Math.floor(lanes.length / 2)], lanes[lanes.length - 2]];
-      pickLanes.forEach((v, i) => {
+      const longLanes = lanes.filter((v) => {
+        const rg = laneRange(v, th, 95);
+        return rg && (rg[1] - rg[0]) >= 600;
+      });
+      const pickLanes = longLanes.length >= 2
+        ? [longLanes[Math.floor(longLanes.length * 0.28)], longLanes[Math.floor(longLanes.length * 0.72)]]
+        : (longLanes.length === 1 ? [longLanes[0]] : []);
+      pickLanes.forEach((v) => {
         const rg = laneRange(v, th, 95);
         if (!rg) return;
         const L = lanePt(rg[0], v, th), R = lanePt(rg[1], v, th);
@@ -318,9 +338,8 @@
         const b = addNeuron({ kind: 'stellate', x: R.x, y: R.y, r: 14, axonAngle: th + Math.PI });
         a.lane = v; b.lane = v; a.side = -1; b.side = 1;
         ends.push(a, b);
-        void i;
       });
-      // 穿越軸突
+      // 全圖版平行的有髓鞘投射軸突束
       lanes.forEach((v) => {
         if (pickLanes.includes(v)) return;
         const rg = laneRange(v, th, -120);
@@ -331,7 +350,7 @@
         vn.axonAngle = forward ? th : th + Math.PI;
         vn.passThrough = true; vn.lane = v;
         vn.route = [];
-        const steps = 50, ph = rng.range(0, 6), amp = rng.range(4, 10);
+        const steps = 50, ph = rng.range(0, 6), amp = rng.range(3, 6.5);
         for (let k = 0; k <= steps; k++) {
           const u = forward ? U.lerp(rg[0], rg[1], k / steps) : U.lerp(rg[1], rg[0], k / steps);
           vn.route.push(lanePt(u, v + Math.sin(u * 0.006 + ph) * amp, th));
@@ -342,10 +361,9 @@
       exitFor = (n) => n.passThrough ? { exit: n.route[n.route.length - 1], exitAngle: n.axonAngle } : null;
       targetFor = (n) => {
         if (n.virtual) return null;
-        const opp = ends.filter((m) => m.side !== n.side).sort((a, b) => Math.abs(a.lane - n.lane) - Math.abs(b.lane - n.lane));
-        return opp.slice(0, 2).map((m) => ({ post: m }));
+        return ends.filter((m) => m.side !== n.side && m.lane === n.lane).map((m) => ({ post: m }));
       };
-      myelinCollaterals = true;
+      myelinCollaterals = false;
     } else if (T === 'ventricle') {
       sc.archY = (x) => -HH + 150 + (x * x) / 5200;
       const pos = place(rng, 8, () => ({ x: rng.range(-720, 720), y: rng.range(-120, 440) }), (p) => okSoma(100)(p) && p.y > sc.archY(p.x) + 200, 160, []);
@@ -401,8 +419,8 @@
         const route = [];
         const u0 = n.side < 0 ? rgA[0] + 50 : rgA[1] - 50;
         const u1 = n.side < 0 ? rgA[1] - 120 : rgA[0] + 120;
-        const vv = n.lane + 16;
-        for (let k = 0; k <= 40; k++) route.push(lanePt(U.lerp(u0, u1, k / 40), vv + Math.sin(k * 0.3) * 3, th));
+        const vv = n.lane + (n.side < 0 ? 6 : -6);
+        for (let k = 0; k <= 40; k++) route.push(lanePt(U.lerp(u0, u1, k / 40), vv + Math.sin(k * 0.3) * 2.2, th));
         route.push({ x: (route[route.length - 1].x + syns[0].bouton.x) / 2, y: (route[route.length - 1].y + syns[0].bouton.y) / 2 });
         route.push(syns[0].bouton);
         opt.route = route;
@@ -416,7 +434,7 @@
     /* ---- 5. 寡突膠質細胞 ---- */
     const internodes = [];
     for (const n of sc.neurons) for (const p of n.axon.paths) for (const it of p.internodes) internodes.push({ path: p, internode: it, n });
-    const nOli = T === 'whitematter' ? 11 : T === 'striatum' || T === 'thalamus' ? 6 : 5;
+    const nOli = T === 'whitematter' ? 16 : T === 'striatum' || T === 'thalamus' ? 6 : 5;
     const somata = real.map((n) => ({ x: n.x, y: n.y, minD: 60 }));
     const oliPos = place(rng, nOli, () => {
       if (internodes.length && rng.chance(0.85)) {
@@ -426,7 +444,7 @@
         return { x: p.x - Math.sin(p.a) * o, y: p.y + Math.cos(p.a) * o };
       }
       return { x: rng.range(-750, 750), y: rng.range(-480, 480) };
-    }, (p) => inFrame(p.x, p.y, 60) && !nearVessel(sc, p.x, p.y, 25) && (!sc.archY || p.y > sc.archY(p.x) + 80), 120, somata);
+    }, (p) => inFrame(p.x, p.y, 60) && !nearVessel(sc, p.x, p.y, 25) && (!sc.archY || p.y > sc.archY(p.x) + 80), T === 'whitematter' ? 95 : 120, somata);
     const oliList = oliPos.map((p) => ({ x: p.x, y: p.y, sheaths: [] }));
     const maxPer = T === 'whitematter' ? 5 : 4;
     const lim = T === 'whitematter' ? 190 : 220;
@@ -447,7 +465,7 @@
     sc.orphans = C.buildOrphanSheaths(orphans);
 
     /* ---- 6. 星形膠質細胞 ---- */
-    const nAst = T === 'whitematter' ? 5 : 6;
+    const nAst = T === 'whitematter' ? 6 : 6;
     const astPos = place(rng, nAst, () => {
       if (sc.vessels.length && rng.chance(0.7)) {
         const v = rng.pick(sc.vessels);
@@ -500,7 +518,7 @@
     const fib = new Path2D();
     for (let i = 0; i < 140; i++) {
       let x = rng.range(-HW, HW), y = rng.range(-HH, HH), a = rng.range(0, 6.28);
-      if (T === 'whitematter' && rng.chance(0.7)) a = sc.wmAngle + rng.range(-0.08, 0.08);
+      if (T === 'whitematter' && rng.chance(0.86)) a = sc.wmAngle + rng.range(-0.06, 0.06);
       if (sc.archY && y < sc.archY(x) + 30) continue;
       fib.moveTo(x, y);
       for (let k = 0; k < 12; k++) { a += rng.range(-0.25, 0.25); x += Math.cos(a) * 14; y += Math.sin(a) * 14; fib.lineTo(x, y); }

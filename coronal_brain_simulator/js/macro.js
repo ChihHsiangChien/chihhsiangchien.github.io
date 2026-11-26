@@ -100,11 +100,39 @@
   }
 
   function internalCapPath(ctx, dir) {
-    ctx.moveTo(dir * 66, -42);
-    ctx.lineTo(dir * 86, -34);
-    ctx.lineTo(dir * 96, 62);
-    ctx.lineTo(dir * 74, 58);
+    ctx.moveTo(dir * 74, -50);
+    ctx.lineTo(dir * 102, -40);
+    ctx.lineTo(dir * 74, 68);
+    ctx.lineTo(dir * 52, 62);
     ctx.closePath();
+  }
+
+  function normWhiteAngle(a) {
+    while (a > Math.PI / 2) a -= Math.PI;
+    while (a <= -Math.PI / 2) a += Math.PI;
+    return a;
+  }
+
+  /**
+   * 依巨觀切面區域計算對應的白質神經纖維方向（弧度，範圍 (-pi/2, pi/2]）
+   */
+  function getWhiteMatterAngle(wx, wy, reg, plane) {
+    void plane;
+    if (reg === 7) {
+      const dir = wx >= 0 ? 1 : -1;
+      return normWhiteAngle(Math.atan2(110, -dir * 25));
+    }
+    if (reg === 3) {
+      const dir = wx >= 0 ? 1 : -1;
+      const ox = dir * 82;
+      const oy = -16;
+      return normWhiteAngle(Math.atan2(wy - oy, wx - ox));
+    }
+    if (reg === 4) {
+      if (Math.abs(wy - 26) < 14) return 0;
+      return Math.atan(Math.max(-1, Math.min(1, wx / 115)) * 0.28);
+    }
+    return 0;
   }
 
   function ventriclePath(ctx, dir) {
@@ -187,7 +215,7 @@
       { title: '胼胝體', sub: 'Corpus Callosum', ax: 0, ay: -70, lx: 346, ly: -125, align: 'left', preset: 'callosum' },
       { title: '側腦室與室管膜', sub: 'Lateral Ventricle', ax: -30, ay: -34, lx: -346, ly: -120, align: 'right', preset: 'ventricle' },
       { title: '尾狀核', sub: 'Caudate Nucleus', ax: 54, ay: -24, lx: 346, ly: -58, align: 'left', preset: 'striatum' },
-      { title: '內囊（白質束）', sub: 'Internal Capsule', ax: 82, ay: 12, lx: 346, ly: 8, align: 'left', preset: 'capsule' },
+      { title: '內囊（白質束）', sub: 'Internal Capsule', ax: 74, ay: 12, lx: 346, ly: 8, align: 'left', preset: 'capsule' },
       { title: '豆狀核（殼核／蒼白球）', sub: 'Lentiform Nucleus', ax: -124, ay: 18, lx: -346, ly: 18, align: 'right', preset: 'striatum' }
     ];
     if (plane === 'anterior') {
@@ -260,23 +288,27 @@
     g.lineWidth = 0.9;
     g.stroke();
 
-    // 放射狀白質纖維手繪排線紋理
+    // 放射狀白質纖維手繪排線紋理（由雙側內囊上端扇形輻射而出，與顯微白質視野角度一致）
     g.save();
     tracePoly(g, innerWhitePts);
     g.clip();
     g.strokeStyle = pal.fiberLine;
     g.lineWidth = 0.85;
-    for (let i = 0; i < 108; i++) {
-      const ang = (i / 108) * Math.PI * 2;
+    for (const dir of [-1, 1]) {
+      g.save();
       g.beginPath();
-      g.moveTo(Math.cos(ang) * 38, Math.sin(ang) * 28);
-      g.quadraticCurveTo(
-        Math.cos(ang + 0.1) * 175,
-        Math.sin(ang - 0.08) * 135,
-        Math.cos(ang) * 330,
-        Math.sin(ang) * 250
-      );
-      g.stroke();
+      g.rect(dir < 0 ? -420 : 0, -330, 420, 660);
+      g.clip();
+      const ox = dir * 82, oy = -16;
+      const nRays = 54;
+      for (let i = 0; i < nRays; i++) {
+        const ang = (i / nRays) * Math.PI * 2;
+        g.beginPath();
+        g.moveTo(ox + Math.cos(ang) * 26, oy + Math.sin(ang) * 26);
+        g.lineTo(ox + Math.cos(ang) * 320, oy + Math.sin(ang) * 320);
+        g.stroke();
+      }
+      g.restore();
     }
     g.restore();
 
@@ -310,13 +342,41 @@
       g.ellipse(0, 26, 98, 6.5, 0, 0, Math.PI * 2);
       g.fill();
       g.stroke();
+
+      // 前連合橫向平行纖維細線
+      g.save();
+      g.beginPath();
+      g.ellipse(0, 26, 98, 6.5, 0, 0, Math.PI * 2);
+      g.clip();
+      g.strokeStyle = pal.fiberLine;
+      g.lineWidth = 0.72;
+      for (const dy of [-3, 0, 3]) {
+        g.beginPath();
+        g.moveTo(-98, 26 + dy);
+        g.lineTo(98, 26 + dy);
+        g.stroke();
+      }
+      g.restore();
     }
 
     // 5. 深部灰質核團、內囊與海馬迴
     for (const dir of [-1, 1]) {
-      // 內囊
+      // 內囊與斜行投射纖維紋理
       g.fillStyle = pal.capsule;
-      g.beginPath(); internalCapPath(g, dir); g.fill();
+      g.strokeStyle = 'rgba(44,26,14,0.32)';
+      g.lineWidth = 0.85;
+      g.beginPath(); internalCapPath(g, dir); g.fill(); g.stroke();
+      g.save();
+      g.beginPath(); internalCapPath(g, dir); g.clip();
+      g.strokeStyle = pal.fiberLine;
+      g.lineWidth = 0.85;
+      for (let t = 0.1; t <= 0.92; t += 0.16) {
+        g.beginPath();
+        g.moveTo(dir * (74 + 28 * t), -50 + 10 * t);
+        g.lineTo(dir * (52 + 22 * t), 62 + 6 * t);
+        g.stroke();
+      }
+      g.restore();
 
       // 尾狀核頭
       g.fillStyle = pal.nuclei;
@@ -326,14 +386,16 @@
       g.ellipse(dir * 54, -22, 16, 24, dir * -0.25, 0, Math.PI * 2);
       g.fill(); g.stroke();
 
-      // 橫跨內囊的紋狀體灰質橋 (Pontes grisei caudatolenticulares)
-      g.strokeStyle = pal.nuclei;
-      g.lineWidth = 2.8;
-      for (let b = -22; b <= 32; b += 11) {
-        g.beginPath();
-        g.moveTo(dir * 65, b);
-        g.lineTo(dir * 96, b + 8);
-        g.stroke();
+      // 橫跨內囊前肢的紋狀體灰質橋 (Pontes grisei caudatolenticulares)
+      if (plane === 'anterior') {
+        g.strokeStyle = pal.nuclei;
+        g.lineWidth = 2.6;
+        for (let b = -22; b <= 24; b += 11) {
+          g.beginPath();
+          g.moveTo(dir * 66, b);
+          g.lineTo(dir * 96, b + 8);
+          g.stroke();
+        }
       }
 
       // 豆狀核：殼核 + 外/內蒼白球
@@ -701,6 +763,7 @@
 
   BS.macro = {
     getRegionAt,
+    getWhiteMatterAngle,
     REGION_LABELS,
     getCallouts,
     draw,
