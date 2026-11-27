@@ -1,0 +1,2345 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>mTOR、AMPK 與粒線體動態互動模擬</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap');
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #e8f0f8;
+      color: #0f172a;
+      font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
+      touch-action: none;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+    }
+
+    canvas:active {
+      cursor: grabbing;
+    }
+
+    /* 自訂捲軸 */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(226, 232, 240, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.7);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(100, 116, 139, 0.85);
+    }
+
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.90);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.10);
+    }
+
+    .btn-pill {
+      transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .btn-pill:active {
+      transform: scale(0.96);
+    }
+
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 0.75; }
+      50% { opacity: 1; }
+    }
+    .animate-glow {
+      animation: pulseGlow 2.4s infinite ease-in-out;
+    }
+
+    .scrollable-panel {
+      touch-action: pan-y;
+      -webkit-overflow-scrolling: touch;
+    }
+  </style>
+</head>
+<body class="relative select-none">
+
+  <!-- 主畫布 -->
+  <canvas id="simCanvas"></canvas>
+
+  <!-- 頂部標題與狀態監測列 -->
+  <header class="fixed top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+    <!-- 左側標題與視圖切換 -->
+    <div class="glass-panel rounded-2xl px-3.5 py-2 flex items-center gap-3 pointer-events-auto">
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-glow shadow-[0_0_8px_#10b981]"></span>
+        <div>
+          <h1 class="text-sm sm:text-base font-bold text-slate-900 tracking-wide leading-tight">
+            mTOR・AMPK 與粒線體動態視覺模擬
+          </h1>
+          <p id="subtitleText" class="text-[11px] text-slate-500 hidden sm:block">
+            點擊畫布元件看白話解說・右側切換「自學課程 / 實驗控制 / 隨堂測驗」
+          </p>
+        </div>
+      </div>
+
+      <!-- 視圖切換按鈕 -->
+      <div class="flex bg-slate-100 p-1 rounded-xl border border-slate-200 ml-1">
+        <button id="btnViewCell" class="btn-pill px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-700 border border-emerald-500/40">
+          細胞代謝網路
+        </button>
+        <button id="btnViewNeuron" class="btn-pill px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-500 hover:text-slate-800">
+          神經突觸運輸
+        </button>
+      </div>
+    </div>
+
+    <!-- 中央即時生理指標儀表 -->
+    <div id="metricsBar" class="glass-panel rounded-2xl px-3.5 py-2 hidden lg:flex items-center gap-4 pointer-events-auto">
+      <div class="w-28">
+        <div class="flex justify-between text-[11px] mb-1">
+          <span id="lblMtor" class="text-amber-700 font-semibold">擴廠隊長</span>
+          <span id="valMtor" class="text-slate-700 font-mono font-semibold">58%</span>
+        </div>
+        <div class="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+          <div id="barMtor" class="h-full bg-gradient-to-r from-amber-500 to-orange-400 rounded-full transition-all duration-300" style="width: 58%"></div>
+        </div>
+      </div>
+
+      <div class="w-28">
+        <div class="flex justify-between text-[11px] mb-1">
+          <span id="lblAmpk" class="text-cyan-700 font-semibold">省電總監</span>
+          <span id="valAmpk" class="text-slate-700 font-mono font-semibold">74%</span>
+        </div>
+        <div class="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+          <div id="barAmpk" class="h-full bg-gradient-to-r from-cyan-500 to-sky-400 rounded-full transition-all duration-300" style="width: 74%"></div>
+        </div>
+      </div>
+
+      <div class="w-32">
+        <div class="flex justify-between text-[11px] mb-1">
+          <span id="lblMito" class="text-emerald-700 font-semibold">電池電量</span>
+          <span id="valMito" class="text-slate-700 font-mono font-semibold">89%</span>
+        </div>
+        <div class="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+          <div id="barMito" class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-300" style="width: 89%"></div>
+        </div>
+      </div>
+
+      <div class="w-28">
+        <div class="flex justify-between text-[11px] mb-1">
+          <span id="lblMitoPhagy" class="text-purple-700 font-semibold">回收廠通量</span>
+          <span id="valMitoPhagy" class="text-slate-700 font-mono font-semibold">78%</span>
+        </div>
+        <div class="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+          <div id="barMitoPhagy" class="h-full bg-gradient-to-r from-purple-500 to-fuchsia-400 rounded-full transition-all duration-300" style="width: 78%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右側快捷工具按鈕 -->
+    <div class="glass-panel rounded-2xl p-1.5 flex items-center gap-1.5 pointer-events-auto relative z-30">
+      <button id="btnToggleJargon" title="切換白話角色與專業生物名詞" class="btn-pill px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 border border-emerald-500/40 flex items-center gap-1">
+        <span id="jargonModeLabel">白話模式</span>
+      </button>
+      <button id="btnToggleLabels" title="顯示或隱藏構造標籤" class="btn-pill px-2.5 py-1.5 rounded-xl text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300 flex items-center gap-1.5">
+        <svg class="w-3.5 h-3.5 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+        <span class="hidden sm:inline">標籤</span>
+      </button>
+      <button id="btnPause" title="暫停或繼續動畫" class="btn-pill px-2.5 py-1.5 rounded-xl text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300 flex items-center gap-1.5">
+        <svg class="w-3.5 h-3.5 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+        <span>暫停</span>
+      </button>
+      <button id="btnResetView" title="重設縮放與視角" class="btn-pill px-2.5 py-1.5 rounded-xl text-xs font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300 flex items-center gap-1.5">
+        <svg class="w-3.5 h-3.5 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="3" x2="12" y2="7"/><line x1="12" y1="17" x2="12" y2="21"/><line x1="3" y1="12" x2="7" y2="12"/><line x1="17" y1="12" x2="21" y2="12"/></svg>
+        <span>重設</span>
+      </button>
+      <button id="btnToggleDrawer" title="展開或收合控制面板" class="btn-pill px-3 py-1.5 rounded-xl text-xs font-semibold bg-sky-500/15 text-sky-700 hover:bg-sky-500/25 border border-sky-500/40 flex items-center gap-1.5">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        <span id="drawerToggleLabel">收合面板</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- 可收合右側自學與控制面板 -->
+  <aside id="controlDrawer" style="display: flex;" class="fixed top-16 right-3 bottom-3 w-80 sm:w-96 max-h-[calc(100vh-5rem)] z-40 glass-panel rounded-2xl flex-col overflow-hidden pointer-events-auto transition-all duration-300 ease-out">
+    <!-- 面板頂部與關閉鈕 -->
+    <div class="px-3.5 py-2.5 border-b border-slate-200 flex items-center justify-between bg-slate-50/90 shrink-0">
+      <div class="flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-sky-500"></span>
+        <span class="text-xs font-bold tracking-wider text-slate-800">互動自學中心</span>
+      </div>
+      <button id="btnCloseDrawer" type="button" aria-label="關閉控制面板" class="px-2.5 py-1 min-h-[30px] rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 border border-slate-300 hover:border-rose-300 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer pointer-events-auto">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        <span>關閉</span>
+      </button>
+    </div>
+
+    <!-- 三大分頁切換列：自學課程 / 實驗控制 / 隨堂測驗 -->
+    <div class="px-3 py-2 bg-slate-100/80 border-b border-slate-200 grid grid-cols-3 gap-1.5 shrink-0">
+      <button id="tabBtnLearn" data-tab="learn" class="drawer-tab-btn py-1.5 px-2 rounded-xl text-xs font-bold bg-sky-500/15 text-sky-700 border border-sky-500/40 transition-all">
+        1. 自學課程
+      </button>
+      <button id="tabBtnLab" data-tab="lab" class="drawer-tab-btn py-1.5 px-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 border border-transparent hover:bg-white/70 transition-all">
+        2. 實驗控制
+      </button>
+      <button id="tabBtnQuiz" data-tab="quiz" class="drawer-tab-btn py-1.5 px-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 border border-transparent hover:bg-white/70 transition-all">
+        3. 隨堂測驗
+      </button>
+    </div>
+
+    <!-- 雙連續滑桿生活操縱台：熱量供給 × 活動強度 -->
+    <div class="px-3.5 py-2.5 bg-slate-50/90 border-b border-slate-200 grid grid-cols-2 gap-3 shrink-0">
+      <div>
+        <div class="flex items-center justify-between text-[11px] mb-1">
+          <span class="font-semibold text-amber-700">🍽️ 熱量供給</span>
+          <span id="valNutrition" class="font-mono font-bold text-amber-700">50%</span>
+        </div>
+        <input id="sliderNutrition" type="range" min="0" max="100" value="50" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-amber-500" />
+        <div class="flex justify-between text-[9px] text-slate-500 mt-0.5">
+          <span>輕斷食</span><span>飽食過剩</span>
+        </div>
+      </div>
+
+      <div>
+        <div class="flex items-center justify-between text-[11px] mb-1">
+          <span class="font-semibold text-cyan-700">🏃 活動強度</span>
+          <span id="valActivity" class="font-mono font-bold text-cyan-700">55%</span>
+        </div>
+        <input id="sliderActivity" type="range" min="0" max="100" value="55" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-cyan-600" />
+        <div class="flex justify-between text-[9px] text-slate-500 mt-0.5">
+          <span>久坐</span><span>高強度衝刺</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 分頁 1：循序漸進自學課程 -->
+    <div id="tabPanelLearn" class="flex-1 overflow-y-auto scrollable-panel p-4 space-y-3.5">
+      <div class="flex items-center justify-between">
+        <span id="lessonProgressLabel" class="text-[11px] font-bold text-sky-700 bg-sky-100 border border-sky-300 px-2.5 py-0.5 rounded-full">
+          第 1 / 6 課
+        </span>
+        <div id="lessonStepDots" class="flex items-center gap-1"></div>
+      </div>
+
+      <div id="lessonCard" class="space-y-3">
+        <!-- 動態填入課程內容 -->
+      </div>
+
+      <div class="pt-2 border-t border-slate-200 flex items-center justify-between gap-2">
+        <button id="btnPrevLesson" class="btn-pill px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 disabled:opacity-40">
+          ← 上一課
+        </button>
+        <button id="btnNextLesson" class="btn-pill flex-1 px-3 py-2 rounded-xl text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white border border-sky-700">
+          下一課 →
+        </button>
+      </div>
+    </div>
+
+    <!-- 分頁 2：實驗室控制與圖例（原本的四大情境與手動觸發） -->
+    <div id="tabPanelLab" class="hidden flex-1 overflow-y-auto scrollable-panel p-4 space-y-4">
+      <!-- 1. 四大生理情境切換 -->
+      <section>
+        <h2 class="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span>生理情境模式（點擊觀察數值與動畫變化）</span>
+        </h2>
+        <div class="grid grid-cols-1 gap-2" id="scenarioList">
+          <button data-scenario="zone2" class="scenario-btn text-left p-2.5 rounded-xl border border-emerald-400 bg-emerald-50 transition-all">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-bold text-emerald-800">Zone 2 有氧訓練</span>
+              <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">黃金平衡</span>
+            </div>
+            <p class="text-[11px] text-slate-600 mt-1">燃燒脂肪酸，讓 AMPK 適度啟動、保養並擴建粒線體。</p>
+            <div class="flex flex-wrap items-center gap-1 mt-1.5 text-[11px] text-slate-700 font-mono">
+              <span class="px-1.5 py-0.5 rounded bg-lime-100 text-lime-800">[受質]FFA+O₂</span>
+              <span>→</span>
+              <span class="px-1.5 py-0.5 rounded bg-cyan-100 text-cyan-800">[酵素]AMPK</span>
+              <span>→</span>
+              <span class="px-1.5 py-0.5 rounded bg-teal-100 text-teal-800">[轉錄]PGC-1α</span>
+            </div>
+          </button>
+
+          <button data-scenario="sedentary" class="scenario-btn text-left p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-all">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-bold text-amber-800">久坐與熱量過剩</span>
+              <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">自噬閘門關閉</span>
+            </div>
+            <p class="text-[11px] text-slate-600 mt-1">能量過多讓 mTORC1 一直開著，鎖住回收廠導致老舊粒線體堆積。</p>
+            <div class="flex flex-wrap items-center gap-1 mt-1.5 text-[11px] text-slate-700 font-mono">
+              <span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">[受質]胺基酸/糖</span>
+              <span>→</span>
+              <span class="px-1.5 py-0.5 rounded bg-orange-100 text-orange-800">[酵素]mTORC1↑</span>
+              <span>⊣</span>
+              <span class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-800">[胞器]溶酶體</span>
+            </div>
+          </button>
+
+          <button data-scenario="hiit" class="scenario-btn text-left p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-all">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-bold text-rose-800">高強度 / 肌力恢復週期</span>
+              <span class="text-[10px] px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">先破後立</span>
+            </div>
+            <p class="text-[11px] text-slate-600 mt-1">運動時先淘汰受損零件，休息吃營養後再由 mTORC1 強勢重建。</p>
+            <div class="flex flex-wrap items-center gap-1 mt-1.5 text-[11px] text-slate-700 font-mono">
+              <span class="px-1.5 py-0.5 rounded bg-cyan-100 text-cyan-800">[酵素]DRP1/PINK1</span>
+              <span>⇄</span>
+              <span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">恢復期 mTORC1</span>
+            </div>
+          </button>
+
+          <button data-scenario="neuron" class="scenario-btn text-left p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-all">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-bold text-sky-800">神經突觸高頻放電</span>
+              <span class="text-[10px] px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-300">長途物流供電</span>
+            </div>
+            <p class="text-[11px] text-slate-600 mt-1">突觸需要電時靠 Ca²⁺ 叫粒線體停車供電；壞掉的沿微管送回回收。</p>
+            <div class="flex flex-wrap items-center gap-1 mt-1.5 text-[11px] text-slate-700 font-mono">
+              <span class="px-1.5 py-0.5 rounded bg-sky-100 text-sky-800">[蛋白]MIRO+[受質]Ca²⁺</span>
+              <span>・</span>
+              <span class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-800">← 逆行至溶酶體</span>
+            </div>
+          </button>
+        </div>
+      </section>
+
+      <!-- 2. 手動觸發分子事件 -->
+      <section>
+        <h2 class="text-xs font-semibold text-slate-600 mb-2 flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-cyan-600"></span>
+          <span>手動觸發分子事件（觀察畫布即時反應）</span>
+        </h2>
+        <div class="grid grid-cols-2 gap-2">
+          <button id="btnTriggerFusion" class="btn-pill p-2.5 rounded-xl bg-teal-50 hover:bg-teal-100 border border-teal-300 text-left">
+            <div class="text-xs font-bold text-teal-800">觸發融合 (合併互補)</div>
+            <div class="text-[10px] text-slate-600 mt-0.5">[結構] MFN1/2・OPA1</div>
+          </button>
+
+          <button id="btnTriggerFission" class="btn-pill p-2.5 rounded-xl bg-cyan-50 hover:bg-cyan-100 border border-cyan-300 text-left">
+            <div class="text-xs font-bold text-cyan-800">觸發分裂 (剪開隔離)</div>
+            <div class="text-[10px] text-slate-600 mt-0.5">[胞器]ER + [酵素]DRP1</div>
+          </button>
+
+          <button id="btnTriggerDamage" class="btn-pill p-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-300 text-left">
+            <div class="text-xs font-bold text-purple-800">誘導自噬 (貼標籤回收)</div>
+            <div class="text-[10px] text-slate-600 mt-0.5">[酵素]PINK1/Parkin→Ub</div>
+          </button>
+
+          <button id="btnTriggerRecovery" class="btn-pill p-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-300 text-left">
+            <div class="text-xs font-bold text-amber-800">合成脈衝 (蓋新工廠)</div>
+            <div class="text-[10px] text-slate-600 mt-0.5">[酵素]mTORC1→PGC-1α</div>
+          </button>
+        </div>
+      </section>
+
+      <!-- 3. 行動裝置即時指標摘要 -->
+      <section class="lg:hidden bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+        <h2 class="text-xs font-semibold text-slate-600">即時訊號活性</h2>
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <div class="bg-white p-2 rounded-lg border border-slate-200">
+            <span class="text-amber-700 block text-[11px] font-semibold">mTORC1 激酶</span>
+            <span id="mobMtor" class="font-mono font-bold text-slate-800">58%</span>
+          </div>
+          <div class="bg-white p-2 rounded-lg border border-slate-200">
+            <span class="text-cyan-700 block text-[11px] font-semibold">AMPK 激酶</span>
+            <span id="mobAmpk" class="font-mono font-bold text-slate-800">74%</span>
+          </div>
+          <div class="bg-white p-2 rounded-lg border border-slate-200">
+            <span class="text-emerald-700 block text-[11px] font-semibold">膜電位 ΔΨm</span>
+            <span id="mobMito" class="font-mono font-bold text-slate-800">89%</span>
+          </div>
+          <div class="bg-white p-2 rounded-lg border border-slate-200">
+            <span class="text-purple-700 block text-[11px] font-semibold">自噬清除通量</span>
+            <span id="mobMitoPhagy" class="font-mono font-bold text-slate-800">78%</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. 分子角色分類篩選與視覺圖例 -->
+      <section class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2.5">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xs font-semibold text-slate-700">視覺圖例與角色高亮篩選</h2>
+          <button id="btnResetRoleFilter" class="text-[10px] text-sky-600 hover:text-sky-800 underline font-semibold">顯示全部</button>
+        </div>
+
+        <!-- 四大角色互動篩選按鈕 -->
+        <div class="grid grid-cols-2 gap-1.5" id="roleFilterGroup">
+          <button data-role="enzyme" class="role-filter-btn flex items-center gap-1.5 p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-left transition-all">
+            <span class="inline-flex items-center justify-center w-5 h-5 rounded-md bg-amber-100 text-amber-700 font-bold text-xs border border-amber-300">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </span>
+            <div>
+              <div class="text-[11px] font-bold text-amber-800">酵素 / 激酶</div>
+              <div class="text-[9px] text-slate-500">鋸齒齒輪 (開關/剪刀)</div>
+            </div>
+          </button>
+
+          <button data-role="substrate" class="role-filter-btn flex items-center gap-1.5 p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-left transition-all">
+            <span class="inline-flex items-center justify-center w-5 h-5 rounded-md bg-lime-100 text-lime-700 font-bold text-xs border border-lime-300">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 21 7 21 17 12 22 3 17 3 7 12 2"/></svg>
+            </span>
+            <div>
+              <div class="text-[11px] font-bold text-lime-800">受質 / 代謝物</div>
+              <div class="text-[9px] text-slate-500">流動小分子 (燃料/原料)</div>
+            </div>
+          </button>
+
+          <button data-role="organelle" class="role-filter-btn flex items-center gap-1.5 p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-left transition-all">
+            <span class="inline-flex items-center justify-center w-5 h-5 rounded-md bg-emerald-100 text-emerald-700 font-bold text-xs border border-emerald-300">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/></svg>
+            </span>
+            <div>
+              <div class="text-[11px] font-bold text-emerald-800">胞器 / 區室</div>
+              <div class="text-[9px] text-slate-500">發電廠與回收廠</div>
+            </div>
+          </button>
+
+          <button data-role="factor" class="role-filter-btn flex items-center gap-1.5 p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-left transition-all">
+            <span class="inline-flex items-center justify-center w-5 h-5 rounded-md bg-teal-100 text-teal-700 font-bold text-xs border border-teal-300">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 22 12 12 22 2 12 12 2"/></svg>
+            </span>
+            <div>
+              <div class="text-[11px] font-bold text-teal-800">結構 / 轉錄因子</div>
+              <div class="text-[9px] text-slate-500">細胞核藍圖調控</div>
+            </div>
+          </button>
+        </div>
+
+        <!-- 具體化學受質形狀對照 -->
+        <div class="pt-1.5 border-t border-slate-200 grid grid-cols-2 gap-1.5 text-[10.5px] text-slate-700">
+          <div class="flex items-center gap-1.5">
+            <span class="inline-block w-2.5 h-2.5 rotate-45 border border-lime-600 bg-lime-400"></span>
+            <span>FFA + O₂ (脂肪酸燃料)</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+            <span>ATP (細胞電力) / AMP</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="inline-block w-2.5 h-2.5 rotate-45 bg-amber-500"></span>
+            <span>胺基酸 / 葡萄糖原料</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="inline-block w-2.5 h-2.5 rounded-full bg-sky-500"></span>
+            <span>Ca²⁺ 鈣離子訊號</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="inline-block w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-b-[9px] border-b-teal-600"></span>
+            <span>TCA 循環建構前驅物</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="inline-block w-2.5 h-2.5 rounded-sm bg-rose-500"></span>
+            <span>ROS 自由基 / Ub 貼紙</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- 分頁 3：隨堂小測驗（自我檢核） -->
+    <div id="tabPanelQuiz" class="hidden flex-1 overflow-y-auto scrollable-panel p-4 space-y-3.5">
+      <div class="flex items-center justify-between bg-slate-100 px-3 py-2 rounded-xl border border-slate-200">
+        <div>
+          <div class="text-xs font-bold text-slate-800">自學成果檢核</div>
+          <div id="quizScoreText" class="text-[11px] text-emerald-700 font-mono font-semibold">已作答 0 / 6 題・答對 0 題</div>
+        </div>
+        <button id="btnResetQuiz" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300">
+          重新測驗
+        </button>
+      </div>
+      <div id="quizList" class="space-y-3">
+        <!-- 動態填入測驗題目 -->
+      </div>
+    </div>
+  </aside>
+
+  <!-- 精簡視覺化底部解說卡（可收合/關閉） -->
+  <div id="inspectorCard" class="fixed bottom-3 left-3 right-3 sm:right-auto sm:w-[465px] z-20 glass-panel rounded-2xl p-3.5 transition-all duration-300 pointer-events-auto">
+    <div class="flex items-center justify-between gap-2">
+      <div class="flex items-center gap-2 min-w-0">
+        <span id="inspectorBadge" class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
+          胞器與分子互動總覽
+        </span>
+        <h3 id="inspectorTitle" class="text-sm font-bold text-slate-900 truncate">
+          酵素・受質與胞器的動態協作圖譜
+        </h3>
+      </div>
+      <div class="flex items-center gap-1.5 shrink-0">
+        <span id="eventToast" class="text-[11px] font-semibold text-sky-800 bg-sky-100 border border-sky-300 px-2 py-0.5 rounded-full hidden">
+          事件觸發
+        </span>
+        <button id="btnToggleInspector" type="button" title="收合或展開解說卡" class="px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] border border-slate-300 font-medium">
+          收合
+        </button>
+      </div>
+    </div>
+
+    <div id="inspectorBody">
+      <!-- 白話比喻提示條 -->
+      <div id="inspectorAnalogy" class="mt-2 px-2.5 py-1.5 rounded-xl bg-sky-50 border border-sky-200 text-xs text-sky-900 leading-relaxed">
+        💡 <b>白話比喻：</b>把細胞想成一座工廠，<b>mTORC1</b> 是擴廠建築隊長、<b>AMPK</b> 是省電品管總監、<b>粒線體</b> 是發電廠、<b>溶酶體</b> 則是資源回收廠。
+      </div>
+
+      <!-- 視覺化路徑徽章條 -->
+      <div id="inspectorFlow" class="flex flex-wrap items-center gap-1.5 mt-2 text-[11px] font-mono">
+        <span class="px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300">[鋸齒] 酵素/激酶</span>
+        <span class="px-2 py-0.5 rounded bg-lime-100 text-lime-800 border border-lime-300">[多邊形] 受質/代謝物</span>
+        <span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">[膜囊] 胞器</span>
+      </div>
+
+      <!-- 精簡重點條列 -->
+      <ul id="inspectorBullets" class="mt-2 space-y-1 text-xs text-slate-700 list-disc list-inside leading-relaxed">
+        <li>點擊畫布上的<b>[酵素]</b>、<b>[受質]</b>或<b>[胞器]</b>，即可看到對應的白話解釋與運作原理。</li>
+        <li>建議先從右側「<b>1. 自學課程</b>」開始，只需 6 步就能完整掌握這套細胞能量網路。</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+// ... existing code ... -->
+      // 右側控制面板開啟 / 關閉狀態管理（直接使用 inline style.display 覆蓋 Tailwind 優先權）
+      const drawer = document.getElementById('controlDrawer');
+      const btnToggleDrawer = document.getElementById('btnToggleDrawer');
+      const btnCloseDrawer = document.getElementById('btnCloseDrawer');
+      const drawerToggleLabel = document.getElementById('drawerToggleLabel');
+      let isDrawerOpen = true;
+
+      function setDrawerOpen(open) {
+        isDrawerOpen = Boolean(open);
+        if (isDrawerOpen) {
+          drawer.classList.remove('hidden');
+          drawer.style.setProperty('display', 'flex', 'important');
+          if (drawerToggleLabel) drawerToggleLabel.textContent = '收合面板';
+        } else {
+          drawer.classList.add('hidden');
+          drawer.style.setProperty('display', 'none', 'important');
+          if (drawerToggleLabel) drawerToggleLabel.textContent = '開啟控制面板';
+        }
+      }
+
+      if (btnToggleDrawer) {
+        btnToggleDrawer.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setDrawerOpen(!isDrawerOpen);
+        });
+      }
+
+      if (btnCloseDrawer) {
+        btnCloseDrawer.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setDrawerOpen(false);
+        });
+      }
+
+      // 底部解說卡收合控制
+      const btnToggleInspector = document.getElementById('btnToggleInspector');
+      const inspectorBody = document.getElementById('inspectorBody');
+      if (btnToggleInspector && inspectorBody) {
+        btnToggleInspector.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const willHide = !inspectorBody.classList.contains('hidden');
+          inspectorBody.classList.toggle('hidden', willHide);
+          btnToggleInspector.textContent = willHide ? '展開' : '收合';
+        });
+      }
+
+      function showEventToast(text) {
+        const toast = document.getElementById('eventToast');
+        if (!toast) return;
+        toast.textContent = text;
+        toast.classList.remove('hidden');
+        clearTimeout(toast._timer);
+        toast._timer = setTimeout(() => toast.classList.add('hidden'), 2400);
+      }
+
+      // 防止面板內的觸控事件穿透到畫布（不阻斷面板內部捲動）
+      ['touchstart', 'touchmove', 'touchend', 'pointerdown', 'pointerup'].forEach(evtName => {
+        if (drawer) drawer.addEventListener(evtName, (e) => e.stopPropagation(), { passive: true });
+        const card = document.getElementById('inspectorCard');
+        if (card) card.addEventListener(evtName, (e) => e.stopPropagation(), { passive: true });
+      });
+
+      // 手機版額外綁定 touchend 以確保即時回應關閉
+      if (btnCloseDrawer) {
+        btnCloseDrawer.addEventListener('touchend', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setDrawerOpen(false);
+        }, { passive: false });
+      }
+      if (btnToggleDrawer) {
+        btnToggleDrawer.addEventListener('touchend', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setDrawerOpen(!isDrawerOpen);
+        }, { passive: false });
+      }
+
+      // 畫布與模擬引擎初始化
+      const canvas = document.getElementById('simCanvas');
+      const ctx = canvas.getContext('2d');
+      let width = 0, height = 0, dpr = 1;
+
+      function resizeCanvas() {
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = Math.floor(width * dpr);
+        canvas.height = Math.floor(height * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+
+      // 模擬狀態變數
+      const state = {
+        view: 'cell',          // 'cell' | 'neuron'
+        scenario: 'zone2',     // 'zone2' | 'sedentary' | 'hiit' | 'neuron'
+        paused: false,
+        showLabels: true,
+        roleFilter: null,      // null | 'enzyme' | 'substrate' | 'organelle' | 'factor'
+        selectedId: null,
+        lessonFocusIds: ['ampk', 'mtor'],
+        activeTab: 'learn',
+        lessonIndex: 0,
+        jargonMode: 'plain',   // 'plain' | 'pro'
+        nutrition: 50,         // 0..100
+        activity: 55,          // 0..100
+        time: 0,
+        camera: { x: 0, y: 0, zoom: 1 },
+        metrics: {
+          mtor: 58,
+          ampk: 74,
+          mito: 89,
+          mitophagy: 78
+        },
+        targets: {
+          mtor: 58,
+          ampk: 74,
+          mito: 89,
+          mitophagy: 78
+        },
+        hiitPhase: 0,
+        fusionPulse: 0,
+        fissionPulse: 0,
+        recoveryPulse: 0
+      };
+
+      // 生理情境預設目標值與視覺參數
+      const SCENARIOS = {
+        zone2: {
+          view: 'cell',
+          mtor: 54, ampk: 78, mito: 92, mitophagy: 82,
+          badge: 'Zone 2 有氧訓練',
+          title: '脂肪酸氧化驅動 AMPK 與 PGC-1α 粒線體重塑',
+          analogy: '就像定期保養又擴建的發電廠：邊燒脂肪產電，邊把老舊機組汰換更新，電力維持滿格！',
+          flow: ['[受質] FFA + O₂', '→', '[酵素] AMPK 適度活化', '→', '[轉錄] PGC-1α 粒線體新生'],
+          bullets: [
+            '持續有氧氧化穩定燃燒脂肪酸並產出 ATP，讓粒線體膜電位 ΔΨm 維持在 90% 左右的高檔。',
+            'AMPK 適度活化避免 mTORC1 過度亢進，保留溶酶體自噬通量以定期汰換老舊元件。'
+          ]
+        },
+        sedentary: {
+          view: 'cell',
+          mtor: 91, ampk: 24, mito: 52, mitophagy: 22,
+          badge: '久坐與熱量過剩',
+          title: 'mTORC1 慢性亢進抑制自噬，受損粒線體堆積',
+          analogy: '原料堆滿倉庫，建築隊長 (mTORC1) 忙著蓋新東西，卻把資源回收廠大門鎖死，壞掉的發電機只能堆在廠裡冒黑煙 (ROS)。',
+          flow: ['[受質] 胺基酸/糖過剩', '→', '[酵素] mTORC1↑', '⊣', '[胞器] 溶酶體自噬受阻'],
+          bullets: [
+            '長期營養過剩使 mTORC1 持續高檔，關閉自噬閘門，低膜電位粒線體無法被清除。',
+            '受損呼吸鏈產生大量 ROS 活性氧（自由基），進一步拉低整體能量代謝效率。'
+          ]
+        },
+        hiit: {
+          view: 'cell',
+          mtor: 76, ampk: 84, mito: 80, mitophagy: 88,
+          badge: '高強度 / 肌力恢復週期',
+          title: '先切割清除受損片段，再由 mTORC1 主導修復重建',
+          analogy: '先拆後建的週期維修：高強度運動時先出動剪刀 (DRP1) 切除老舊機組；運動後吃飽休息，建築隊長 (mTORC1) 立刻蓋出更強壯的發電廠。',
+          flow: ['[酵素] DRP1 / PINK1 清除耗損', '⇄', '恢復期 [酵素] mTORC1 合成重建'],
+          bullets: [
+            '高張力與高代謝壓力啟動 DRP1 分裂與 PINK1/Parkin 泛素標記，清除受損粒線體。',
+            '運動後營養補給喚醒 mTORC1 與 PGC-1α，完成肌肉與粒線體網路的超補償重建。'
+          ]
+        },
+        neuron: {
+          view: 'neuron',
+          mtor: 60, ampk: 70, mito: 86, mitophagy: 84,
+          badge: '神經突觸高頻放電',
+          title: 'MIRO 感測 Ca²⁺ 定點停靠供能，受損者逆行回溶酶體',
+          analogy: '神經細胞像超長高速公路：電力吃緊的突觸會放出 Ca²⁺ 當「停車訊號」，讓經過的粒線體停下來供電；故障的則開回總部回收廠報廢。',
+          flow: ['[蛋白] MIRO + [受質] Ca²⁺ 停靠突觸', '・', 'PINK1 標記 ← 逆行運輸至溶酶體'],
+          bullets: [
+            '突觸高頻放電湧入 Ca²⁺ 受質，與 MIRO 結合讓順行粒線體停靠突觸並供應 ATP。',
+            '膜電位下降的粒線體由 PINK1/Parkin 貼上 Ub 泛素鏈，沿微管逆行送回細胞體溶酶體降解。'
+          ]
+        }
+      };
+
+      // 分子節點定義（分區式空間佈局：上方指揮中心、左下維修站、右下回收廠）
+      const nodes = [
+        {
+          id: 'ampk',
+          role: 'enzyme',
+          roleLabel: '[酵素]',
+          name: 'AMPK 激酶',
+          sub: '省電品管總監 (AMP/ATP↑)',
+          plainName: '省電品管總監',
+          plainSub: '電量不夠就啟動省電與回收',
+          rx: -0.27, ry: -0.24, r: 32,
+          color: '#22d3ee',
+          badge: '酵素 / 能量感測激酶',
+          analogy: '細胞的「省電與品管總監」：一旦發現電量 (ATP) 消耗變快，就下令燒脂肪產電、開啟回收廠，並踩住過度擴張的煞車。',
+          flow: ['[受質] AMP 升高', '→', '[酵素] AMPK 磷酸化活化', '→', '促進脂氧與自噬'],
+          bullets: [
+            '偵測細胞 AMP/ATP 比值上升（如 Zone 2 運動時），啟動分解代謝與粒線體自噬。',
+            '適度抑制過度亢進的 mTORC1，並活化轉錄輔因子 PGC-1α 提升粒線體密度。'
+          ]
+        },
+        {
+          id: 'mtor',
+          role: 'enzyme',
+          roleLabel: '[酵素]',
+          name: 'mTORC1 激酶',
+          sub: '擴廠建築隊長 (合成開關)',
+          plainName: '擴廠建築隊長',
+          plainSub: '吃飽就蓋蛋白質・開太高會鎖門',
+          rx: 0.27, ry: -0.24, r: 34,
+          color: '#f59e0b',
+          badge: '酵素 / 絲胺酸-蘇胺酸激酶',
+          analogy: '細胞的「擴廠建築隊長」：看到胺基酸與血糖充足就拚命蓋蛋白質、長肌肉；但如果 24 小時不停工，會把回收廠大門鎖住！',
+          flow: ['[受質] 胺基酸 / 胰島素', '→', '[酵素] mTORC1', '→', '核糖體合成 & 抑制自噬'],
+          bullets: [
+            '在營養充足與恢復期推動蛋白質與粒線體生合成；但慢性過度活化會抑制溶酶體自噬。',
+            '與 AMPK 形成動態拉扯，決定細胞資源流向「合成建造」或「節能修復」。'
+          ]
+        },
+        {
+          id: 'pgc1a',
+          role: 'factor',
+          roleLabel: '[細胞核]',
+          name: '細胞核 PGC-1α',
+          sub: '新發電廠總藍圖',
+          plainName: '發電廠藍圖室 (細胞核)',
+          plainSub: '印出新發電廠零件',
+          rx: 0.0, ry: -0.14, r: 28,
+          color: '#2dd4bf',
+          badge: '轉錄輔因子 / 基因調控',
+          analogy: '細胞核裡的「發電廠擴建藍圖」：收到運動訊號 (AMPK) 與營養建材 (mTORC1) 後，就會啟動基因印出更多粒線體零件。',
+          flow: ['[酵素] AMPK + mTORC1 協同', '→', '[轉錄] PGC-1α 入核', '→', '粒線體蛋白新生'],
+          bullets: [
+            '整合運動能量訊號與恢復期合成訊號，啟動核基因轉錄新的呼吸鏈與粒線體蛋白。',
+            '新合成的元件透過 MFN1/2 與 OPA1 融入既有粒線體網路，擴大有氧產能。'
+          ]
+        },
+        {
+          id: 'er_drp1',
+          role: 'enzyme',
+          roleLabel: '[胞器+酵素]',
+          name: 'ER 內質網 & DRP1',
+          sub: '分子剪刀 (精準切割)',
+          plainName: '定位繩 & 分子剪刀',
+          plainSub: '把壞掉的發電機剪開隔離',
+          rx: -0.28, ry: 0.23, r: 32,
+          color: '#38bdf8',
+          badge: '胞器接觸位點 + 切割酵素',
+          analogy: '細胞內的「定位繩 + 分子剪刀」：內質網 (ER) 先像繩子一樣圈住粒線體標記位置，再叫 DRP1 剪刀一刀剪開，把壞掉的角落切出來送修！',
+          flow: ['[胞器] ER 小管纏繞', '→', '[酵素] DRP1 螺旋收縮', '→', '粒線體分裂分流'],
+          bullets: [
+            '內質網小管先在粒線體外膜標定分裂位點並傳遞 Ca²⁺，再招募胞質 DRP1 酵素形成切割環。',
+            '中段分裂協助健康粒線體增殖；外周分裂則將低膜電位受損片段分離出來交給自噬清除。'
+          ]
+        },
+        {
+          id: 'lysosome',
+          role: 'organelle',
+          roleLabel: '[胞器]',
+          name: '溶酶體 (自噬回收室)',
+          sub: '酸性資源回收廠',
+          plainName: '資源回收廠',
+          plainSub: '拆解舊零件再造新原料',
+          rx: 0.28, ry: 0.23, r: 34,
+          color: '#c084fc',
+          badge: '胞器 / 細胞品管回收站',
+          analogy: '細胞的「強酸資源回收廠」：專門吞掉貼有 Ub 報廢貼紙的老舊粒線體，把裡面的胺基酸與鐵拆解出來重新利用！',
+          flow: ['[酵素] PINK1/Parkin 貼 Ub 鏈', '→', '[胞器] 自噬體融合溶酶體', '→', '釋出胺基酸/鐵原料'],
+          bullets: [
+            '吞噬被泛素鏈標記的去極化粒線體，透過內部酸性水解酶分解受損蛋白與脂質。',
+            '回收後的胺基酸、脂肪酸與鐵硫原料重新供應細胞合成，維持粒線體網路年輕高效。'
+          ]
+        }
+      ];
+
+      // 粒線體群體初始化
+      let mitochondria = [];
+      function initMitochondria() {
+        mitochondria = [
+          { id: 'm1', x: -55, y: -15, vx: 0.18, vy: -0.10, angle: 0.25, len: 56, rad: 18, potential: 0.94, damaged: false, ub: 0 },
+          { id: 'm2', x: 58, y: 10, vx: -0.15, vy: 0.14, angle: -0.4, len: 52, rad: 17, potential: 0.90, damaged: false, ub: 0 },
+          { id: 'm3', x: -10, y: 55, vx: 0.12, vy: -0.16, angle: 0.85, len: 48, rad: 16, potential: 0.88, damaged: false, ub: 0 },
+          { id: 'm4', x: 18, y: -58, vx: -0.14, vy: 0.12, angle: -0.15, len: 46, rad: 16, potential: 0.85, damaged: false, ub: 0 }
+        ];
+      }
+      initMitochondria();
+
+      // 神經突觸視圖下的粒線體與鈣離子
+      let axonMitos = [
+        { x: -180, dir: 1, potential: 0.93, docked: false, ub: 0 },
+        { x: -40, dir: 1, potential: 0.91, docked: true, ub: 0 },
+        { x: 120, dir: 1, potential: 0.89, docked: true, ub: 0 },
+        { x: 60, dir: -1, potential: 0.34, docked: false, ub: 1 }
+      ];
+
+      // 流動化學受質與代謝物粒子
+      const particles = [];
+      const SUBSTRATE_TYPES = [
+        { type: 'ffa', label: 'FFA+O₂', color: '#a3e635', shape: 'hex' },
+        { type: 'atp', label: 'ATP', color: '#34d399', shape: 'star' },
+        { type: 'nutrient', label: '胺基酸/糖', color: '#fbbf24', shape: 'diamond' },
+        { type: 'tca', label: 'TCA前驅物', color: '#2dd4bf', shape: 'tri' },
+        { type: 'ca', label: 'Ca²⁺', color: '#38bdf8', shape: 'dot' }
+      ];
+
+      for (let i = 0; i < 28; i++) {
+        const st = SUBSTRATE_TYPES[i % SUBSTRATE_TYPES.length];
+        particles.push({
+          ...st,
+          t: Math.random(),
+          speed: 0.002 + Math.random() * 0.0025,
+          offset: (Math.random() - 0.5) * 26
+        });
+      }
+
+      // 更新底部解說卡內容
+      function updateInspector(info) {
+        const badge = document.getElementById('inspectorBadge');
+        const title = document.getElementById('inspectorTitle');
+        const analogy = document.getElementById('inspectorAnalogy');
+        const flow = document.getElementById('inspectorFlow');
+        const bullets = document.getElementById('inspectorBullets');
+        if (!badge || !title || !flow || !bullets) return;
+
+        badge.textContent = info.badge;
+        title.textContent = info.title || info.name || '';
+        if (analogy) {
+          if (info.analogy) {
+            analogy.innerHTML = `💡 <b>白話比喻：</b>${info.analogy}`;
+            analogy.classList.remove('hidden');
+          } else {
+            analogy.classList.add('hidden');
+          }
+        }
+        flow.innerHTML = info.flow.map(step => {
+          if (step === '→' || step === '⊣' || step === '⇄' || step === '・') {
+            return `<span class="text-slate-500 font-bold">${step}</span>`;
+          }
+          return `<span class="px-2 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-300">${step}</span>`;
+        }).join('');
+        bullets.innerHTML = info.bullets.map(b => `<li>${b}</li>`).join('');
+      }
+
+      const SCENARIO_SLIDERS = {
+        zone2: { nutrition: 50, activity: 55 },
+        sedentary: { nutrition: 92, activity: 8 },
+        hiit: { nutrition: 60, activity: 88 },
+        neuron: { nutrition: 55, activity: 60 }
+      };
+
+      function syncSliderUI() {
+        const sn = document.getElementById('sliderNutrition');
+        const sa = document.getElementById('sliderActivity');
+        const vn = document.getElementById('valNutrition');
+        const va = document.getElementById('valActivity');
+        if (sn) sn.value = Math.round(state.nutrition);
+        if (sa) sa.value = Math.round(state.activity);
+        if (vn) vn.textContent = Math.round(state.nutrition) + '%';
+        if (va) va.textContent = Math.round(state.activity) + '%';
+      }
+
+      function applyLifestyleSliders() {
+        const n = state.nutrition;
+        const a = state.activity;
+        const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+        const targetMtor = clamp(15 + n * 0.82 - Math.max(0, a - 20) * 0.28, 12, 96);
+        const targetAmpk = clamp(20 + a * 0.68 + (100 - n) * 0.25, 15, 95);
+        const targetMitophagy = clamp(85 - Math.max(0, targetMtor - 55) * 1.55 + a * 0.15, 12, 95);
+        const targetMito = clamp(55 + a * 0.28 + (targetMitophagy - 45) * 0.42, 38, 96);
+
+        state.scenario = 'custom';
+        if (state.view !== 'cell') setView('cell', false);
+        state.targets.mtor = targetMtor;
+        state.targets.ampk = targetAmpk;
+        state.targets.mitophagy = targetMitophagy;
+        state.targets.mito = targetMito;
+
+        // 若閘門鎖死且場上沒有受損粒線體，自動產生一顆來視覺化堆積；若閘門暢通則清理多餘受損粒線體
+        if (targetMitophagy < 45 && !mitochondria.some(m => m.damaged)) {
+          mitochondria.push({
+            id: 'm_dmg_' + Date.now(),
+            x: 45, y: 42, vx: 0.05, vy: -0.04,
+            angle: 0.3, len: 38, rad: 15, potential: 0.30, damaged: true, ub: 0.8
+          });
+        } else if (targetMitophagy >= 60 && mitochondria.some(m => m.damaged)) {
+          mitochondria = mitochondria.filter(m => !m.damaged);
+          if (mitochondria.length < 3) initMitochondria();
+        }
+      }
+
+      function setJargonMode(mode) {
+        state.jargonMode = mode;
+        const isPlain = mode === 'plain';
+        const btn = document.getElementById('btnToggleJargon');
+        const lbl = document.getElementById('jargonModeLabel');
+        if (lbl) lbl.textContent = isPlain ? '白話模式' : '專業術語';
+        if (btn) {
+          btn.className = isPlain
+            ? 'btn-pill px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 border border-emerald-500/40 flex items-center gap-1'
+            : 'btn-pill px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 border border-amber-500/40 flex items-center gap-1';
+        }
+        const setTxt = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
+        setTxt('lblMtor', isPlain ? '擴廠隊長' : 'mTORC1 合成');
+        setTxt('lblAmpk', isPlain ? '省電總監' : 'AMPK 感測');
+        setTxt('lblMito', isPlain ? '電池電量' : '膜電位 ΔΨm');
+        setTxt('lblMitoPhagy', isPlain ? '回收廠通量' : '自噬清除通量');
+      }
+
+      // 情境切換函數
+      function setScenario(key) {
+        const cfg = SCENARIOS[key];
+        if (!cfg) return;
+        state.scenario = key;
+        state.targets.mtor = cfg.mtor;
+        state.targets.ampk = cfg.ampk;
+        state.targets.mito = cfg.mito;
+        state.targets.mitophagy = cfg.mitophagy;
+
+        if (SCENARIO_SLIDERS[key]) {
+          state.nutrition = SCENARIO_SLIDERS[key].nutrition;
+          state.activity = SCENARIO_SLIDERS[key].activity;
+          syncSliderUI();
+        }
+
+        if (cfg.view !== state.view) {
+          setView(cfg.view, false);
+        }
+
+        document.querySelectorAll('.scenario-btn').forEach(btn => {
+          const active = btn.dataset.scenario === key;
+          if (!active) {
+            btn.className = 'scenario-btn text-left p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 transition-all';
+          } else if (key === 'zone2') {
+            btn.className = 'scenario-btn text-left p-2.5 rounded-xl border border-emerald-400 bg-emerald-50 transition-all';
+          } else if (key === 'sedentary') {
+            btn.className = 'scenario-btn text-left p-2.5 rounded-xl border border-amber-400 bg-amber-50 transition-all';
+          } else if (key === 'hiit') {
+            btn.className = 'scenario-btn text-left p-2.5 rounded-xl border border-rose-400 bg-rose-50 transition-all';
+          } else if (key === 'neuron') {
+            btn.className = 'scenario-btn text-left p-2.5 rounded-xl border border-sky-400 bg-sky-50 transition-all';
+          }
+        });
+
+        // 久坐模式下自動產生一顆低膜電位受損粒線體以視覺化堆積效果
+        if (key === 'sedentary') {
+          if (!mitochondria.some(m => m.damaged)) {
+            mitochondria.push({
+              id: 'm_dmg_' + Date.now(),
+              x: 45, y: 48, vx: 0.05, vy: -0.04,
+              angle: 0.5, len: 36, rad: 15, potential: 0.30, damaged: true, ub: 0.35
+            });
+          }
+        }
+
+        updateInspector(cfg);
+        showEventToast(`已切換：${cfg.badge}`);
+      }
+
+      // 視圖切換（細胞代謝網路 vs 神經突觸運輸）
+      function setView(viewName, syncScenario = true) {
+        state.view = viewName;
+        const btnCell = document.getElementById('btnViewCell');
+        const btnNeuron = document.getElementById('btnViewNeuron');
+        if (viewName === 'cell') {
+          btnCell.className = 'btn-pill px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/15 text-emerald-700 border border-emerald-500/40';
+          btnNeuron.className = 'btn-pill px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-500 hover:text-slate-800';
+          if (syncScenario && state.scenario === 'neuron') setScenario('zone2');
+        } else {
+          btnNeuron.className = 'btn-pill px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-sky-500/15 text-sky-700 border border-sky-500/40';
+          btnCell.className = 'btn-pill px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-500 hover:text-slate-800';
+          if (syncScenario && state.scenario !== 'neuron') setScenario('neuron');
+        }
+      }
+
+      document.getElementById('btnViewCell').addEventListener('click', () => setView('cell'));
+      document.getElementById('btnViewNeuron').addEventListener('click', () => setView('neuron'));
+
+      document.querySelectorAll('.scenario-btn').forEach(btn => {
+        btn.addEventListener('click', () => setScenario(btn.dataset.scenario));
+      });
+
+      // 手動觸發四大分子事件
+      document.getElementById('btnTriggerFusion').addEventListener('click', () => {
+        state.fusionPulse = 1.0;
+        if (mitochondria.length > 3) {
+          mitochondria.pop();
+        }
+        mitochondria.forEach(m => {
+          m.len = Math.min(68, m.len + 7);
+          m.potential = Math.min(0.98, m.potential + 0.08);
+          if (m.potential > 0.6) { m.damaged = false; m.ub = 0; }
+        });
+        showEventToast('MFN1/2 + OPA1 融合互補完成');
+      });
+
+      document.getElementById('btnTriggerFission').addEventListener('click', () => {
+        state.fissionPulse = 1.0;
+        if (mitochondria.length < 7) {
+          const parent = mitochondria[0];
+          parent.len = Math.max(34, parent.len * 0.72);
+          mitochondria.push({
+            id: 'm_split_' + Date.now(),
+            x: parent.x + 26, y: parent.y + 18,
+            vx: -parent.vx, vy: parent.vy,
+            angle: parent.angle + 0.6, len: parent.len, rad: parent.rad,
+            potential: parent.potential, damaged: false, ub: 0
+          });
+        }
+        showEventToast('ER 圈套 + DRP1 切割分裂完成');
+      });
+
+      document.getElementById('btnTriggerDamage').addEventListener('click', () => {
+        // 標記一顆受損粒線體並啟動 PINK1/Parkin 與溶酶體清除
+        let target = mitochondria.find(m => m.damaged);
+        if (!target) {
+          target = mitochondria[mitochondria.length - 1];
+          target.damaged = true;
+          target.potential = 0.28;
+        }
+        target.ub = 1.0;
+        if (state.metrics.mitophagy > 45) {
+          setTimeout(() => {
+            mitochondria = mitochondria.filter(m => m !== target);
+            if (mitochondria.length < 3) initMitochondria();
+            showEventToast('溶酶體已降解 Ub 泛素標記粒線體');
+          }, 1100);
+          showEventToast('PINK1/Parkin 貼上 Ub 鏈 → 導向溶酶體');
+        } else {
+          showEventToast('mTORC1 過高抑制自噬閘門，清除受阻');
+        }
+      });
+
+      document.getElementById('btnTriggerRecovery').addEventListener('click', () => {
+        state.recoveryPulse = 1.0;
+        state.metrics.mtor = Math.min(95, state.metrics.mtor + 16);
+        mitochondria.forEach(m => {
+          m.potential = Math.min(0.97, m.potential + 0.1);
+          m.damaged = false;
+          m.ub = 0;
+        });
+        showEventToast('mTORC1 + PGC-1α 啟動合成與新生脈衝');
+      });
+
+      // 分子角色高亮篩選
+      document.querySelectorAll('.role-filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const role = btn.dataset.role;
+          state.roleFilter = (state.roleFilter === role) ? null : role;
+          document.querySelectorAll('.role-filter-btn').forEach(b => {
+            const active = b.dataset.role === state.roleFilter;
+            b.classList.toggle('ring-2', active);
+            b.classList.toggle('ring-sky-400', active);
+            b.classList.toggle('bg-slate-700/80', active);
+          });
+        });
+      });
+
+      document.getElementById('btnResetRoleFilter').addEventListener('click', () => {
+        state.roleFilter = null;
+        document.querySelectorAll('.role-filter-btn').forEach(b => {
+          b.classList.remove('ring-2', 'ring-sky-400', 'bg-slate-700/80');
+        });
+      });
+
+      // 頂部工具列按鈕
+      document.getElementById('btnToggleLabels').addEventListener('click', () => {
+        state.showLabels = !state.showLabels;
+      });
+      document.getElementById('btnPause').addEventListener('click', (e) => {
+        state.paused = !state.paused;
+        e.currentTarget.querySelector('span').textContent = state.paused ? '繼續' : '暫停';
+      });
+      document.getElementById('btnResetView').addEventListener('click', () => {
+        state.camera = { x: 0, y: 0, zoom: 1 };
+      });
+
+      // 畫布平移、縮放與點擊節點選取
+      let isDragging = false;
+      let dragStart = { x: 0, y: 0 };
+      let hasMoved = false;
+
+      function getSimScale() {
+        const availW = (isDrawerOpen && width >= 768) ? Math.max(360, width - 400) : width;
+        return Math.min(availW, height);
+      }
+
+      function getViewportCenter() {
+        const drawerOffset = (isDrawerOpen && width >= 768) ? 185 : 0;
+        return {
+          cx: width / 2 - drawerOffset + state.camera.x,
+          cy: height / 2 + state.camera.y
+        };
+      }
+
+      function getWorldPos(clientX, clientY) {
+        const { cx, cy } = getViewportCenter();
+        return {
+          x: (clientX - cx) / state.camera.zoom,
+          y: (clientY - cy) / state.camera.zoom
+        };
+      }
+
+      function handleCanvasTap(clientX, clientY) {
+        const wp = getWorldPos(clientX, clientY);
+        const scale = getSimScale();
+
+        if (state.view === 'neuron') {
+          const span = Math.min(scale * 0.42, 330);
+          if (Math.hypot(wp.x - (-span), wp.y) <= 62) {
+            state.selectedId = 'soma';
+            updateInspector({
+              badge: '神經元細胞體 (Soma)',
+              title: '溶酶體降解總部：老舊粒線體的終點站',
+              analogy: '就像車隊總部維修廠！在遠處軸突壞掉的粒線體無法就地報廢，必須沿著微管高速公路「逆行」開回這裡給溶酶體拆解回收。',
+              flow: ['受損粒線體', '→', 'PINK1/Parkin 貼 Ub 標籤', '→', 'Dynein 逆行送回溶酶體'],
+              bullets: [
+                '神經元的溶酶體主要集中在細胞體 (Soma)，遠端突觸幾乎沒有完整的降解回收站。',
+                '若逆行運輸受阻，受損粒線體會卡在軸突中釋放自由基 (ROS)，與神經退化疾病高度相關。'
+              ]
+            });
+            return;
+          }
+          if (Math.hypot(wp.x - span, wp.y) <= 60) {
+            state.selectedId = 'synapse';
+            updateInspector({
+              badge: '突觸末梢 (Synapse)',
+              title: 'MIRO + Ca²⁺ 定點停靠供電站',
+              analogy: '突觸放電時會湧入大量鈣離子 (Ca²⁺)，就像在路邊舉起「急需用電！請停車！」的牌子，MIRO 蛋白看到後就會把粒線體煞車停在這裡供電。',
+              flow: ['突觸高頻放電', '→', 'Ca²⁺ 湧入結合 MIRO', '→', '粒線體停靠供應 ATP'],
+              bullets: [
+                '神經傳導物質的釋放與回收非常耗能，需要粒線體就近提供大量 ATP 並幫忙緩衝 Ca²⁺。',
+                '當突觸電量需求降低、Ca²⁺ 消退後，粒線體又能重新上路巡邏。'
+              ]
+            });
+            return;
+          }
+          for (const am of axonMitos) {
+            const my = am.dir > 0 ? -14 : 16;
+            if (Math.hypot(wp.x - am.x, wp.y - my) <= 28) {
+              state.selectedId = 'axon_mito';
+              updateInspector({
+                badge: am.dir > 0 ? '順行健康粒線體 (Kinesin)' : '逆行受損粒線體 (Dynein)',
+                title: am.dir > 0 ? '正前往突觸末梢支援供電' : '電量過低・已被貼上 Ub 標籤送回回收',
+                analogy: am.dir > 0
+                  ? '滿電出發的行動電源車，沿著順行車道 (Kinesin) 開往最耗電的突觸前線！'
+                  : '電量見底還冒煙的故障電源車，貼上 Ub 報廢貼紙後改走逆行車道 (Dynein) 回總部拆解。',
+                flow: am.dir > 0
+                  ? ['Kinesin 馬達蛋白', '→', '沿微管順行', '→', '抵達突觸供電']
+                  : ['膜電位 ΔΨm↓', '→', 'PINK1/Parkin 貼 Ub', '→', 'Dynein 逆行回細胞體'],
+                bullets: am.dir > 0
+                  ? [
+                      '健康的粒線體保有高膜電位 (ΔΨm ≈ 90%)，由 Kinesin 驅動蛋白搬運至遠端突觸。',
+                      '一旦當地出現大量 Ca²⁺，MIRO 會暫停運輸並讓它定點釋放 ATP。'
+                    ]
+                  : [
+                      '當粒線體老化受損、膜電位下降時，會脫離停靠點並被貼上泛素鏈 (Ub)。',
+                      '改由 Dynein 馬達蛋白逆向拖回神經元細胞體的溶酶體進行自噬清除。'
+                    ]
+              });
+              return;
+            }
+          }
+          return;
+        }
+
+        // 檢查是否點擊分子節點
+        for (const n of nodes) {
+          const nx = n.rx * scale;
+          const ny = n.ry * scale;
+          if (Math.hypot(wp.x - nx, wp.y - ny) <= n.r + 14) {
+            state.selectedId = n.id;
+            updateInspector(n);
+            return;
+          }
+        }
+        // 檢查是否點擊粒線體
+        for (const m of mitochondria) {
+          if (Math.hypot(wp.x - m.x, wp.y - m.y) <= m.len * 0.65) {
+            state.selectedId = m.id;
+            updateInspector({
+              badge: m.damaged ? '胞器 / 去極化受損粒線體' : '胞器 / 高效運作粒線體',
+              title: m.damaged ? '膜電位 ΔΨm 下降・等待 PINK1/Parkin 標記' : '雙層膜與內嵴 (Cristae) 氧化磷酸化工廠',
+              analogy: m.damaged
+                ? '這顆電池已經「電量見底 (ΔΨm 過低)」，如果不趕快貼上 Ub 報廢貼紙送去回收，就會一直漏出傷害細胞的自由基 (ROS)。'
+                : '細胞的「發電廠」：內膜摺成一層層的內嵴 (Cristae) 就像加裝超多台發電機，把脂肪酸和糖變成通用電力 (ATP)。',
+              flow: m.damaged
+                ? ['膜電位 ΔΨm↓', '→', '[酵素] PINK1 穩定外膜', '→', '[酵素] Parkin 貼上 Ub 鏈']
+                : ['[受質] FFA + 丙酮酸 + O₂', '→', '電子傳遞鏈', '→', '[產物] ATP + 緩衝 Ca²⁺'],
+              bullets: m.damaged
+                ? [
+                    '當粒線體受損去極化時，PINK1 無法進入內膜而累積於外膜，招募 Parkin 泛素連接酶。',
+                    '外膜泛素鏈 (Ub) 吸引自噬體包覆並送往溶酶體降解，避免洩漏大量 ROS 活性氧。'
+                  ]
+                : [
+                    '內膜摺疊成嵴 (Cristae) 擴大呼吸鏈面積，將 FFA 脂肪酸與糖解產物轉化為 ATP。',
+                    '同時參與檸檬酸循環中間產物輸出、血基質合成與細胞內 Ca²⁺ 緩衝。'
+                  ]
+            });
+            return;
+          }
+        }
+      }
+
+      canvas.addEventListener('pointerdown', (e) => {
+        isDragging = true;
+        hasMoved = false;
+        dragStart = { x: e.clientX - state.camera.x, y: e.clientY - state.camera.y };
+      });
+      window.addEventListener('pointermove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - dragStart.x;
+        const dy = e.clientY - dragStart.y;
+        if (Math.hypot(dx - state.camera.x, dy - state.camera.y) > 4) hasMoved = true;
+        state.camera.x = dx;
+        state.camera.y = dy;
+      });
+      window.addEventListener('pointerup', (e) => {
+        if (isDragging && !hasMoved && e.target === canvas) {
+          handleCanvasTap(e.clientX, e.clientY);
+        }
+        isDragging = false;
+      });
+      canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.08 : 0.92;
+        state.camera.zoom = Math.max(0.55, Math.min(2.0, state.camera.zoom * factor));
+      }, { passive: false });
+
+      // 繪製輔助幾何函數
+      function drawGearCircle(x, y, r, teeth, rot, color, alpha = 1) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(rot);
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        const steps = teeth * 2;
+        for (let i = 0; i <= steps; i++) {
+          const a = (i / steps) * Math.PI * 2;
+          const rad = (i % 2 === 0) ? r + 4 : r - 2;
+          const px = Math.cos(a) * rad;
+          const py = Math.sin(a) * rad;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fillStyle = color + '26';
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function drawSignalArrow(x1, y1, x2, y2, color, inhibit = false, pulsePhase = 0, label = '') {
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 1) return;
+        const ux = dx / dist;
+        const uy = dy / dist;
+        const sx = x1 + ux * 42;
+        const sy = y1 + uy * 42;
+        const ex = x2 - ux * 44;
+        const ey = y2 - uy * 44;
+
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.setLineDash(inhibit ? [6, 5] : []);
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(ex, ey);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // 末端箭頭或 T-bar 抑制符號
+        const angle = Math.atan2(ey - sy, ex - sx);
+        ctx.translate(ex, ey);
+        ctx.rotate(angle);
+        if (inhibit) {
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(0, -8);
+          ctx.lineTo(0, 8);
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.moveTo(4, 0);
+          ctx.lineTo(-8, -5);
+          ctx.lineTo(-8, 5);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.restore();
+
+        // 沿線流動脈衝點
+        const t = (pulsePhase % 1);
+        const px = sx + (ex - sx) * t;
+        const py = sy + (ey - sy) * t;
+        ctx.save();
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(px, py, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        if (state.showLabels && label) {
+          const mx = (sx + ex) / 2;
+          const my = (sy + ey) / 2 - 8;
+          ctx.save();
+          ctx.font = '10px "Noto Sans TC", sans-serif';
+          ctx.fillStyle = color;
+          ctx.textAlign = 'center';
+          ctx.fillText(label, mx, my);
+          ctx.restore();
+        }
+      }
+
+      // 繪製單顆粒線體（雙層膜 + 內嵴 + 內建電量條 + ATP/ROS 火花；文字保持水平）
+      function drawMitochondrion(m, alpha = 1) {
+        const baseColor = m.damaged ? '#e11d48' : (m.potential > 0.8 ? '#059669' : '#d97706');
+        const fillColor = m.damaged ? '#fff1f2' : (m.potential > 0.8 ? '#ecfdf5' : '#fffbeb');
+        const glowColor = m.damaged ? 'rgba(225, 29, 72, 0.22)' : 'rgba(5, 150, 105, 0.20)';
+        const halfL = m.len / 2;
+        const r = m.rad;
+
+        // 1. 膠囊本體與內嵴
+        ctx.save();
+        ctx.translate(m.x, m.y);
+        ctx.rotate(m.angle);
+        ctx.globalAlpha = alpha;
+
+        ctx.shadowColor = glowColor;
+        ctx.shadowBlur = 12;
+
+        ctx.beginPath();
+        ctx.roundRect(-halfL, -r, m.len, r * 2, r);
+        ctx.fillStyle = fillColor;
+        ctx.strokeStyle = baseColor;
+        ctx.lineWidth = 2.4;
+        ctx.fill();
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        ctx.strokeStyle = baseColor + 'bb';
+        ctx.lineWidth = 1.6;
+        const folds = Math.max(3, Math.floor(m.len / 11));
+        for (let i = 1; i < folds; i++) {
+          const fx = -halfL + (m.len * i) / folds;
+          const top = (i % 2 === 0);
+          ctx.beginPath();
+          ctx.moveTo(fx, top ? -r + 3 : r - 3);
+          ctx.lineTo(fx, top ? 3 : -3);
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        // 2. 水平正向：電量條、ATP/ROS 火花、Ub 泛素貼紙與文字
+        ctx.save();
+        ctx.translate(m.x, m.y);
+        ctx.globalAlpha = alpha;
+
+        // 迷你電池電量條 (ΔΨm)
+        const barW = 30;
+        const barH = 4;
+        const barY = r + 5;
+        ctx.fillStyle = '#e2e8f0';
+        ctx.fillRect(-barW / 2, barY, barW, barH);
+        ctx.fillStyle = baseColor;
+        ctx.fillRect(-barW / 2, barY, barW * Math.max(0.08, m.potential), barH);
+        ctx.strokeStyle = 'rgba(100, 116, 139, 0.45)';
+        ctx.lineWidth = 0.8;
+        ctx.strokeRect(-barW / 2, barY, barW, barH);
+
+        if (m.damaged || m.ub > 0) {
+          // 紅色 ROS 自由基火花
+          for (let s = 0; s < 3; s++) {
+            const ang = state.time * 3 + s * 2.1;
+            const sx = Math.cos(ang) * (halfL * 0.65);
+            const sy = Math.sin(ang * 1.3) * (r + 6);
+            ctx.fillStyle = '#e11d48';
+            ctx.beginPath();
+            ctx.arc(sx, sy, 2.3, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          // 金色 Ub 泛素報廢貼紙
+          ctx.fillStyle = '#f59e0b';
+          ctx.strokeStyle = '#b45309';
+          ctx.lineWidth = 0.8;
+          for (let k = -1; k <= 1; k++) {
+            ctx.beginPath();
+            ctx.arc(k * 9, -r - 7, 3.3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+          }
+          if (state.showLabels) {
+            ctx.font = 'bold 9.5px "Noto Sans TC", sans-serif';
+            ctx.fillStyle = '#be123c';
+            ctx.textAlign = 'center';
+            const dmgTxt = state.jargonMode === 'plain'
+              ? `故障 ${Math.round(m.potential * 100)}%・報廢貼紙`
+              : `受損 ΔΨm ${Math.round(m.potential * 100)}%・Ub 標籤`;
+            ctx.fillText(dmgTxt, 0, -r - 15);
+          }
+        } else {
+          // 健康產電 ATP 閃亮粒子
+          const sparkY = -r - 6 - ((state.time * 18 + m.x) % 12);
+          ctx.fillStyle = '#059669';
+          ctx.beginPath();
+          ctx.arc(0, sparkY, 2.3, 0, Math.PI * 2);
+          ctx.fill();
+          if (state.showLabels) {
+            ctx.font = 'bold 9.5px "Noto Sans TC", sans-serif';
+            ctx.fillStyle = '#065f46';
+            ctx.textAlign = 'center';
+            const okTxt = state.jargonMode === 'plain'
+              ? `電量 ${Math.round(m.potential * 100)}%`
+              : `ΔΨm ${Math.round(m.potential * 100)}%`;
+            ctx.fillText(okTxt, 0, barY + 14);
+          }
+        }
+        ctx.restore();
+      }
+
+      // 繪製神經突觸雙向運輸高速公路視圖
+      function drawNeuronView(scale) {
+        const span = Math.min(scale * 0.42, 330);
+
+        ctx.save();
+
+        // 頂部狀態橫幅
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+        ctx.strokeStyle = 'rgba(2, 132, 199, 0.45)';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.roundRect(-210, -140, 420, 28, 14);
+        ctx.fill();
+        ctx.stroke();
+        ctx.font = 'bold 11px "Noto Sans TC", sans-serif';
+        ctx.fillStyle = '#0369a1';
+        ctx.textAlign = 'center';
+        ctx.fillText('🧠 神經元長途物流：突觸 Ca²⁺ 叫停車供電 ・ 受損者逆行回溶酶體', 0, -122);
+
+        // 軸突高速公路外框
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+        ctx.strokeStyle = 'rgba(2, 132, 199, 0.45)';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.roundRect(-span, -48, span * 2, 96, 24);
+        ctx.fill();
+        ctx.stroke();
+
+        // 上車道：順行供電 (Kinesin →)
+        ctx.strokeStyle = 'rgba(5, 150, 105, 0.45)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([10, 6]);
+        ctx.beginPath();
+        ctx.moveTo(-span + 45, -18);
+        ctx.lineTo(span - 45, -18);
+        ctx.stroke();
+
+        // 下車道：逆行回收 (← Dynein)
+        ctx.strokeStyle = 'rgba(147, 51, 234, 0.45)';
+        ctx.beginPath();
+        ctx.moveTo(-span + 45, 20);
+        ctx.lineTo(span - 45, 20);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // 動態方向箭頭指示
+        const chevOffset = (state.time * 40) % 60;
+        ctx.font = 'bold 11px monospace';
+        ctx.fillStyle = 'rgba(5, 150, 105, 0.75)';
+        ctx.fillText('>>>', -span + 80 + chevOffset, -14);
+        ctx.fillText('>>>', 20 + chevOffset, -14);
+        ctx.fillStyle = 'rgba(147, 51, 234, 0.75)';
+        ctx.fillText('<<<', span - 80 - chevOffset, 24);
+        ctx.fillText('<<<', -20 - chevOffset, 24);
+
+        // 左側：神經元細胞體 (Soma) + 內含溶酶體回收廠
+        ctx.beginPath();
+        ctx.arc(-span, 0, 58, 0, Math.PI * 2);
+        ctx.fillStyle = '#f3e8ff';
+        ctx.strokeStyle = '#9333ea';
+        ctx.lineWidth = 2.8;
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(-span - 8, 6, 22, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(147, 51, 234, 0.14)';
+        ctx.strokeStyle = '#9333ea';
+        ctx.lineWidth = 1.6;
+        ctx.fill();
+        ctx.stroke();
+
+        // 右側：突觸前末梢 (Synapse) + Ca2+ 鈣離子湧入脈衝
+        ctx.beginPath();
+        ctx.arc(span, 0, 56, 0, Math.PI * 2);
+        ctx.fillStyle = '#e0f2fe';
+        ctx.strokeStyle = '#0284c7';
+        ctx.lineWidth = 2.8;
+        ctx.fill();
+        ctx.stroke();
+
+        // 突觸 Ca2+ 湧入動畫粒子
+        for (let c = 0; c < 5; c++) {
+          const ct = (state.time * 0.9 + c * 0.2) % 1;
+          const cx = span + 32 - ct * 42;
+          const cy = -28 + c * 14;
+          ctx.fillStyle = `rgba(2, 132, 199, ${1 - ct * 0.4})`;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 3.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        if (state.showLabels) {
+          ctx.font = 'bold 11px "Noto Sans TC", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#581c87';
+          ctx.fillText('細胞體 (Soma) 回收總部', -span, -68);
+          ctx.fillStyle = '#7e22ce';
+          ctx.font = '10px "Noto Sans TC", sans-serif';
+          ctx.fillText('溶酶體降解區', -span - 8, 9);
+
+          ctx.font = 'bold 11px "Noto Sans TC", sans-serif';
+          ctx.fillStyle = '#075985';
+          ctx.fillText('突觸末梢 (Synapse) 放電區', span, -68);
+          ctx.fillStyle = '#0369a1';
+          ctx.font = '10px "Noto Sans TC", sans-serif';
+          ctx.fillText(state.jargonMode === 'plain' ? '停車感應 + 鈣訊號' : 'MIRO + Ca²⁺ 停車供電', span, 4);
+
+          ctx.fillStyle = '#047857';
+          ctx.fillText(state.jargonMode === 'plain' ? '順行送電車 → 遇鈣訊號停靠產電' : '順行供電 (Kinesin) → 遇 Ca²⁺ 停靠產 ATP', 0, -56);
+          ctx.fillStyle = '#6b21a8';
+          ctx.fillText(state.jargonMode === 'plain' ? '← 逆行送修車 貼報廢貼紙回回收廠' : '← 逆行送修 (Dynein) 貼 Ub 標籤回溶酶體', 0, 62);
+        }
+
+        // 沿微管移動的粒線體
+        axonMitos.forEach(am => {
+          if (!state.paused) {
+            if (!am.docked) {
+              am.x += am.dir * 0.65;
+              if (am.dir > 0 && am.x > span - 75) am.x = -span + 75;
+              if (am.dir < 0 && am.x < -span + 75) am.x = span - 75;
+            }
+          }
+          drawMitochondrion({
+            x: am.x,
+            y: am.dir > 0 ? -18 : 20,
+            angle: 0,
+            len: 36,
+            rad: 10,
+            potential: am.potential,
+            damaged: am.dir < 0,
+            ub: am.ub
+          }, 1);
+        });
+
+        ctx.restore();
+      }
+
+      // 主動畫迴圈
+      function updateAndRender() {
+        if (!state.paused) {
+          state.time += 0.016;
+          // 高強度恢復週期自動擺盪
+          if (state.scenario === 'hiit') {
+            state.hiitPhase = (state.hiitPhase + 0.004) % 1;
+            const inRecovery = state.hiitPhase > 0.5;
+            state.targets.mtor = inRecovery ? 86 : 42;
+            state.targets.ampk = inRecovery ? 52 : 90;
+          }
+
+          // 平滑過渡指標數值
+          ['mtor', 'ampk', 'mito', 'mitophagy'].forEach(k => {
+            state.metrics[k] += (state.targets[k] - state.metrics[k]) * 0.05;
+          });
+
+          state.fusionPulse = Math.max(0, state.fusionPulse - 0.015);
+          state.fissionPulse = Math.max(0, state.fissionPulse - 0.015);
+          state.recoveryPulse = Math.max(0, state.recoveryPulse - 0.015);
+
+          // 更新粒線體位置與膜電位（健康者居於中央發電區，受損者往右側回收閘門移動）
+          mitochondria.forEach((m) => {
+            if (m.damaged) {
+              m.x += (72 - m.x) * 0.015;
+              m.y += (36 - m.y) * 0.015;
+            } else {
+              m.x += m.vx;
+              m.y += m.vy;
+              if (m.x < -90 || m.x > 55) m.vx *= -1;
+              if (m.y < -35 || m.y > 75) m.vy *= -1;
+              const targetPot = state.metrics.mito / 100;
+              m.potential += (targetPot - m.potential) * 0.03;
+            }
+          });
+
+          // 更新流動受質粒子
+          particles.forEach(p => {
+            p.t = (p.t + p.speed) % 1;
+          });
+        }
+
+        // 同步更新頂部與手機版 UI 儀表數值
+        const mtorVal = Math.round(state.metrics.mtor);
+        const ampkVal = Math.round(state.metrics.ampk);
+        const mitoVal = Math.round(state.metrics.mito);
+        const phagyVal = Math.round(state.metrics.mitophagy);
+
+        const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v + '%'; };
+        const setBar = (id, v) => { const el = document.getElementById(id); if (el) el.style.width = v + '%'; };
+        setTxt('valMtor', mtorVal); setBar('barMtor', mtorVal);
+        setTxt('valAmpk', ampkVal); setBar('barAmpk', ampkVal);
+        setTxt('valMito', mitoVal); setBar('barMito', mitoVal);
+        setTxt('valMitoPhagy', phagyVal); setBar('barMitoPhagy', phagyVal);
+        setTxt('mobMtor', mtorVal); setTxt('mobAmpk', ampkVal);
+        setTxt('mobMito', mitoVal); setTxt('mobMitoPhagy', phagyVal);
+
+        // 清空背景（明亮清透科學圖譜風）
+        ctx.clearRect(0, 0, width, height);
+        const bgGrad = ctx.createRadialGradient(width / 2, height / 2, 40, width / 2, height / 2, Math.max(width, height) * 0.75);
+        bgGrad.addColorStop(0, '#f8fafc');
+        bgGrad.addColorStop(1, '#dbe6f2');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, width, height);
+
+        ctx.save();
+        const { cx, cy } = getViewportCenter();
+        ctx.translate(cx, cy);
+        ctx.scale(state.camera.zoom, state.camera.zoom);
+
+        const scale = getSimScale();
+
+        if (state.view === 'neuron') {
+          drawNeuronView(scale);
+        } else {
+          // 1. 細胞雙層膜邊界（明亮細胞質 + 清晰雙層膜）
+          ctx.save();
+          ctx.shadowColor = 'rgba(15, 23, 42, 0.09)';
+          ctx.shadowBlur = 24;
+          ctx.beginPath();
+          ctx.ellipse(0, 0, scale * 0.45, scale * 0.41, 0, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+          ctx.fill();
+          ctx.shadowBlur = 0;
+          ctx.strokeStyle = 'rgba(100, 116, 139, 0.55)';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.ellipse(0, 0, scale * 0.438, scale * 0.398, 0, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+          ctx.restore();
+
+          // 2. 頂部即時生理狀態橫幅
+          const gateLocked = state.metrics.mitophagy < 45;
+          const isPlain = state.jargonMode === 'plain';
+          let statusBanner = isPlain
+            ? '⚡ 能量平衡：燒脂肪產電中・資源回收廠暢通'
+            : '⚡ Zone 2 有氧：FFA 脂氧產能・AMPK 維持自噬通量';
+          let bannerColor = '#047857';
+          if (state.scenario === 'sedentary' || (state.scenario === 'custom' && gateLocked)) {
+            statusBanner = isPlain
+              ? '🔒 熱量過剩 + 少動：擴廠隊長鎖死回收廠・壞電池冒黑煙'
+              : '🔒 mTORC1 亢進：自噬閘門鎖死・低 ΔΨm 粒線體堆積 ROS';
+            bannerColor = '#be123c';
+          } else if (state.scenario === 'custom') {
+            if (state.metrics.ampk > 75 && state.nutrition < 35) {
+              statusBanner = isPlain
+                ? '🧹 輕斷食 / 省電修復：回收廠火力全開大掃除'
+                : '🧹 低熱量高 AMPK：自噬清除 (Mitophagy) 高度活化';
+              bannerColor = '#0e7490';
+            } else {
+              statusBanner = isPlain
+                ? `🎛️ 自訂生活節奏：熱量 ${Math.round(state.nutrition)}% × 活動 ${Math.round(state.activity)}%`
+                : `🎛️ 動態平衡：mTORC1 ${Math.round(state.metrics.mtor)}% ・ AMPK ${Math.round(state.metrics.ampk)}%`;
+              bannerColor = '#0369a1';
+            }
+          } else if (state.scenario === 'hiit') {
+            const inRec = state.hiitPhase > 0.5;
+            statusBanner = inRec
+              ? (isPlain ? '🔄 高強度週期 [恢復期]：吃營養蓋出更強新發電廠' : '🔄 HIIT [階段 2/2]：恢復期 mTORC1 + PGC-1α 超補償重建')
+              : (isPlain ? '🔄 高強度週期 [運動期]：省電總監與剪刀先淘汰舊機器' : '🔄 HIIT [階段 1/2]：壓力期 AMPK + DRP1 淘汰受損元件');
+            bannerColor = inRec ? '#b45309' : '#0e7490';
+          }
+          ctx.save();
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
+          ctx.strokeStyle = bannerColor + '88';
+          ctx.lineWidth = 1.6;
+          const bw = Math.min(scale * 0.78, 390);
+          ctx.beginPath();
+          ctx.roundRect(-bw / 2, -scale * 0.44, bw, 26, 13);
+          ctx.fill();
+          ctx.stroke();
+          ctx.font = 'bold 11px "Noto Sans TC", sans-serif';
+          ctx.fillStyle = bannerColor;
+          ctx.textAlign = 'center';
+          ctx.fillText(statusBanner, 0, -scale * 0.44 + 17);
+          ctx.restore();
+
+          // 計算節點世界座標
+          const pos = {};
+          nodes.forEach(n => {
+            pos[n.id] = { x: n.rx * scale, y: n.ry * scale };
+          });
+
+          // 3. 中央「粒線體發電廠區」分區底框
+          ctx.save();
+          ctx.setLineDash([6, 5]);
+          ctx.strokeStyle = 'rgba(5, 150, 105, 0.42)';
+          ctx.fillStyle = 'rgba(16, 185, 129, 0.07)';
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.roundRect(-scale * 0.20, -scale * 0.05, scale * 0.40, scale * 0.24, 18);
+          ctx.fill();
+          ctx.stroke();
+          ctx.setLineDash([]);
+          if (state.showLabels) {
+            ctx.font = 'bold 10px "Noto Sans TC", sans-serif';
+            ctx.fillStyle = '#047857';
+            ctx.textAlign = 'center';
+            ctx.fillText('⚡ 粒線體發電廠區 (FFA+O₂ → ATP)', 0, scale * 0.21);
+          }
+          ctx.restore();
+
+          // 4. AMPK vs mTORC1 動態翹翹板 (天秤平衡桿)
+          const tilt = ((state.metrics.mtor - state.metrics.ampk) / 100) * 0.22;
+          ctx.save();
+          ctx.translate(0, pos.ampk.y);
+          ctx.rotate(tilt);
+          ctx.strokeStyle = '#64748b';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(-scale * 0.14, 0);
+          ctx.lineTo(scale * 0.14, 0);
+          ctx.stroke();
+          ctx.fillStyle = '#0f172a';
+          ctx.beginPath();
+          ctx.arc(0, 0, 5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+          if (state.showLabels) {
+            ctx.save();
+            ctx.font = 'bold 10px "Noto Sans TC", sans-serif';
+            ctx.fillStyle = '#475569';
+            ctx.textAlign = 'center';
+            ctx.fillText('⚖️ 省電修復 vs 合成擴建', 0, pos.ampk.y - 12);
+            ctx.restore();
+          }
+
+          // 5. 分子訊號連線
+          drawSignalArrow(pos.ampk.x, pos.ampk.y, pos.pgc1a.x, pos.pgc1a.y, '#22d3ee', false, state.time * 0.6, '活化藍圖');
+          drawSignalArrow(pos.mtor.x, pos.mtor.y, pos.pgc1a.x, pos.pgc1a.y, '#f59e0b', false, state.time * 0.5, '提供建材');
+          drawSignalArrow(pos.mtor.x, pos.mtor.y, pos.lysosome.x, pos.lysosome.y, gateLocked ? '#f43f5e' : '#fb7185', true, state.time * 0.6, gateLocked ? '🔒 鎖死回收廠!' : '適度制衡');
+          drawSignalArrow(pos.er_drp1.x, pos.er_drp1.y, -45, 25, '#38bdf8', false, state.time * 0.65, 'DRP1 剪開');
+          drawSignalArrow(55, 30, pos.lysosome.x, pos.lysosome.y, gateLocked ? '#64748b' : '#c084fc', gateLocked, state.time * 0.5, gateLocked ? '堆積受阻' : 'Ub 標籤送回收');
+
+          // 6. 自噬閘門視覺化（位於中央粒線體與溶酶體之間）
+          const gateX = (45 + pos.lysosome.x) / 2;
+          const gateY = (30 + pos.lysosome.y) / 2;
+          ctx.save();
+          ctx.translate(gateX, gateY);
+          ctx.fillStyle = gateLocked ? '#ffe4e6' : '#d1fae5';
+          ctx.strokeStyle = gateLocked ? '#e11d48' : '#059669';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.roundRect(-34, -11, 68, 22, 8);
+          ctx.fill();
+          ctx.stroke();
+          ctx.font = 'bold 9.5px "Noto Sans TC", sans-serif';
+          ctx.fillStyle = gateLocked ? '#be123c' : '#065f46';
+          ctx.textAlign = 'center';
+          ctx.fillText(gateLocked ? '🔒 閘門鎖死' : '✅ 回收暢通', 0, 3.5);
+          ctx.restore();
+
+          // 7. 流動燃料受質粒子（從左側進料流向中央發電廠）
+          const subAlpha = (!state.roleFilter || state.roleFilter === 'substrate') ? 1 : 0.2;
+          particles.forEach((p, idx) => {
+            const lane = (idx % 3) - 1;
+            const px = -scale * 0.32 + p.t * (scale * 0.52);
+            const py = lane * 26 + Math.sin(p.t * Math.PI * 3 + idx) * 10 + 18;
+
+            ctx.save();
+            ctx.globalAlpha = subAlpha * 0.85;
+            ctx.fillStyle = p.color;
+            ctx.translate(px, py);
+            if (p.shape === 'diamond') {
+              ctx.rotate(Math.PI / 4);
+              ctx.fillRect(-3.2, -3.2, 6.4, 6.4);
+            } else if (p.shape === 'tri') {
+              ctx.beginPath();
+              ctx.moveTo(0, -4.5);
+              ctx.lineTo(4, 3.5);
+              ctx.lineTo(-4, 3.5);
+              ctx.closePath();
+              ctx.fill();
+            } else {
+              ctx.beginPath();
+              ctx.arc(0, 0, 3.2, 0, Math.PI * 2);
+              ctx.fill();
+            }
+            if (state.showLabels && idx % 7 === 0) {
+              ctx.font = '9px "Noto Sans TC", sans-serif';
+              ctx.fillStyle = p.color;
+              ctx.fillText(p.label, 6, 3);
+            }
+            ctx.restore();
+          });
+
+          // 融合橋視覺效果 (MFN1/2 + OPA1)
+          if (state.fusionPulse > 0.05 && mitochondria.length >= 2) {
+            ctx.save();
+            ctx.strokeStyle = `rgba(45, 212, 191, ${state.fusionPulse})`;
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.moveTo(mitochondria[0].x, mitochondria[0].y);
+            ctx.lineTo(mitochondria[1].x, mitochondria[1].y);
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          // 分裂切割環視覺效果 (ER + DRP1)
+          if (state.fissionPulse > 0.05 && mitochondria.length >= 1) {
+            const target = mitochondria[0];
+            ctx.save();
+            ctx.translate(target.x, target.y);
+            ctx.rotate(target.angle);
+            ctx.strokeStyle = `rgba(56, 189, 248, ${state.fissionPulse})`;
+            ctx.lineWidth = 3.5;
+            ctx.setLineDash([4, 3]);
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 6, target.rad + 10, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          // 8. 繪製中央粒線體網路
+          const orgAlpha = (!state.roleFilter || state.roleFilter === 'organelle') ? 1 : 0.22;
+          mitochondria.forEach(m => drawMitochondrion(m, orgAlpha));
+
+          // 9. 繪製五大核心分子與胞器節點
+          nodes.forEach(n => {
+            const p = pos[n.id];
+            const isMatch = !state.roleFilter ||
+              state.roleFilter === n.role ||
+              (n.id === 'er_drp1' && (state.roleFilter === 'enzyme' || state.roleFilter === 'organelle'));
+            const alpha = isMatch ? 1 : 0.22;
+
+            let activityFactor = 1;
+            if (n.id === 'ampk') activityFactor = 0.72 + (state.metrics.ampk / 100) * 0.45;
+            if (n.id === 'mtor') activityFactor = 0.72 + (state.metrics.mtor / 100) * 0.45;
+            const drawR = n.r * (n.role === 'enzyme' ? activityFactor : 1);
+            const gearRot = state.time * (n.id === 'mtor' ? (0.3 + state.metrics.mtor * 0.015) : n.id === 'ampk' ? (0.3 + state.metrics.ampk * 0.015) : 0.7);
+
+            const isSelected = state.selectedId === n.id;
+            const isLessonFocus = state.activeTab === 'learn' && state.lessonFocusIds.includes(n.id);
+            if (isSelected || isLessonFocus) {
+              const pulse = 0.5 + 0.5 * Math.sin(state.time * 4);
+              ctx.save();
+              ctx.beginPath();
+              ctx.arc(p.x, p.y, drawR + 9 + pulse * 4, 0, Math.PI * 2);
+              ctx.strokeStyle = isSelected ? '#0f172a' : n.color;
+              ctx.globalAlpha = isSelected ? 0.75 : 0.45 + pulse * 0.35;
+              ctx.lineWidth = isSelected ? 2.5 : 2;
+              ctx.setLineDash(isSelected ? [] : [5, 4]);
+              ctx.stroke();
+              ctx.restore();
+            }
+
+            if (n.role === 'enzyme') {
+              drawGearCircle(p.x, p.y, drawR, 12, gearRot, n.color, alpha);
+              if (n.id === 'er_drp1') {
+                // 在 ER & DRP1 內部畫出折疊內質網管狀線條
+                ctx.save();
+                ctx.globalAlpha = alpha;
+                ctx.strokeStyle = '#7dd3fc';
+                ctx.lineWidth = 1.6;
+                ctx.beginPath();
+                ctx.moveTo(p.x - 14, p.y - 6);
+                ctx.bezierCurveTo(p.x - 4, p.y - 14, p.x + 4, p.y + 14, p.x + 14, p.y - 4);
+                ctx.stroke();
+                ctx.restore();
+              }
+            } else if (n.role === 'organelle') {
+              // 溶酶體：雙層膜 + 內部消化酵素氣泡
+              ctx.save();
+              ctx.globalAlpha = alpha;
+              ctx.beginPath();
+              ctx.arc(p.x, p.y, n.r, 0, Math.PI * 2);
+              ctx.fillStyle = n.color + '22';
+              ctx.strokeStyle = n.color;
+              ctx.lineWidth = 2.5;
+              ctx.fill();
+              ctx.stroke();
+              ctx.beginPath();
+              ctx.arc(p.x, p.y, n.r - 6, 0, Math.PI * 2);
+              ctx.strokeStyle = n.color + '88';
+              ctx.lineWidth = 1.2;
+              ctx.stroke();
+              ctx.fillStyle = n.color + '66';
+              [[-9, -6, 4], [8, 7, 3.5], [-4, 10, 3]].forEach(([bx, by, br]) => {
+                ctx.beginPath();
+                ctx.arc(p.x + bx, p.y + by, br, 0, Math.PI * 2);
+                ctx.fill();
+              });
+              ctx.restore();
+            } else {
+              // 細胞核 PGC-1α：核膜圓形 + 雙股螺旋示意
+              ctx.save();
+              ctx.globalAlpha = alpha;
+              ctx.beginPath();
+              ctx.arc(p.x, p.y, n.r, 0, Math.PI * 2);
+              ctx.fillStyle = 'rgba(45, 212, 191, 0.14)';
+              ctx.strokeStyle = n.color;
+              ctx.lineWidth = 2.2;
+              ctx.setLineDash([7, 4]);
+              ctx.fill();
+              ctx.stroke();
+              ctx.setLineDash([]);
+              ctx.strokeStyle = '#0d9488';
+              ctx.lineWidth = 1.8;
+              ctx.beginPath();
+              ctx.moveTo(p.x - 13, p.y);
+              ctx.bezierCurveTo(p.x - 5, p.y - 10, p.x + 5, p.y + 10, p.x + 13, p.y);
+              ctx.stroke();
+              ctx.restore();
+            }
+
+            if (n.id === 'lysosome' && gateLocked) {
+              ctx.save();
+              ctx.strokeStyle = '#e11d48';
+              ctx.lineWidth = 3;
+              ctx.beginPath();
+              ctx.moveTo(p.x - 14, p.y - 14);
+              ctx.lineTo(p.x + 14, p.y + 14);
+              ctx.moveTo(p.x + 14, p.y - 14);
+              ctx.lineTo(p.x - 14, p.y + 14);
+              ctx.stroke();
+              ctx.restore();
+            }
+
+            if (state.showLabels) {
+              ctx.save();
+              ctx.globalAlpha = alpha;
+              ctx.textAlign = 'center';
+              ctx.font = 'bold 11px "Noto Sans TC", sans-serif';
+              ctx.fillStyle = '#0f172a';
+              const displayTitle = isPlain ? n.plainName : `${n.roleLabel} ${n.name}`;
+              const displaySub = isPlain ? n.plainSub : n.sub;
+              ctx.fillText(displayTitle, p.x, p.y + n.r + 16);
+              ctx.font = '9.5px "Noto Sans TC", sans-serif';
+              ctx.fillStyle = '#475569';
+              ctx.fillText(displaySub, p.x, p.y + n.r + 29);
+              ctx.restore();
+            }
+          });
+        }
+
+        ctx.restore();
+        requestAnimationFrame(updateAndRender);
+      }
+
+      // =========================================================
+      // 自學課程資料 (6 堂循序漸進互動課) 與 隨堂測驗
+      // =========================================================
+      const LESSONS = [
+        {
+          title: '第 1 課：細胞的兩個總開關（AMPK vs mTORC1）',
+          summary: '細胞裡有一位「省電品管總監 (AMPK)」和一位「擴廠建築隊長 (mTORC1)」，兩者互相制衡，決定現在要「省電維修」還是「吃飽擴建」。',
+          analogy: '就像公司的財務總監與擴廠隊長：資源充足時隊長 (mTORC1) 猛蓋新產線；電力吃緊或運動時，總監 (AMPK) 會踩煞車並檢查舊機器！',
+          points: [
+            '<b>AMPK（左上青色齒輪）：</b>當運動或飢餓讓電量 (ATP) 下降、AMP 上升時啟動。它會促進燒脂肪產電，並「抑制」過度的 mTORC1。',
+            '<b>mTORC1（右上橘色齒輪）：</b>當胺基酸與血糖充足時啟動，負責合成蛋白質與長肌肉，但開太高會把「溶酶體回收廠」鎖住。'
+          ],
+          scenario: 'zone2',
+          focusIds: ['ampk', 'mtor'],
+          actions: [
+            { label: '試試看：吃太飽又久坐 (mTORC1↑)', style: 'amber', fn: () => setScenario('sedentary') },
+            { label: '試試看：Zone 2 有氧 (AMPK↑)', style: 'emerald', fn: () => setScenario('zone2') }
+          ]
+        },
+        {
+          title: '第 2 課：發電廠與電量指標（粒線體與膜電位 ΔΨm）',
+          summary: '畫布中央的綠色膠囊就是「粒線體」，它把脂肪酸 (FFA) 與氧氣變成細胞通用的電力 (ATP)，而「膜電位 ΔΨm」就是它的電池電量！',
+          analogy: '粒線體內膜摺成一層層的「內嵴 (Cristae)」，就像在發電廠裡塞滿發電機；ΔΨm 90% 代表電力飽滿，掉到 30% 代表電池老化漏電。',
+          points: [
+            '<b>健康粒線體（綠色）：</b>膜電位 ΔΨm 高（約 85–95%），穩定輸出 ATP 電力並協助緩衝鈣離子 (Ca²⁺)。',
+            '<b>受損粒線體（紅色）：</b>膜電位下降（去極化），不只發電效率差，還會洩漏傷害細胞的自由基 (ROS)。'
+          ],
+          scenario: 'zone2',
+          focusIds: ['pgc1a'],
+          onEnter: () => {
+            initMitochondria();
+            mitochondria[mitochondria.length - 1].damaged = true;
+            mitochondria[mitochondria.length - 1].potential = 0.32;
+            mitochondria[mitochondria.length - 1].ub = 0.8;
+            showEventToast('對比展示：綠色滿電 (92%) vs 紅色低電量受損 (32%)');
+          },
+          actions: [
+            { label: '點我產生「受損低電量粒線體」觀察', style: 'purple', fn: () => document.getElementById('btnTriggerDamage').click() },
+            { label: '點我「合成脈衝」蓋新發電廠', style: 'amber', fn: () => document.getElementById('btnTriggerRecovery').click() }
+          ]
+        },
+        {
+          title: '第 3 課：日常保養術（融合 Fusion vs 分裂 Fission）',
+          summary: '粒線體不是死板的豆子，而是會不斷「合併互補 (融合)」或「剪開隔離 (分裂)」的動態網路！',
+          analogy: '<b>融合</b>就像兩顆半滿的電池並聯成一顆大電池互相支援；<b>分裂</b>則是先用定位繩 (ER 內質網) 綁住，再拿分子剪刀 (DRP1) 把壞掉的一角剪掉隔離！',
+          points: [
+            '<b>融合 (MFN1/2・OPA1)：</b>讓健康與輕微受損的粒線體互通有無，提升整體發電效率。',
+            '<b>分裂 (ER + DRP1)：</b>左下角藍色節點負責標定並切斷粒線體，既能增殖數量，也能把壞掉的片段單獨切出來準備回收。'
+          ],
+          scenario: 'zone2',
+          focusIds: ['er_drp1'],
+          onEnter: () => {
+            initMitochondria();
+            state.fissionPulse = 1.0;
+            showEventToast('已自動示範：ER 內質網 + DRP1 切割環');
+          },
+          actions: [
+            { label: '✂️ 觸發分裂 (ER + DRP1)', style: 'cyan', fn: () => document.getElementById('btnTriggerFission').click() },
+            { label: '🔗 觸發融合 (MFN1/2・OPA1)', style: 'teal', fn: () => document.getElementById('btnTriggerFusion').click() }
+          ]
+        },
+        {
+          title: '第 4 課：品管回收廠（PINK1/Parkin 貼標籤與溶酶體自噬）',
+          summary: '當粒線體電量低到救不回來，細胞會貼上「Ub 泛素報廢貼紙」，交給「溶酶體」拆解回收；但若 mTORC1 太高，回收廠大門會被鎖住！',
+          analogy: '電量見底的粒線體會吸引 PINK1 與 Parkin 兩位品管員，在它外殼貼上一串金色「報廢貼紙 (Ub 泛素鏈)」，清潔車就會把它拖進右下角的溶酶體資源回收廠。',
+          points: [
+            '<b>自噬清除 (Mitophagy)：</b>溶酶體用酸性水解酶分解老舊粒線體，把裡面的胺基酸與鐵重新回收再利用。',
+            '<b>為什麼久坐傷身？</b>長期熱量過剩讓 mTORC1 一直處於高檔，會直接「鎖死溶酶體」（出現紅色 ✕），導致壞粒線體堆積！'
+          ],
+          scenario: 'sedentary',
+          focusIds: ['mtor', 'lysosome'],
+          actions: [
+            { label: '試試在「久坐模式」下誘導清除（會受阻！）', style: 'purple', fn: () => { setScenario('sedentary'); setTimeout(() => document.getElementById('btnTriggerDamage').click(), 300); } },
+            { label: '切回「Zone 2」解鎖回收廠再清除', style: 'emerald', fn: () => { setScenario('zone2'); setTimeout(() => document.getElementById('btnTriggerDamage').click(), 300); } }
+          ]
+        },
+        {
+          title: '第 5 課：生活應用（Zone 2 vs HIIT 肌力恢復週期）',
+          summary: '想讓細胞維持年輕高效，關鍵不是「永遠開 AMPK」或「永遠開 mTORC1」，而是讓兩者在對的時間輪流接棒！',
+          analogy: '<b>Zone 2 有氧</b>像每天溫和保養；<b>HIIT / 重訓</b>則像大掃除加擴建——訓練時先讓 AMPK 與 DRP1 淘汰舊機組，練完補充營養再讓 mTORC1 蓋出更強的新發電廠。',
+          points: [
+            '<b>Zone 2 有氧：</b>穩定燃燒脂肪，AMPK 溫和活化、PGC-1α 穩定新建粒線體，同時保留自噬清理。',
+            '<b>HIIT / 肌力恢復週期：</b>觀察右上儀表板如何「先由 AMPK 清除耗損 ⇄ 再由 mTORC1 主導修復重建」動態擺盪。'
+          ],
+          scenario: 'hiit',
+          focusIds: ['ampk', 'mtor', 'pgc1a'],
+          actions: [
+            { label: '切換觀察：HIIT 週期擺盪', style: 'rose', fn: () => setScenario('hiit') },
+            { label: '切換觀察：Zone 2 黃金平衡', style: 'emerald', fn: () => setScenario('zone2') }
+          ]
+        },
+        {
+          title: '第 6 課：神經元的高速公路（突觸停靠與逆行回收）',
+          summary: '神經細胞的軸突很長，粒線體必須像行動電源車一樣沿著微管軌道奔波：哪裡放電缺電就停在哪裡，壞掉的必須開回總部回收！',
+          analogy: '當右邊的突觸高頻放電時，會湧入大量鈣離子 (Ca²⁺) 當作「停車訊號」；粒線體上的 MIRO 感應到後就煞車停靠供電。壞掉的則走逆行車道回左邊的溶酶體報廢。',
+          points: [
+            '<b>順行供電 (Kinesin →)：</b>滿電粒線體從細胞體出發，遇到突觸 Ca²⁺ 訊號就停下來供應 ATP。',
+            '<b>逆行回收 (← Dynein)：</b>電量耗盡的粒線體被貼上 Ub 標籤後，必須逆行送回細胞體的溶酶體降解（可點擊畫布上的細胞體或突觸看詳解！）。'
+          ],
+          scenario: 'neuron',
+          focusIds: [],
+          actions: [
+            { label: '回到細胞代謝網路總覽', style: 'emerald', fn: () => setView('cell') }
+          ]
+        }
+      ];
+
+      const QUIZ_QUESTIONS = [
+        {
+          q: '1. 當長期「久坐且熱量過剩」時，為什麼受損的粒線體會堆積在細胞裡？',
+          options: [
+            'AMPK 過度活化，把粒線體全部剪碎了',
+            'mTORC1 長期亢進，把溶酶體的自噬回收大門鎖住了',
+            'PGC-1α 停止製造任何蛋白質，導致粒線體瞬間消失'
+          ],
+          answer: 1,
+          explain: '答對了！營養長期過剩會讓建築隊長 mTORC1 一直處於高檔，直接抑制溶酶體自噬清除 (Mitophagy)，導致低電量、冒自由基的老舊粒線體清不掉。'
+        },
+        {
+          q: '2. 粒線體的「膜電位 ΔΨm」在現實生理中代表什麼意義？',
+          options: [
+            '像電池的電量/電壓，越高代表氧化磷酸化產電越健康',
+            '代表粒線體移動的速度有多快',
+            '代表細胞核裡的 DNA 總長度'
+          ],
+          answer: 0,
+          explain: '沒錯！ΔΨm 就像發電廠的電壓表。健康的粒線體維持高膜電位（約 85–95%）來合成 ATP；一旦受損去極化（電量驟降），就會觸發品管回收機制。'
+        },
+        {
+          q: '3. 當某顆粒線體受損且膜電位下降時，誰會負責在它外膜貼上「Ub 泛素報廢貼紙」？',
+          options: [
+            'MFN1/2 與 OPA1',
+            'PINK1 與 Parkin',
+            'MIRO 與 Ca²⁺'
+          ],
+          answer: 1,
+          explain: '正確！當膜電位下降時，PINK1 無法進入內膜而累積在外膜，進而招募 Parkin 貼上泛素鏈 (Ub)，通知自噬體把它送進溶酶體降解。'
+        },
+        {
+          q: '4. 細胞想把粒線體「剪開隔離」以便增殖或切除壞掉片段時，是由哪個組合執行？',
+          options: [
+            'ER 內質網圈套標定 + DRP1 分子剪刀',
+            'mTORC1 + 核糖體直接溶化外膜',
+            '溶酶體直接撞擊粒線體'
+          ],
+          answer: 0,
+          explain: '答對了！ER 內質網小管先纏繞標定分裂位置，再招募胞質中的 DRP1 酵素形成螺旋收縮環把粒線體剪開。'
+        },
+        {
+          q: '5. 為什麼「高強度運動後補充營養與休息」能讓體能超補償？',
+          options: [
+            '因為運動和休息時都是 mTORC1 單獨在工作',
+            '因為訓練時先靠 AMPK / DRP1 清除耗損，恢復期再由 mTORC1 與 PGC-1α 重建新生',
+            '因為高強度運動會永久關閉溶酶體'
+          ],
+          answer: 1,
+          explain: '完全正確！「先破後立」的週期切換才是關鍵：壓力期淘汰老舊元件，恢復期提供營養讓 mTORC1 與 PGC-1α 蓋出更強壯的粒線體網路。'
+        },
+        {
+          q: '6. 在神經元軸突中，當突觸高頻放電需要大量 ATP 時，是什麼訊號讓路過的粒線體「煞車停靠」？',
+          options: [
+            '湧入的 Ca²⁺ 結合粒線體外膜的 MIRO 蛋白',
+            '細胞體發出紅外線訊號',
+            'PINK1 把微管軌道切斷'
+          ],
+          answer: 0,
+          explain: '太棒了！突觸活動湧入的鈣離子 (Ca²⁺) 會結合 MIRO 蛋白，就像踩下煞車一樣讓順行粒線體停在突觸就近供電！'
+        }
+      ];
+
+      const quizUserAnswers = {};
+
+      function setDrawerTab(tab) {
+        state.activeTab = tab;
+        const tabs = {
+          learn: { btn: document.getElementById('tabBtnLearn'), panel: document.getElementById('tabPanelLearn') },
+          lab: { btn: document.getElementById('tabBtnLab'), panel: document.getElementById('tabPanelLab') },
+          quiz: { btn: document.getElementById('tabBtnQuiz'), panel: document.getElementById('tabPanelQuiz') }
+        };
+        Object.entries(tabs).forEach(([key, { btn, panel }]) => {
+          const active = key === tab;
+          if (panel) panel.classList.toggle('hidden', !active);
+          if (btn) {
+            btn.className = active
+              ? 'drawer-tab-btn py-1.5 px-2 rounded-xl text-xs font-bold bg-sky-500/15 text-sky-700 border border-sky-500/40 transition-all'
+              : 'drawer-tab-btn py-1.5 px-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 border border-transparent hover:bg-white/70 transition-all';
+          }
+        });
+      }
+
+      function renderLesson(idx, applyScenario = true) {
+        state.lessonIndex = Math.max(0, Math.min(LESSONS.length - 1, idx));
+        const lesson = LESSONS[state.lessonIndex];
+        state.lessonFocusIds = lesson.focusIds || [];
+
+        if (applyScenario && lesson.scenario) {
+          setScenario(lesson.scenario);
+        }
+        if (applyScenario && typeof lesson.onEnter === 'function') {
+          lesson.onEnter();
+        }
+
+        const progressLabel = document.getElementById('lessonProgressLabel');
+        if (progressLabel) progressLabel.textContent = `第 ${state.lessonIndex + 1} / ${LESSONS.length} 課`;
+
+        const dotsWrap = document.getElementById('lessonStepDots');
+        if (dotsWrap) {
+          dotsWrap.innerHTML = LESSONS.map((_, i) => {
+            const active = i === state.lessonIndex;
+            return `<button data-lesson-idx="${i}" class="w-5 h-5 rounded-full text-[10px] font-bold transition-all ${active ? 'bg-sky-600 text-white scale-110' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}">${i + 1}</button>`;
+          }).join('');
+          dotsWrap.querySelectorAll('button').forEach(b => {
+            b.addEventListener('click', () => renderLesson(Number(b.dataset.lessonIdx), true));
+          });
+        }
+
+        const colorMap = {
+          amber: 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-800',
+          emerald: 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-800',
+          purple: 'bg-purple-50 hover:bg-purple-100 border-purple-300 text-purple-800',
+          cyan: 'bg-cyan-50 hover:bg-cyan-100 border-cyan-300 text-cyan-800',
+          teal: 'bg-teal-50 hover:bg-teal-100 border-teal-300 text-teal-800',
+          rose: 'bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-800'
+        };
+
+        const card = document.getElementById('lessonCard');
+        if (card) {
+          card.innerHTML = `
+            <h3 class="text-sm font-bold text-slate-900 leading-snug">${lesson.title}</h3>
+            <p class="text-xs text-slate-700 leading-relaxed bg-slate-50 p-2.5 rounded-xl border border-slate-200">${lesson.summary}</p>
+            <div class="p-2.5 rounded-xl bg-sky-50 border border-sky-200 text-xs text-sky-900 leading-relaxed">
+              💡 <b>生活比喻：</b>${lesson.analogy}
+            </div>
+            <ul class="space-y-1.5 text-xs text-slate-700 list-disc list-inside leading-relaxed">
+              ${lesson.points.map(p => `<li>${p}</li>`).join('')}
+            </ul>
+            <div class="pt-1 space-y-1.5">
+              <div class="text-[11px] font-semibold text-slate-600">👉 動手試試看（觀察左側畫布變化）：</div>
+              <div class="grid grid-cols-1 gap-1.5" id="lessonActionBtns">
+                ${lesson.actions.map((a, i) => `<button data-act-idx="${i}" class="btn-pill w-full px-3 py-2 rounded-xl border text-left text-xs font-semibold ${colorMap[a.style] || colorMap.cyan}">${a.label}</button>`).join('')}
+              </div>
+            </div>
+          `;
+          card.querySelectorAll('#lessonActionBtns button').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const act = lesson.actions[Number(btn.dataset.actIdx)];
+              if (act && act.fn) act.fn();
+            });
+          });
+        }
+
+        const btnPrev = document.getElementById('btnPrevLesson');
+        const btnNext = document.getElementById('btnNextLesson');
+        if (btnPrev) btnPrev.disabled = state.lessonIndex === 0;
+        if (btnNext) {
+          btnNext.textContent = (state.lessonIndex === LESSONS.length - 1) ? '前往隨堂測驗 →' : '下一課 →';
+        }
+      }
+
+      function renderQuiz() {
+        const list = document.getElementById('quizList');
+        const scoreEl = document.getElementById('quizScoreText');
+        if (!list) return;
+
+        let answeredCount = 0;
+        let correctCount = 0;
+        QUIZ_QUESTIONS.forEach((item, qi) => {
+          if (quizUserAnswers[qi] !== undefined) {
+            answeredCount++;
+            if (quizUserAnswers[qi] === item.answer) correctCount++;
+          }
+        });
+        if (scoreEl) scoreEl.textContent = `已作答 ${answeredCount} / ${QUIZ_QUESTIONS.length} 題・答對 ${correctCount} 題`;
+
+        list.innerHTML = QUIZ_QUESTIONS.map((item, qi) => {
+          const picked = quizUserAnswers[qi];
+          const hasPicked = picked !== undefined;
+          return `
+            <div class="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+              <div class="text-xs font-bold text-slate-800 leading-relaxed">${item.q}</div>
+              <div class="space-y-1.5">
+                ${item.options.map((opt, oi) => {
+                  let cls = 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700';
+                  if (hasPicked) {
+                    if (oi === item.answer) {
+                      cls = 'bg-emerald-50 border-emerald-400 text-emerald-800 font-semibold';
+                    } else if (oi === picked) {
+                      cls = 'bg-rose-50 border-rose-400 text-rose-800';
+                    } else {
+                      cls = 'bg-slate-100 border-slate-200 text-slate-400 opacity-75';
+                    }
+                  }
+                  return `<button data-qi="${qi}" data-oi="${oi}" class="quiz-opt-btn ${cls} w-full text-left px-2.5 py-2 rounded-lg border text-[11.5px] transition-all">${opt}</button>`;
+                }).join('')}
+              </div>
+              ${hasPicked ? `<div class="p-2 rounded-lg text-[11px] leading-relaxed ${picked === item.answer ? 'bg-emerald-50 text-emerald-800 border border-emerald-300' : 'bg-rose-50 text-rose-800 border border-rose-300'}">${picked === item.answer ? '✅ ' : '❌ '}${item.explain}</div>` : ''}
+            </div>
+          `;
+        }).join('');
+
+        list.querySelectorAll('.quiz-opt-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const qi = Number(btn.dataset.qi);
+            const oi = Number(btn.dataset.oi);
+            quizUserAnswers[qi] = oi;
+            renderQuiz();
+          });
+        });
+      }
+
+      document.getElementById('tabBtnLearn')?.addEventListener('click', () => setDrawerTab('learn'));
+      document.getElementById('tabBtnLab')?.addEventListener('click', () => setDrawerTab('lab'));
+      document.getElementById('tabBtnQuiz')?.addEventListener('click', () => { setDrawerTab('quiz'); renderQuiz(); });
+
+      document.getElementById('btnPrevLesson')?.addEventListener('click', () => {
+        if (state.lessonIndex > 0) renderLesson(state.lessonIndex - 1, true);
+      });
+      document.getElementById('btnNextLesson')?.addEventListener('click', () => {
+        if (state.lessonIndex < LESSONS.length - 1) {
+          renderLesson(state.lessonIndex + 1, true);
+        } else {
+          setDrawerTab('quiz');
+          renderQuiz();
+        }
+      });
+      document.getElementById('btnResetQuiz')?.addEventListener('click', () => {
+        Object.keys(quizUserAnswers).forEach(k => delete quizUserAnswers[k]);
+        renderQuiz();
+      });
+
+      document.getElementById('btnToggleJargon')?.addEventListener('click', () => {
+        setJargonMode(state.jargonMode === 'plain' ? 'pro' : 'plain');
+      });
+
+      document.getElementById('sliderNutrition')?.addEventListener('input', (e) => {
+        state.nutrition = Number(e.target.value);
+        syncSliderUI();
+        applyLifestyleSliders();
+      });
+
+      document.getElementById('sliderActivity')?.addEventListener('input', (e) => {
+        state.activity = Number(e.target.value);
+        syncSliderUI();
+        applyLifestyleSliders();
+      });
+
+      // 啟動模擬
+      window.addEventListener('load', () => {
+        setJargonMode('plain');
+        setDrawerTab('learn');
+        renderLesson(0, true);
+        renderQuiz();
+        if (window.innerWidth < 768) {
+          setDrawerOpen(false);
+        }
+        requestAnimationFrame(updateAndRender);
+      });
+  </script>
+</body>
+</html>
