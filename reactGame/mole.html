@@ -1,146 +1,494 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <title>Whack-a-Mole with React</title>
-  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>反應力打地鼠 | Whack-a-Mole</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
-    body {
-      font-family: sans-serif;
-      text-align: center;
-      background-color: #fefefe;
-    }
-    .grid {
-      display: grid;
-      gap: 10px;
-      justify-content: center;
-      margin-top: 20px;
-    }
-    .hole {
-      width: 80px;
-      height: 80px;
-      background: #ccc;
-      border-radius: 50%;
-      position: relative;
-      cursor: pointer;
-      transition: background 0.3s;
-    }
-    .mole {
-      background: brown;
-      animation: pop 0.3s ease-in-out;
-    }
-    .hole.hit {
-      background: red;
-      animation: explode 0.3s ease-out;
+    :root {
+      --bg: #090d16;
+      --panel: rgba(17, 24, 39, 0.9);
+      --border: rgba(255, 255, 255, 0.12);
+      --text: #f8fafc;
+      --muted: #94a3b8;
     }
 
-    @keyframes explode {
-      0% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(1.4); opacity: 0.7; }
-      100% { transform: scale(1); opacity: 1; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      min-height: 100dvh;
+      background: radial-gradient(circle at 50% 15%, #1e293b 0%, #090d16 70%);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
+      touch-action: manipulation;
+    }
+
+    .app-shell {
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: calc(12px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left));
+      gap: 12px;
+    }
+
+    .hud {
+      width: 100%;
+      max-width: 560px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 12px 14px;
+      backdrop-filter: blur(10px);
+    }
+
+    .hud-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .hud-top h1 {
+      font-size: 1.15rem;
+      font-weight: 800;
+    }
+
+    .controls-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .pill-btn {
+      min-height: 38px;
+      padding: 6px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .pill-btn.active {
+      background: rgba(56, 189, 248, 0.25);
+      border-color: #38bdf8;
+    }
+
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+
+    .stat-box {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 10px;
+      padding: 6px 8px;
+      text-align: center;
+    }
+
+    .stat-box span {
+      display: block;
+      font-size: 0.68rem;
+      color: var(--muted);
+    }
+
+    .stat-box strong {
+      font-size: 1.05rem;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-box.timer strong.urgent {
+      color: #f87171;
+    }
+
+    .board-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      touch-action: none;
+    }
+
+    .grid {
+      display: grid;
+      gap: clamp(8px, 2vw, 14px);
+      padding: clamp(12px, 2.5vw, 20px);
+      background: rgba(17, 24, 39, 0.75);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+    }
+
+    .hole {
+      width: var(--cell-size);
+      height: var(--cell-size);
+      border-radius: 50%;
+      background: radial-gradient(circle at 50% 65%, #1e293b 0%, #0f172a 85%);
+      border: 3px solid rgba(255, 255, 255, 0.1);
+      display: grid;
+      place-items: center;
+      font-size: calc(var(--cell-size) * 0.54);
+      cursor: pointer;
+      position: relative;
+      transition: transform 0.1s, border-color 0.15s, background 0.15s;
+      touch-action: manipulation;
+    }
+
+    .hole:active {
+      transform: scale(0.92);
+    }
+
+    .hole.normal {
+      background: radial-gradient(circle at 50% 40%, #92400e 0%, #451a03 85%);
+      border-color: #f59e0b;
+      animation: pop 0.16s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .hole.golden {
+      background: radial-gradient(circle at 50% 40%, #eab308 0%, #854d0e 85%);
+      border-color: #fef08a;
+      box-shadow: 0 0 18px rgba(250, 204, 21, 0.5);
+      animation: pop 0.16s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .hole.bomb {
+      background: radial-gradient(circle at 50% 40%, #991b1b 0%, #450a0a 85%);
+      border-color: #f87171;
+      animation: pop 0.16s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .hole.hit {
+      background: #10b981;
+      border-color: #6ee7b7;
+      transform: scale(1.08);
+    }
+
+    .hole.miss {
+      background: #ef4444;
+      border-color: #fca5a5;
     }
 
     @keyframes pop {
-      0% { transform: scale(0.5); opacity: 0.5; }
-      100% { transform: scale(1); opacity: 1; }
+      0% { transform: scale(0.6); }
+      100% { transform: scale(1); }
+    }
+
+    .legend {
+      font-size: 0.78rem;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(9, 13, 22, 0.8);
+      backdrop-filter: blur(6px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 20;
+    }
+
+    .modal {
+      width: 100%;
+      max-width: 360px;
+      background: #111827;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 20px;
+      padding: 24px;
+      text-align: center;
+    }
+
+    .modal h2 {
+      font-size: 1.45rem;
+      margin-bottom: 8px;
+    }
+
+    .modal p {
+      color: var(--muted);
+      margin-bottom: 18px;
+      line-height: 1.5;
+    }
+
+    .primary-btn {
+      width: 100%;
+      min-height: 46px;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #3b82f6, #06b6d4);
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
   <div id="root"></div>
 
-  <!-- 音效 -->
-  <audio id="hitSound" src="https://www.myinstants.com/media/sounds/cartoon-jump.mp3" preload="auto"></audio>
-
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef, useCallback } = React;
 
-    function WhackAMole({ gridSize = 3, gameDuration = 30 }) {
-      const totalCells = gridSize * gridSize;
-      const [moleIndex, setMoleIndex] = useState(null);
+    // Web Audio Synthesizer (zero external audio dependencies)
+    const audio = {
+      ctx: null,
+      enabled: true,
+      unlock() {
+        if (!this.ctx) {
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          if (Ctx) this.ctx = new Ctx();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+      },
+      tone(f1, f2, dur = 0.1, type = 'triangle', vol = 0.18) {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(f1, now);
+        osc.frequency.exponentialRampToValueAtTime(f2, now + dur);
+        gain.gain.setValueAtTime(vol, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + dur + 0.02);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + dur + 0.03);
+      },
+      hit() { this.tone(420, 740, 0.09, 'triangle', 0.18); },
+      golden() { this.tone(660, 1180, 0.15, 'sine', 0.2); },
+      bomb() { this.tone(160, 55, 0.22, 'sawtooth', 0.18); },
+      miss() { this.tone(190, 140, 0.07, 'sine', 0.08); },
+      end() {
+        [523, 659, 784].forEach((f, i) => setTimeout(() => this.tone(f, f, 0.18, 'triangle', 0.16), i * 100));
+      }
+    };
+
+    function WhackAMole() {
+      const [gridSize, setGridSize] = useState(4);
+      const [mole, setMole] = useState(null); // { index, kind: 'normal' | 'golden' | 'bomb' }
       const [score, setScore] = useState(0);
-      const [timeLeft, setTimeLeft] = useState(gameDuration);
-      const [isPlaying, setIsPlaying] = useState(true);
-      const [hitIndex, setHitIndex] = useState(null);
+      const [bestScore, setBestScore] = useState(() => Number(localStorage.getItem('mole_best') || 0));
+      const [combo, setCombo] = useState(0);
+      const [timeLeft, setTimeLeft] = useState(30);
+      const [phase, setPhase] = useState('ready'); // 'ready' | 'playing' | 'ended'
+      const [feedback, setFeedback] = useState(null); // { index, type: 'hit' | 'miss' }
+      const [soundOn, setSoundOn] = useState(true);
 
-      // 倒數計時
+      const feedbackTimerRef = useRef(null);
+      const totalCells = gridSize * gridSize;
+
+      // Prevent accidental double-tap zoom
       useEffect(() => {
-        if (!isPlaying) return;
+        const preventDbl = (e) => e.preventDefault();
+        document.addEventListener('dblclick', preventDbl, { passive: false });
+        return () => document.removeEventListener('dblclick', preventDbl);
+      }, []);
 
-        const timer = setInterval(() => {
-          setTimeLeft(prev => {
+      const startGame = useCallback((newSize = gridSize) => {
+        audio.unlock();
+        if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+        setGridSize(newSize);
+        setScore(0);
+        setCombo(0);
+        setTimeLeft(30);
+        setMole(null);
+        setFeedback(null);
+        setPhase('playing');
+      }, [gridSize]);
+
+      // Countdown timer
+      useEffect(() => {
+        if (phase !== 'playing') return;
+        const id = setInterval(() => {
+          setTimeLeft((prev) => {
             if (prev <= 1) {
-              setIsPlaying(false);
+              setPhase('ended');
+              setMole(null);
+              audio.end();
               return 0;
             }
             return prev - 1;
           });
         }, 1000);
+        return () => clearInterval(id);
+      }, [phase]);
 
-        return () => clearInterval(timer);
-      }, [isPlaying]);
-
-      // 隨機生成地鼠
+      // Save high score
       useEffect(() => {
-        if (!isPlaying) return;
+        if (score > bestScore) {
+          setBestScore(score);
+          localStorage.setItem('mole_best', String(score));
+        }
+      }, [score, bestScore]);
 
-        const moleTimer = setInterval(() => {
-          const randomIndex = Math.floor(Math.random() * totalCells);
-          setMoleIndex(randomIndex);
-        }, 800);
+      // Spawn moles
+      useEffect(() => {
+        if (phase !== 'playing') return;
+        const intervalMs = Math.max(480, 820 - combo * 15);
+        const spawn = () => {
+          const index = Math.floor(Math.random() * totalCells);
+          const roll = Math.random();
+          const kind = roll < 0.14 ? 'golden' : roll < 0.28 ? 'bomb' : 'normal';
+          setMole({ index, kind });
+        };
+        spawn();
+        const id = setInterval(spawn, intervalMs);
+        return () => clearInterval(id);
+      }, [phase, totalCells, combo]);
 
-        return () => clearInterval(moleTimer);
-      }, [isPlaying, totalCells]);
+      const triggerFeedback = (index, type) => {
+        if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+        setFeedback({ index, type });
+        feedbackTimerRef.current = setTimeout(() => setFeedback(null), 220);
+      };
 
-      // 點擊事件處理（支持觸控）
-      const handleClick = (index) => {
-        if (!isPlaying) return;
-        if (index === moleIndex) {
-          setScore(score + 1);
-          setMoleIndex(null);
-          setHitIndex(index);  // 設置爆炸效果
+      const handleHolePress = (index) => {
+        if (phase !== 'playing') return;
+        audio.unlock();
 
-          // 播放音效
-          const sound = document.getElementById("hitSound");
-          sound.currentTime = 0;
-          sound.play();
-
-          // 清除 hit 標記（讓動畫能重播）
-          setTimeout(() => setHitIndex(null), 300);
+        if (mole && mole.index === index) {
+          if (mole.kind === 'bomb') {
+            setScore((s) => Math.max(0, s - 2));
+            setCombo(0);
+            triggerFeedback(index, 'miss');
+            audio.bomb();
+          } else {
+            const pts = mole.kind === 'golden' ? 3 : 1 + Math.floor(combo / 5);
+            setScore((s) => s + pts);
+            setCombo((c) => c + 1);
+            triggerFeedback(index, 'hit');
+            if (mole.kind === 'golden') audio.golden();
+            else audio.hit();
+          }
+          setMole(null);
+        } else {
+          setCombo(0);
+          triggerFeedback(index, 'miss');
+          audio.miss();
         }
       };
 
-      const handleTouch = (index) => {
-        handleClick(index);  // 觸控點擊事件
-      };
-
-      const gridStyle = {
-        gridTemplateColumns: `repeat(${gridSize}, 80px)`,
-      };
+      const cellSize = gridSize === 3
+        ? 'min(96px, 24vw)'
+        : gridSize === 4
+          ? 'min(82px, 19vw)'
+          : 'min(66px, 15vw)';
 
       return (
-        <div>
-          <h2>分數: {score}</h2>
-          <h3>剩餘時間: {timeLeft} 秒</h3>
-          {!isPlaying && <h2 style={{ color: "red" }}>遊戲結束！</h2>}
-          <div className="grid" style={gridStyle}>
-            {Array(totalCells).fill(0).map((_, i) => (
-              <div
-                key={i}
-                className={`hole ${i === moleIndex ? 'mole' : ''} ${i === hitIndex ? 'hit' : ''}`}
-                onClick={() => handleClick(i)}
-                onTouchStart={() => handleTouch(i)}  // 觸控支援
-              />
-            ))}
-          </div>
+        <div className="app-shell">
+          <header className="hud">
+            <div className="hud-top">
+              <h1>🐹 反應力打地鼠</h1>
+              <div className="controls-row">
+                {[3, 4, 5].map((sz) => (
+                  <button
+                    key={sz}
+                    className={`pill-btn ${gridSize === sz ? 'active' : ''}`}
+                    onClick={() => startGame(sz)}
+                  >
+                    {sz}×{sz}
+                  </button>
+                ))}
+                <button
+                  className="pill-btn"
+                  onClick={() => {
+                    audio.unlock();
+                    audio.enabled = !soundOn;
+                    setSoundOn(!soundOn);
+                  }}
+                >
+                  {soundOn ? '🔊' : '🔇'}
+                </button>
+              </div>
+            </div>
+
+            <div className="stats-row">
+              <div className="stat-box"><span>分數</span><strong>{score}</strong></div>
+              <div className="stat-box"><span>連擊</span><strong>{combo}x</strong></div>
+              <div className="stat-box timer">
+                <span>時間</span>
+                <strong className={timeLeft <= 5 && phase === 'playing' ? 'urgent' : ''}>{timeLeft}s</strong>
+              </div>
+              <div className="stat-box"><span>最高</span><strong>{bestScore}</strong></div>
+            </div>
+          </header>
+
+          <main className="board-wrap">
+            <div
+              className="grid"
+              style={{
+                '--cell-size': cellSize,
+                gridTemplateColumns: `repeat(${gridSize}, var(--cell-size))`
+              }}
+            >
+              {Array.from({ length: totalCells }, (_, i) => {
+                const isMole = mole && mole.index === i;
+                const fb = feedback && feedback.index === i ? feedback.type : '';
+                const cls = `hole ${isMole ? mole.kind : ''} ${fb}`;
+                const icon = isMole
+                  ? (mole.kind === 'golden' ? '🌟' : mole.kind === 'bomb' ? '💣' : '🐹')
+                  : '';
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    className={cls}
+                    onPointerDown={() => handleHolePress(i)}
+                    aria-label={`地鼠洞 ${i + 1}`}
+                  >
+                    {icon}
+                  </button>
+                );
+              })}
+            </div>
+          </main>
+
+          <p className="legend">🐹 普通 +1（連擊加分） · 🌟 金地鼠 +3 · 💣 炸彈 -2</p>
+
+          {phase !== 'playing' && (
+            <div className="overlay">
+              <div className="modal">
+                <h2>{phase === 'ready' ? '準備好了嗎？' : '時間到！'}</h2>
+                <p>
+                  {phase === 'ready'
+                    ? '點擊冒出的地鼠得分，小心避開炸彈！連擊越多出現速度越快。'
+                    : `本局得分：${score} 分（歷史最高：${bestScore} 分）`}
+                </p>
+                <button className="primary-btn" onClick={() => startGame(gridSize)}>
+                  {phase === 'ready' ? '開始遊戲' : '再玩一局'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
 
-    const root = ReactDOM.createRoot(document.getElementById("root"));
-    root.render(<WhackAMole gridSize={7} gameDuration={30} />);
+    ReactDOM.createRoot(document.getElementById('root')).render(<WhackAMole />);
   </script>
 </body>
 </html>

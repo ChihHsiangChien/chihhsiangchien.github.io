@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>3D 俯視方塊井 | 3D Top-Down Tetris</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    :root {
+      --bg: #070b14;
+      --panel: rgba(17, 24, 39, 0.88);
+      --border: rgba(255, 255, 255, 0.12);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100dvh;
+      overflow: hidden;
+      background: radial-gradient(circle at 50% 20%, #172554 0%, #070b14 75%);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
+      touch-action: none;
+    }
+
+    .app-shell {
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: calc(10px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));
+      gap: 8px;
+    }
+
+    .top-bar {
+      width: 100%;
+      max-width: 720px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge {
+      font-size: 0.7rem;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: linear-gradient(135deg, #06b6d4, #8b5cf6);
+      color: #fff;
+    }
+
+    .top-bar h1 {
+      font-size: 1.1rem;
+      font-weight: 800;
+    }
+
+    .top-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .icon-btn {
+      min-width: 42px;
+      min-height: 40px;
+      padding: 0 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .play-area {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      max-width: 720px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    #well-container {
+      position: relative;
+      height: 100%;
+      max-height: 540px;
+      aspect-ratio: 1;
+      border: 2px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      background: #04070e;
+      box-shadow: 0 20px 48px rgba(0, 0, 0, 0.65);
+      touch-action: none;
+    }
+
+    #gl-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .side-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 146px;
+    }
+
+    .stat-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 9px 10px;
+      text-align: center;
+    }
+
+    .stat-card span {
+      display: block;
+      font-size: 0.7rem;
+      color: var(--muted);
+    }
+
+    .stat-card strong {
+      font-size: 1.15rem;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .depth-meter {
+      display: flex;
+      flex-direction: column-reverse;
+      gap: 3px;
+      margin-top: 6px;
+    }
+
+    .depth-bar {
+      height: 8px;
+      border-radius: 3px;
+      opacity: 0.2;
+      transition: opacity 0.15s;
+    }
+
+    .depth-bar.filled {
+      opacity: 1;
+    }
+
+    .controls-hint {
+      font-size: 0.72rem;
+      line-height: 1.45;
+      color: var(--muted);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px 10px;
+    }
+
+    kbd {
+      background: #334155;
+      border-radius: 4px;
+      padding: 1px 4px;
+      font-family: monospace;
+      color: #fff;
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: rgba(7, 11, 20, 0.86);
+      backdrop-filter: blur(8px);
+      padding: 18px;
+      text-align: center;
+      z-index: 10;
+      transition: opacity 0.2s;
+    }
+
+    .overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .overlay h2 { font-size: 1.45rem; }
+    .overlay p { font-size: 0.88rem; color: var(--muted); line-height: 1.5; max-width: 300px; }
+
+    .primary-btn {
+      min-height: 46px;
+      padding: 10px 28px;
+      border: none;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #06b6d4, #6366f1);
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* Touch Controls */
+    .touch-dock {
+      width: 100%;
+      max-width: 560px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      touch-action: none;
+    }
+
+    .dpad {
+      display: grid;
+      grid-template-areas:
+        ". up ."
+        "left down right";
+      gap: 6px;
+    }
+
+    .rot-pad {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+    }
+
+    .t-btn {
+      min-width: 54px;
+      min-height: 48px;
+      padding: 0 10px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.09);
+      color: #fff;
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      touch-action: none;
+    }
+
+    .t-btn:active {
+      background: rgba(255, 255, 255, 0.25);
+      transform: scale(0.94);
+    }
+
+    .t-btn.drop {
+      grid-column: span 2;
+      background: rgba(236, 72, 153, 0.26);
+      border-color: rgba(236, 72, 153, 0.5);
+    }
+
+    .t-btn.rot {
+      background: rgba(56, 189, 248, 0.2);
+      border-color: rgba(56, 189, 248, 0.45);
+      font-size: 0.86rem;
+    }
+
+    #btn-up { grid-area: up; }
+    #btn-left { grid-area: left; }
+    #btn-down { grid-area: down; }
+    #btn-right { grid-area: right; }
+
+    @media (max-width: 600px) {
+      .side-panel { width: 104px; }
+      .controls-hint { display: none; }
+      .t-btn { min-width: 46px; min-height: 44px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="top-bar">
+      <div class="brand">
+        <span class="badge">3D WELL</span>
+        <h1>3D 俯視方塊井</h1>
+      </div>
+      <div class="top-actions">
+        <button id="pause-btn" class="icon-btn" disabled>⏸ 暫停</button>
+        <button id="sound-btn" class="icon-btn" aria-label="切換音效">🔊</button>
+      </div>
+    </header>
+
+    <main class="play-area">
+      <div id="well-container">
+        <canvas id="gl-canvas"></canvas>
+        <div id="overlay" class="overlay">
+          <h2 id="overlay-title">3D 俯視方塊井</h2>
+          <p id="overlay-desc">方塊會從上方朝底面（5×5 平面）落下！填滿任一層 5×5 平面即可整層消除。</p>
+          <button id="start-btn" class="primary-btn">開始遊戲</button>
+        </div>
+      </div>
+
+      <aside class="side-panel">
+        <div class="stat-card"><span>分數</span><strong id="score">0</strong></div>
+        <div class="stat-card"><span>最高分</span><strong id="best">0</strong></div>
+        <div class="stat-card"><span>消層數</span><strong id="layers">0</strong></div>
+        <div class="stat-card">
+          <span>堆疊高度</span>
+          <div id="depth-meter" class="depth-meter"></div>
+        </div>
+        <div class="controls-hint">
+          <kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> 平面移動<br />
+          <kbd>Q</kbd> 水平旋轉 · <kbd>W</kbd> 翻轉<br />
+          <kbd>Space</kbd> / 點擊畫面：落下
+        </div>
+      </aside>
+    </main>
+
+    <footer class="touch-dock">
+      <div class="dpad">
+        <button id="btn-up" class="t-btn" aria-label="上移">▲</button>
+        <button id="btn-left" class="t-btn" aria-label="左移">◀</button>
+        <button id="btn-down" class="t-btn" aria-label="下移">▼</button>
+        <button id="btn-right" class="t-btn" aria-label="右移">▶</button>
+      </div>
+      <div class="rot-pad">
+        <button id="btn-rot-y" class="t-btn rot">↻ 轉向</button>
+        <button id="btn-rot-x" class="t-btn rot">🔄 翻轉</button>
+        <button id="btn-drop" class="t-btn drop">⏬ 落下到底</button>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const GRID = 5;    // 5x5 target floor plane
+      const HEIGHT = 10; // 10 depth layers
+
+      // Layer colors from floor (0) to top (9)
+      const LAYER_COLORS = [
+        0x10b981, 0x06b6d4, 0x3b82f6, 0x6366f1, 0x8b5cf6,
+        0xd946ef, 0xec4899, 0xf97316, 0xeab308, 0xef4444
+      ];
+      const LAYER_HEX = [
+        '#10b981', '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6',
+        '#d946ef', '#ec4899', '#f97316', '#eab308', '#ef4444'
+      ];
+
+      // 3D Polyominoes (arrays of [x, y, z] relative to pivot)
+      const PIECES = [
+        [[0,0,0]],                                  // 1-cube dot
+        [[0,0,0], [1,0,0]],                         // 2-cube I2
+        [[0,0,0], [1,0,0], [0,0,1]],                // 3-cube L
+        [[0,0,0], [1,0,0], [-1,0,0]],               // 3-cube I3
+        [[0,0,0], [1,0,0], [0,0,1], [1,0,1]],       // 2x2 square
+        [[0,0,0], [-1,0,0], [1,0,0], [0,0,1]],      // T
+        [[0,0,0], [1,0,0], [0,1,0]],                // 3D corner
+        [[0,0,0], [1,0,0], [0,0,1], [0,1,0]]        // 3D tripod
+      ];
+
+      // --- Sound ---
+      const sound = {
+        ctx: null,
+        enabled: true,
+        unlock() {
+          if (!this.ctx) {
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            if (Ctx) this.ctx = new Ctx();
+          }
+          if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+        },
+        tone(f1, f2, dur = 0.07, type = 'triangle', vol = 0.13) {
+          if (!this.enabled || !this.ctx) return;
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(f1, now);
+          osc.frequency.exponentialRampToValueAtTime(f2, now + dur);
+          gain.gain.setValueAtTime(vol, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + dur + 0.02);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + dur + 0.03);
+        },
+        move() { this.tone(280, 320, 0.03, 'sine', 0.06); },
+        rotate() { this.tone(420, 580, 0.05, 'triangle', 0.1); },
+        lock() { this.tone(160, 85, 0.08, 'triangle', 0.15); },
+        clear() { this.tone(520, 880, 0.2, 'triangle', 0.18); },
+        over() { this.tone(220, 75, 0.35, 'sawtooth', 0.15); }
+      };
+
+      // --- DOM ---
+      const container = document.getElementById('well-container');
+      const glCanvas = document.getElementById('gl-canvas');
+      const scoreEl = document.getElementById('score');
+      const bestEl = document.getElementById('best');
+      const layersEl = document.getElementById('layers');
+      const depthMeterEl = document.getElementById('depth-meter');
+      const overlay = document.getElementById('overlay');
+      const overlayTitle = document.getElementById('overlay-title');
+      const overlayDesc = document.getElementById('overlay-desc');
+      const startBtn = document.getElementById('start-btn');
+      const pauseBtn = document.getElementById('pause-btn');
+      const soundBtn = document.getElementById('sound-btn');
+
+      // Build depth meter bars
+      const depthBars = [];
+      for (let y = 0; y < HEIGHT; y++) {
+        const div = document.createElement('div');
+        div.className = 'depth-bar';
+        div.style.background = LAYER_HEX[y];
+        depthMeterEl.appendChild(div);
+        depthBars.push(div);
+      }
+
+      // --- Three.js Setup (Top-Down Perspective Looking Into Pit) ---
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x04070e);
+
+      const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 100);
+      // Positioned directly above the center of the 5x5x10 well, looking straight down!
+      const center = (GRID - 1) / 2;
+      camera.position.set(center, HEIGHT + 5.2, center + 0.01);
+      camera.lookAt(center, 0, center);
+
+      const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+      scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+      const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      dirLight.position.set(center + 4, HEIGHT + 8, center + 3);
+      scene.add(dirLight);
+
+      // Well floor grid & depth frame lines
+      const wellGroup = new THREE.Group();
+      const floorGrid = new THREE.GridHelper(GRID, GRID, 0x38bdf8, 0x1e293b);
+      floorGrid.position.set(center, -0.5, center);
+      wellGroup.add(floorGrid);
+
+      const frameMat = new THREE.LineBasicMaterial({ color: 0x334155, transparent: true, opacity: 0.7 });
+      const corners = [
+        [-0.5, -0.5], [GRID - 0.5, -0.5], [GRID - 0.5, GRID - 0.5], [-0.5, GRID - 0.5]
+      ];
+      corners.forEach(([cx, cz]) => {
+        const g = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(cx, -0.5, cz),
+          new THREE.Vector3(cx, HEIGHT - 0.5, cz)
+        ]);
+        wellGroup.add(new THREE.Line(g, frameMat));
+      });
+      // Depth rings every 2 layers for clear perspective
+      for (let y = 1; y < HEIGHT; y += 2) {
+        const pts = corners.concat([corners[0]]).map(([cx, cz]) => new THREE.Vector3(cx, y - 0.5, cz));
+        wellGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), frameMat));
+      }
+      scene.add(wellGroup);
+
+      // Dynamic groups
+      const settledGroup = new THREE.Group();
+      const activeGroup = new THREE.Group();
+      const shadowGroup = new THREE.Group();
+      scene.add(settledGroup, shadowGroup, activeGroup);
+
+      const cubeGeom = new THREE.BoxGeometry(0.92, 0.92, 0.92);
+      const edgesGeom = new THREE.EdgesGeometry(new THREE.BoxGeometry(0.94, 0.94, 0.94));
+      const shadowGeom = new THREE.PlaneGeometry(0.86, 0.86);
+
+      // --- Game State ---
+      let well = []; // well[y][z][x] = 0 or 1
+      let activePiece = null; // { blocks: [[x,y,z],...], pos: {x, y, z} }
+      let score = 0;
+      let bestScore = Number(localStorage.getItem('tetris3d_best') || 0);
+      let clearedLayers = 0;
+      let isPaused = true;
+      let isGameOver = false;
+      let dropCounter = 0;
+      let dropInterval = 1100;
+      let lastTime = 0;
+
+      function initWell() {
+        well = Array.from({ length: HEIGHT }, () =>
+          Array.from({ length: GRID }, () => new Array(GRID).fill(0))
+        );
+      }
+
+      function isValidPos(blocks, pos) {
+        for (const [bx, by, bz] of blocks) {
+          const x = pos.x + bx;
+          const y = pos.y + by;
+          const z = pos.z + bz;
+          if (x < 0 || x >= GRID || z < 0 || z >= GRID || y < 0) return false;
+          if (y < HEIGHT && well[y][z][x] !== 0) return false;
+        }
+        return true;
+      }
+
+      function spawnPiece() {
+        const template = PIECES[Math.floor(Math.random() * PIECES.length)];
+        const blocks = template.map((b) => b.slice());
+        const pos = { x: Math.floor(GRID / 2), y: HEIGHT - 1, z: Math.floor(GRID / 2) };
+
+        // Nudge into bounds if needed
+        while (blocks.some(([bx]) => pos.x + bx >= GRID)) pos.x--;
+        while (blocks.some(([bx]) => pos.x + bx < 0)) pos.x++;
+        while (blocks.some(([, , bz]) => pos.z + bz >= GRID)) pos.z--;
+        while (blocks.some(([, , bz]) => pos.z + bz < 0)) pos.z++;
+
+        activePiece = { blocks, pos };
+        if (!isValidPos(blocks, pos)) {
+          triggerGameOver();
+        }
+      }
+
+      function movePiece(dx, dz) {
+        if (!activePiece || isPaused || isGameOver) return;
+        const nextPos = { x: activePiece.pos.x + dx, y: activePiece.pos.y, z: activePiece.pos.z + dz };
+        if (isValidPos(activePiece.blocks, nextPos)) {
+          activePiece.pos = nextPos;
+          sound.move();
+          rebuildScene();
+        }
+      }
+
+      function rotatePiece(axis) {
+        if (!activePiece || isPaused || isGameOver) return;
+        const rotated = activePiece.blocks.map(([x, y, z]) => {
+          if (axis === 'y') return [-z, y, x]; // horizontal 90 deg on plane
+          return [x, -z, y];                    // vertical flip
+        });
+
+        // Try wall-kick offsets
+        const kicks = [[0,0], [1,0], [-1,0], [0,1], [0,-1]];
+        for (const [kx, kz] of kicks) {
+          const testPos = { x: activePiece.pos.x + kx, y: activePiece.pos.y, z: activePiece.pos.z + kz };
+          if (isValidPos(rotated, testPos)) {
+            activePiece.blocks = rotated;
+            activePiece.pos = testPos;
+            sound.rotate();
+            rebuildScene();
+            return;
+          }
+        }
+      }
+
+      function sweepLayers() {
+        let count = 0;
+        for (let y = 0; y < HEIGHT; y++) {
+          const full = well[y].every((row) => row.every((v) => v !== 0));
+          if (full) {
+            well.splice(y, 1);
+            well.push(Array.from({ length: GRID }, () => new Array(GRID).fill(0)));
+            y--;
+            count++;
+          }
+        }
+        if (count > 0) {
+          clearedLayers += count;
+          score += count * 100 * count;
+          dropInterval = Math.max(350, 1100 - clearedLayers * 35);
+          sound.clear();
+        }
+      }
+
+      function lockPiece() {
+        for (const [bx, by, bz] of activePiece.blocks) {
+          const x = activePiece.pos.x + bx;
+          const y = activePiece.pos.y + by;
+          const z = activePiece.pos.z + bz;
+          if (y >= HEIGHT) {
+            triggerGameOver();
+            return;
+          }
+          well[y][z][x] = 1;
+        }
+        score += 10;
+        sound.lock();
+        sweepLayers();
+        updateHUD();
+        spawnPiece();
+        rebuildScene();
+      }
+
+      function stepDown() {
+        if (!activePiece || isPaused || isGameOver) return;
+        const nextPos = { x: activePiece.pos.x, y: activePiece.pos.y - 1, z: activePiece.pos.z };
+        if (isValidPos(activePiece.blocks, nextPos)) {
+          activePiece.pos = nextPos;
+          rebuildScene();
+        } else {
+          lockPiece();
+        }
+        dropCounter = 0;
+      }
+
+      function hardDrop() {
+        if (!activePiece || isPaused || isGameOver) return;
+        let dist = 0;
+        while (isValidPos(activePiece.blocks, { x: activePiece.pos.x, y: activePiece.pos.y - 1, z: activePiece.pos.z })) {
+          activePiece.pos.y--;
+          dist++;
+        }
+        score += dist * 2;
+        lockPiece();
+        dropCounter = 0;
+      }
+
+      function updateHUD() {
+        if (score > bestScore) {
+          bestScore = score;
+          localStorage.setItem('tetris3d_best', String(bestScore));
+        }
+        scoreEl.textContent = String(score);
+        bestEl.textContent = String(bestScore);
+        layersEl.textContent = String(clearedLayers);
+
+        for (let y = 0; y < HEIGHT; y++) {
+          const hasAny = well[y].some((row) => row.some((v) => v !== 0));
+          depthBars[y].classList.toggle('filled', hasAny);
+        }
+      }
+
+      function clearGroup(grp) {
+        while (grp.children.length > 0) grp.remove(grp.children[0]);
+      }
+
+      function rebuildScene() {
+        clearGroup(settledGroup);
+        clearGroup(activeGroup);
+        clearGroup(shadowGroup);
+
+        // Settled blocks colored by height layer
+        for (let y = 0; y < HEIGHT; y++) {
+          const mat = new THREE.MeshLambertMaterial({ color: LAYER_COLORS[y] });
+          const edgeMat = new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45 });
+          for (let z = 0; z < GRID; z++) {
+            for (let x = 0; x < GRID; x++) {
+              if (well[y][z][x] !== 0) {
+                const mesh = new THREE.Mesh(cubeGeom, mat);
+                mesh.position.set(x, y, z);
+                settledGroup.add(mesh);
+                const edges = new THREE.LineSegments(edgesGeom, edgeMat);
+                edges.position.set(x, y, z);
+                settledGroup.add(edges);
+              }
+            }
+          }
+        }
+
+        if (activePiece && !isGameOver) {
+          // Compute landing height for target plane projection
+          let dropY = activePiece.pos.y;
+          while (isValidPos(activePiece.blocks, { x: activePiece.pos.x, y: dropY - 1, z: activePiece.pos.z })) {
+            dropY--;
+          }
+
+          const activeMat = new THREE.MeshBasicMaterial({
+            color: 0x38bdf8,
+            transparent: true,
+            opacity: 0.25
+          });
+          const activeWire = new THREE.LineBasicMaterial({ color: 0xe0f2fe });
+          const targetMat = new THREE.MeshBasicMaterial({
+            color: 0xfef08a,
+            transparent: true,
+            opacity: 0.35,
+            side: THREE.DoubleSide
+          });
+
+          for (const [bx, by, bz] of activePiece.blocks) {
+            const x = activePiece.pos.x + bx;
+            const y = activePiece.pos.y + by;
+            const z = activePiece.pos.z + bz;
+
+            const mesh = new THREE.Mesh(cubeGeom, activeMat);
+            mesh.position.set(x, y, z);
+            activeGroup.add(mesh);
+
+            const wire = new THREE.LineSegments(edgesGeom, activeWire);
+            wire.position.set(x, y, z);
+            activeGroup.add(wire);
+
+            // Target landing marker on the surface below
+            const sy = dropY + by - 0.48;
+            const marker = new THREE.Mesh(shadowGeom, targetMat);
+            marker.rotation.x = -Math.PI / 2;
+            marker.position.set(x, sy, z);
+            shadowGroup.add(marker);
+          }
+        }
+      }
+
+      function triggerGameOver() {
+        isGameOver = true;
+        isPaused = true;
+        sound.over();
+        overlayTitle.textContent = '方塊堆滿了！';
+        overlayDesc.textContent = `最終分數：${score}（消層：${clearedLayers}）`;
+        startBtn.textContent = '再玩一局';
+        overlay.classList.remove('hidden');
+        pauseBtn.disabled = true;
+      }
+
+      function togglePause() {
+        if (isGameOver || !activePiece) return;
+        isPaused = !isPaused;
+        pauseBtn.textContent = isPaused ? '▶ 繼續' : '⏸ 暫停';
+        if (isPaused) {
+          overlayTitle.textContent = '已暫停';
+          overlayDesc.textContent = '點擊繼續回到遊戲';
+          startBtn.textContent = '繼續遊戲';
+          overlay.classList.remove('hidden');
+        } else {
+          overlay.classList.add('hidden');
+          lastTime = 0;
+        }
+      }
+
+      function resetGame() {
+        initWell();
+        score = 0;
+        clearedLayers = 0;
+        dropInterval = 1100;
+        dropCounter = 0;
+        isGameOver = false;
+        isPaused = false;
+        lastTime = 0;
+        spawnPiece();
+        updateHUD();
+        rebuildScene();
+        overlay.classList.add('hidden');
+        pauseBtn.disabled = false;
+        pauseBtn.textContent = '⏸ 暫停';
+      }
+
+      function onResize() {
+        const w = Math.max(200, container.clientWidth);
+        const h = Math.max(200, container.clientHeight);
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h, false);
+      }
+
+      function animate(time = 0) {
+        requestAnimationFrame(animate);
+        if (!isPaused && !isGameOver) {
+          if (!lastTime) lastTime = time;
+          const dt = Math.min(100, time - lastTime);
+          lastTime = time;
+          dropCounter += dt;
+          if (dropCounter > dropInterval) {
+            stepDown();
+          }
+        }
+        renderer.render(scene, camera);
+      }
+
+      // --- Events ---
+      document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+      const unlockOnce = () => sound.unlock();
+      document.addEventListener('pointerdown', unlockOnce, { passive: true });
+      document.addEventListener('touchstart', unlockOnce, { passive: true });
+      document.addEventListener('keydown', unlockOnce, { passive: true });
+
+      startBtn.addEventListener('click', () => {
+        sound.unlock();
+        if (isPaused && !isGameOver && activePiece) togglePause();
+        else resetGame();
+      });
+
+      pauseBtn.addEventListener('click', () => {
+        sound.unlock();
+        togglePause();
+      });
+
+      soundBtn.addEventListener('click', () => {
+        sound.unlock();
+        sound.enabled = !sound.enabled;
+        soundBtn.textContent = sound.enabled ? '🔊' : '🔇';
+      });
+
+      glCanvas.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        sound.unlock();
+        if (!isPaused && !isGameOver) hardDrop();
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'p' || e.key === 'P') { togglePause(); return; }
+        if (isPaused || isGameOver) return;
+        if (e.key === 'ArrowLeft') { e.preventDefault(); movePiece(-1, 0); }
+        else if (e.key === 'ArrowRight') { e.preventDefault(); movePiece(1, 0); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); movePiece(0, -1); }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); movePiece(0, 1); }
+        else if (e.key === 'q' || e.key === 'Q') rotatePiece('y');
+        else if (e.key === 'w' || e.key === 'W') rotatePiece('x');
+        else if (e.key === ' ') { e.preventDefault(); hardDrop(); }
+      });
+
+      const bindBtn = (id, fn) => {
+        document.getElementById(id).addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          sound.unlock();
+          fn();
+        });
+      };
+
+      bindBtn('btn-left', () => movePiece(-1, 0));
+      bindBtn('btn-right', () => movePiece(1, 0));
+      bindBtn('btn-up', () => movePiece(0, -1));
+      bindBtn('btn-down', () => movePiece(0, 1));
+      bindBtn('btn-rot-y', () => rotatePiece('y'));
+      bindBtn('btn-rot-x', () => rotatePiece('x'));
+      bindBtn('btn-drop', () => hardDrop());
+
+      window.addEventListener('resize', onResize);
+      initWell();
+      updateHUD();
+      onResize();
+      animate();
+    })();
+  </script>
+</body>
+</html>

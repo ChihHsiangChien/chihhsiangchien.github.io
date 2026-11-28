@@ -1,82 +1,408 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
-  <head>
-    <meta charset="UTF-8" />
-    <title>React 井字棋</title>
-    <style>
-      body { font-family: sans-serif; text-align: center; margin-top: 50px; }
-      button {
-        width: 60px;
-        height: 60px;
-        font-size: 24px;
-        margin: 2px;
-      }
-    </style>
-    <!-- React & Babel CDN -->
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  </head>
-  <body>
-    <h1>井字棋（React 小遊戲）</h1>
-    <div id="root"></div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>井字棋對戰 | React Tic-Tac-Toe</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    :root {
+      --bg: #090d16;
+      --panel: rgba(17, 24, 39, 0.9);
+      --border: rgba(255, 255, 255, 0.12);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --x-color: #38bdf8;
+      --o-color: #fb7185;
+    }
 
-    <!-- JSX React 程式 -->
-    <script type="text/babel">
-      const Square = ({ value, onClick }) => (
-        <button onClick={onClick}>{value}</button>
-      );
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+    }
 
-      const calculateWinner = (squares) => {
-        const lines = [
-          [0,1,2], [3,4,5], [6,7,8], // 橫排
-          [0,3,6], [1,4,7], [2,5,8], // 直排
-          [0,4,8], [2,4,6]           // 斜線
-        ];
-        for (let [a, b, c] of lines) {
-          if (squares[a] && squares[a] === squares[b] && squares[a] === squares[c]) {
-            return squares[a];
-          }
+    html, body {
+      width: 100%;
+      min-height: 100dvh;
+      background: radial-gradient(circle at 50% 15%, #1e293b 0%, #090d16 70%);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
+      touch-action: manipulation;
+    }
+
+    .app-shell {
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
+    }
+
+    .panel {
+      width: 100%;
+      max-width: 420px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 18px;
+      backdrop-filter: blur(10px);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      box-shadow: 0 20px 44px rgba(0, 0, 0, 0.45);
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .header h1 {
+      font-size: 1.2rem;
+      font-weight: 800;
+    }
+
+    .mode-switch {
+      display: flex;
+      gap: 6px;
+    }
+
+    .pill-btn {
+      min-height: 38px;
+      padding: 6px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.07);
+      color: var(--text);
+      font-size: 0.84rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .pill-btn.active {
+      background: rgba(56, 189, 248, 0.25);
+      border-color: #38bdf8;
+    }
+
+    .scoreboard {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .score-card {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 8px;
+      text-align: center;
+      border: 1px solid transparent;
+    }
+
+    .score-card.turn-x { border-color: var(--x-color); }
+    .score-card.turn-o { border-color: var(--o-color); }
+
+    .score-card span {
+      display: block;
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+
+    .score-card strong {
+      font-size: 1.2rem;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .status-banner {
+      text-align: center;
+      font-size: 1.05rem;
+      font-weight: 700;
+      padding: 8px 12px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .board {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      width: 100%;
+      aspect-ratio: 1;
+      touch-action: none;
+    }
+
+    .square {
+      width: 100%;
+      height: 100%;
+      min-height: 84px;
+      border-radius: 16px;
+      border: 2px solid var(--border);
+      background: rgba(30, 41, 59, 0.85);
+      font-size: clamp(2.2rem, 9vw, 3.2rem);
+      font-weight: 900;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: transform 0.1s, background 0.15s, border-color 0.2s;
+    }
+
+    .square:active:not(:disabled) {
+      transform: scale(0.95);
+    }
+
+    .square.val-X { color: var(--x-color); }
+    .square.val-O { color: var(--o-color); }
+
+    .square.win-cell {
+      background: rgba(16, 185, 129, 0.22);
+      border-color: #34d399;
+      box-shadow: 0 0 18px rgba(52, 211, 153, 0.35);
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+    }
+
+    .primary-btn {
+      min-height: 44px;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #3b82f6, #06b6d4);
+      color: #fff;
+      font-size: 0.96rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useCallback } = React;
+
+    const LINES = [
+      [0, 1, 2], [3, 4, 5], [6, 7, 8],
+      [0, 3, 6], [1, 4, 7], [2, 5, 8],
+      [0, 4, 8], [2, 4, 6]
+    ];
+
+    const audio = {
+      ctx: null,
+      enabled: true,
+      unlock() {
+        if (!this.ctx) {
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          if (Ctx) this.ctx = new Ctx();
         }
-        return null;
+        if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+      },
+      tone(f1, f2, dur = 0.09, vol = 0.14) {
+        if (!this.enabled || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(f1, now);
+        osc.frequency.exponentialRampToValueAtTime(f2, now + dur);
+        gain.gain.setValueAtTime(vol, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + dur + 0.02);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + dur + 0.03);
+      },
+      place(isX) { this.tone(isX ? 520 : 390, isX ? 620 : 450, 0.07, 0.14); },
+      win() { [523, 659, 784].forEach((f, i) => setTimeout(() => this.tone(f, f, 0.16, 0.16), i * 90)); }
+    };
+
+    function evaluateBoard(squares) {
+      for (const line of LINES) {
+        const [a, b, c] = line;
+        if (squares[a] && squares[a] === squares[b] && squares[a] === squares[c]) {
+          return { winner: squares[a], line };
+        }
+      }
+      return { winner: null, line: [] };
+    }
+
+    function pickAIMove(squares) {
+      // Win if possible, block if needed, else center / random
+      const empty = squares.map((v, i) => (v === null ? i : -1)).filter((i) => i !== -1);
+      if (empty.length === 0) return -1;
+
+      for (const target of ['O', 'X']) {
+        for (const idx of empty) {
+          const test = squares.slice();
+          test[idx] = target;
+          if (evaluateBoard(test).winner === target) return idx;
+        }
+      }
+      if (squares[4] === null && Math.random() < 0.75) return 4;
+      return empty[Math.floor(Math.random() * empty.length)];
+    }
+
+    function App() {
+      const [squares, setSquares] = useState(Array(9).fill(null));
+      const [xIsNext, setXIsNext] = useState(true);
+      const [vsAI, setVsAI] = useState(true);
+      const [scores, setScores] = useState({ X: 0, O: 0, tie: 0 });
+      const [soundOn, setSoundOn] = useState(true);
+
+      const { winner, line: winLine } = evaluateBoard(squares);
+      const isDraw = !winner && squares.every(Boolean);
+      const isFinished = Boolean(winner || isDraw);
+
+      useEffect(() => {
+        const preventDbl = (e) => e.preventDefault();
+        document.addEventListener('dblclick', preventDbl, { passive: false });
+        return () => document.removeEventListener('dblclick', preventDbl);
+      }, []);
+
+      const applyMove = useCallback((idx, isX) => {
+        setSquares((prev) => {
+          if (prev[idx] || evaluateBoard(prev).winner) return prev;
+          const next = prev.slice();
+          next[idx] = isX ? 'X' : 'O';
+          const res = evaluateBoard(next);
+          if (res.winner) {
+            audio.win();
+            setScores((s) => ({ ...s, [res.winner]: s[res.winner] + 1 }));
+          } else if (next.every(Boolean)) {
+            audio.place(isX);
+            setScores((s) => ({ ...s, tie: s.tie + 1 }));
+          } else {
+            audio.place(isX);
+          }
+          return next;
+        });
+        setXIsNext(!isX);
+      }, []);
+
+      // AI turn
+      useEffect(() => {
+        if (!vsAI || xIsNext || isFinished) return;
+        const tid = setTimeout(() => {
+          const move = pickAIMove(squares);
+          if (move !== -1) applyMove(move, false);
+        }, 280);
+        return () => clearTimeout(tid);
+      }, [vsAI, xIsNext, isFinished, squares, applyMove]);
+
+      const handlePress = (i) => {
+        audio.unlock();
+        if (isFinished || squares[i]) return;
+        if (vsAI && !xIsNext) return;
+        applyMove(i, xIsNext);
       };
 
-      function App() {
-        const [squares, setSquares] = React.useState(Array(9).fill(null));
-        const [xIsNext, setXIsNext] = React.useState(true);
+      const resetRound = () => {
+        audio.unlock();
+        setSquares(Array(9).fill(null));
+        setXIsNext(true);
+      };
 
-        const winner = calculateWinner(squares);
-        const status = winner
-          ? `🎉 贏家是：${winner}`
-          : squares.every(Boolean)
-            ? '😲 平手了！'
-            : `下一位：${xIsNext ? 'X' : 'O'}`;
+      const status = winner
+        ? `🎉 ${winner} 獲勝！`
+        : isDraw
+          ? '🤝 平手！'
+          : vsAI && !xIsNext
+            ? '🤖 AI 思考中...'
+            : `輪到 ${xIsNext ? 'X' : 'O'}`;
 
-        function handleClick(i) {
-          if (squares[i] || winner) return;
-          const nextSquares = squares.slice();
-          nextSquares[i] = xIsNext ? 'X' : 'O';
-          setSquares(nextSquares);
-          setXIsNext(!xIsNext);
-        }
+      return (
+        <div className="app-shell">
+          <div className="panel">
+            <div className="header">
+              <h1>⭕❌ 井字棋</h1>
+              <div className="mode-switch">
+                <button
+                  className={`pill-btn ${vsAI ? 'active' : ''}`}
+                  onClick={() => { setVsAI(true); resetRound(); }}
+                >
+                  🤖 單人
+                </button>
+                <button
+                  className={`pill-btn ${!vsAI ? 'active' : ''}`}
+                  onClick={() => { setVsAI(false); resetRound(); }}
+                >
+                  👥 雙人
+                </button>
+                <button
+                  className="pill-btn"
+                  onClick={() => {
+                    audio.unlock();
+                    audio.enabled = !soundOn;
+                    setSoundOn(!soundOn);
+                  }}
+                >
+                  {soundOn ? '🔊' : '🔇'}
+                </button>
+              </div>
+            </div>
 
-        return (
-          <div>
-            <h2>{status}</h2>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 60px)',
-              justifyContent: 'center'
-            }}>
+            <div className="scoreboard">
+              <div className={`score-card ${!isFinished && xIsNext ? 'turn-x' : ''}`}>
+                <span>玩家 X</span>
+                <strong>{scores.X}</strong>
+              </div>
+              <div className="score-card">
+                <span>平手</span>
+                <strong>{scores.tie}</strong>
+              </div>
+              <div className={`score-card ${!isFinished && !xIsNext ? 'turn-o' : ''}`}>
+                <span>{vsAI ? 'AI (O)' : '玩家 O'}</span>
+                <strong>{scores.O}</strong>
+              </div>
+            </div>
+
+            <div className="status-banner">{status}</div>
+
+            <div className="board">
               {squares.map((val, i) => (
-                <Square key={i} value={val} onClick={() => handleClick(i)} />
+                <button
+                  key={i}
+                  type="button"
+                  className={`square ${val ? `val-${val}` : ''} ${winLine.includes(i) ? 'win-cell' : ''}`}
+                  onPointerDown={() => handlePress(i)}
+                  aria-label={`格 ${i + 1}`}
+                >
+                  {val}
+                </button>
               ))}
             </div>
-          </div>
-        );
-      }
 
-      ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-    </script>
-  </body>
+            <div className="actions">
+              <button className="primary-btn" onClick={resetRound}>
+                {isFinished ? '再來一局' : '重新開始'}
+              </button>
+              <button
+                className="pill-btn"
+                onClick={() => {
+                  setScores({ X: 0, O: 0, tie: 0 });
+                  resetRound();
+                }}
+              >
+                歸零分數
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
 </html>

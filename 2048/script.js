@@ -1,267 +1,283 @@
-const GRID_SIZE = 4;
-const gameBoard = document.getElementById('game-board');
-const scoreElement = document.getElementById('score');
+(() => {
+  'use strict';
 
-document.documentElement.style.setProperty('--grid-size', GRID_SIZE);
-gameBoard.style.gridTemplateColumns = `repeat(${GRID_SIZE}, 1fr)`;
-gameBoard.style.gridTemplateRows = `repeat(${GRID_SIZE}, 1fr)`;
+  const GRID_SIZE = 4;
+  const TILE_TYPES = [
+    '細胞', '組織', '器官', '器官系統', '個體',
+    '族群', '群集', '生態系', '生物圈', '地球', '太陽系', '宇宙', '虛空'
+  ];
 
-let grid = [];
-let score = 0;
+  const gameBoard = document.getElementById('game-board');
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best-score');
+  const overlayEl = document.getElementById('overlay');
+  const overlayTitleEl = document.getElementById('overlay-title');
+  const overlayDescEl = document.getElementById('overlay-desc');
+  const btnOverlayAction = document.getElementById('btn-overlay-action');
+  const btnRestart = document.getElementById('btn-restart');
+  const btnSound = document.getElementById('btn-sound');
 
-const TILE_TYPES = ['細胞', '組織', '器官', '器官系統', '個體', 
-                    '族群', '群集', '生態系', '生物圈', '地球','太陽系','宇宙','虛空'];
+  document.documentElement.style.setProperty('--grid-size', GRID_SIZE);
 
-//卷軸問題
-window.scrollTo(0,0);
-window.addEventListener("scroll", (e) => {
-    e.preventDefault();
-    window.scrollTo(0, 0);
-});
+  // --- Sound ---
+  const sound = {
+    ctx: null,
+    enabled: true,
+    unlock() {
+      if (!this.ctx) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (Ctx) this.ctx = new Ctx();
+      }
+      if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+    },
+    tone(f1, f2, dur = 0.08, vol = 0.12) {
+      if (!this.enabled || !this.ctx) return;
+      const now = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(f1, now);
+      osc.frequency.exponentialRampToValueAtTime(f2, now + dur);
+      gain.gain.setValueAtTime(vol, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + dur + 0.02);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(now);
+      osc.stop(now + dur + 0.03);
+    },
+    move() { this.tone(240, 280, 0.04, 0.07); },
+    merge() { this.tone(420, 620, 0.09, 0.13); },
+    over() { this.tone(220, 90, 0.3, 0.14); }
+  };
 
-function initializeGame() {
+  // --- State ---
+  let grid = [];
+  let score = 0;
+  let bestScore = Number(localStorage.getItem('bio2048_best') || 0);
+  let isAnimating = false;
+  let isGameOver = false;
+  let hasWon = false;
+  let animTimer = null;
+
+  function createGrid() {
+    return Array.from({ length: GRID_SIZE }, () => Array.from({ length: GRID_SIZE }, () => null));
+  }
+
+  function addRandomTile() {
+    const empty = [];
+    for (let r = 0; r < GRID_SIZE; r++) {
+      for (let c = 0; c < GRID_SIZE; c++) {
+        if (grid[r][c] === null) empty.push({ r, c });
+      }
+    }
+    if (empty.length > 0) {
+      const { r, c } = empty[Math.floor(Math.random() * empty.length)];
+      grid[r][c] = Math.random() < 0.9 ? 0 : 1;
+    }
+  }
+
+  function updateScore() {
+    if (score > bestScore) {
+      bestScore = score;
+      localStorage.setItem('bio2048_best', String(bestScore));
+    }
+    scoreEl.textContent = String(score);
+    bestEl.textContent = String(bestScore);
+  }
+
+  function canMove() {
+    for (let r = 0; r < GRID_SIZE; r++) {
+      for (let c = 0; c < GRID_SIZE; c++) {
+        if (grid[r][c] === null) return true;
+        if (r + 1 < GRID_SIZE && grid[r][c] === grid[r + 1][c]) return true;
+        if (c + 1 < GRID_SIZE && grid[r][c] === grid[r][c + 1]) return true;
+      }
+    }
+    return false;
+  }
+
+  function renderGrid(mergedSet = new Set()) {
+    gameBoard.innerHTML = '';
+    for (let r = 0; r < GRID_SIZE; r++) {
+      for (let c = 0; c < GRID_SIZE; c++) {
+        const val = grid[r][c];
+        const tile = document.createElement('div');
+        tile.className = 'tile';
+
+        if (val !== null) {
+          const label = TILE_TYPES[val] || TILE_TYPES[TILE_TYPES.length - 1];
+          tile.textContent = label;
+          const pow = Math.min(8192, Math.pow(2, val + 1));
+          tile.classList.add(`tile-${pow}`);
+          if (label.length >= 4) tile.classList.add('tile-long');
+
+          if (mergedSet.has(`${r},${c}`)) {
+            tile.style.transform = 'scale(1.1)';
+            requestAnimationFrame(() => {
+              setTimeout(() => { tile.style.transform = 'scale(1)'; }, 90);
+            });
+          }
+        } else {
+          tile.classList.add('tile-empty');
+        }
+        gameBoard.appendChild(tile);
+      }
+    }
+  }
+
+  function showOverlay(title, desc, btnText, isWin = false) {
+    overlayTitleEl.textContent = title;
+    overlayDescEl.textContent = desc;
+    btnOverlayAction.textContent = btnText;
+    btnOverlayAction.dataset.mode = isWin ? 'continue' : 'restart';
+    overlayEl.classList.remove('hidden');
+  }
+
+  function initializeGame() {
+    if (animTimer) clearTimeout(animTimer);
+    animTimer = null;
+    isAnimating = false;
+    isGameOver = false;
+    hasWon = false;
+    score = 0;
     grid = createGrid();
     addRandomTile();
-    //addRandomTile();
+    addRandomTile();
+    overlayEl.classList.add('hidden');
+    updateScore();
     renderGrid();
-}
+  }
 
-function createGrid() {
-    return Array.from({ length: GRID_SIZE }, () => 
-        Array.from({ length: GRID_SIZE }, () => null)
-    );
-}
+  function moveTiles(direction) {
+    if (isAnimating || isGameOver) return;
+    sound.unlock();
 
-function addRandomTile() {
-    const emptyTiles = [];
-    for (let i = 0; i < GRID_SIZE; i++) {
-        for (let j = 0; j < GRID_SIZE; j++) {
-            if (grid[i][j] === null) {
-                emptyTiles.push({ x: i, y: j });
-            }
-        }
-    }
-    if (emptyTiles.length > 0) {
-        const { x, y } = emptyTiles[Math.floor(Math.random() * emptyTiles.length)];
-        //grid[x][y] = Math.random() < 0.9 ? 0 : 1;  // 90% chance for '細胞', 10% for '組織'
-        grid[x][y] = 0;  // 100% '細胞'
-    }
-}
-
-
-function renderGrid({ movingTiles = [], merged = [] } = {}) {
-
-    // 遍歷 movingTiles，給 tile 添加移動動畫
-    if (movingTiles.length === 0){
-
-        gameBoard.innerHTML = ''; // 清空之前的格子
-
-        for (let i = 0; i < GRID_SIZE; i++) {
-            for (let j = 0; j < GRID_SIZE; j++) {
-                const tile = document.createElement('div');
-                tile.classList.add('tile');
-    
-                if (grid[i][j] !== null) {
-                    // 檢查ij有沒有在merged，有的話需要產生特效
-                    merged.forEach(m=>{
-                        if(i === m.Row & j === m.Col){
-                            // 
-                            tile.style.transition = 'transform 0.1s';
-                            tile.style.transform = 'scale(1.05)';
-
-                            // 在 0.1 秒后恢复到原来的尺寸
-                            setTimeout(() => {
-                                tile.style.transform = 'scale(1)';
-                            }, 100);  // 100 毫秒后执行
-                        };
-                    });
-                    tile.textContent = TILE_TYPES[grid[i][j]];
-                    tile.classList.add(`tile-${Math.pow(2, grid[i][j] + 1)}`);                    
-                } else {
-                    tile.classList.add('tile-empty');
-                }
-                gameBoard.appendChild(tile);
-            }
-        }
-    }
-
-
-    else{
-        /*根據movingTiles的內容value, fromCol, toCol, fromRow, toRow
-        從gameBoard中找到child，移動child到特定的位置
-        */        
-        movingTiles.forEach(movingTile => {
-            const fromTile = gameBoard.children[movingTile.fromRow * GRID_SIZE + movingTile.fromCol];
-            const toTile = gameBoard.children[movingTile.toRow * GRID_SIZE + movingTile.toCol];
-    
-            const fromTileRect = fromTile.getBoundingClientRect();
-            const toTileRect = toTile.getBoundingClientRect();
-    
-            let translateX = toTileRect.left - fromTileRect.left;
-            let translateY = toTileRect.top - fromTileRect.top;
-    
-            fromTile.style.transform = `translate(${translateX}px, ${translateY}px)`;
-            fromTile.style.transition = 'transform 0.2s ease-in-out, opacity 0.2s ease-in-out'; 
-        });
-    }
-
-}
-
-
-function moveTiles(direction) {
-    const newGrid = createGrid(); // 建立一個新的網格
-    const movingTiles = []; // 儲存正在移動的方塊及其移動資訊
-    let merged = []; //產生合併的方塊位置
+    const newGrid = createGrid();
+    const mergedSet = new Set();
+    let changed = false;
+    let didMerge = false;
 
     const isVertical = direction === 'ArrowUp' || direction === 'ArrowDown';
     const isForward = direction === 'ArrowUp' || direction === 'ArrowLeft';
 
-    // 遍歷格子
     for (let i = 0; i < GRID_SIZE; i++) {
-        let tiles = [];
-        for (let j = 0; j < GRID_SIZE; j++) {
-            const row = isVertical ? j : i;
-            const col = isVertical ? i : j;
-            if (grid[row][col] !== null) {
-                tiles.push({
-                    value: grid[row][col],
-                    originalRow: row,
-                    originalCol: col
-                });
-            }
-        }
+      const line = [];
+      for (let j = 0; j < GRID_SIZE; j++) {
+        const r = isVertical ? j : i;
+        const c = isVertical ? i : j;
+        if (grid[r][c] !== null) line.push(grid[r][c]);
+      }
+      if (!isForward) line.reverse();
 
-        let results = mergeTiles(tiles, isForward); // 合併 tiles，並傳入方向
-        tiles  = results[0];
-
-        // 產生合併的位置
-        results[1].forEach(m =>{
-            merged.push(m);
-        });
-        
-        
-
-        let idx = isForward ? 0 : GRID_SIZE - 1;
-        tiles.forEach(tile => {
-            if (tile !== null) { // 檢查是否為 null
-                const row = isVertical ? idx : i;
-                const col = isVertical ? i : idx;
-                newGrid[row][col] = tile.value;
-                movingTiles.push({
-                    value: tile.value,
-                    fromRow: tile.originalRow,
-                    fromCol: tile.originalCol,
-                    toRow: row,
-                    toCol: col
-                });
-                idx += isForward ? 1 : -1;
-            }
-        });
-    }
-
-    // 判斷網格是否改變，如果改變則更新
-
-    if (JSON.stringify(grid) !== JSON.stringify(newGrid)) {
-        grid = newGrid;
-        renderGrid({movingTiles: movingTiles}); // 將正在移動的 tiles 資訊傳遞給 renderGrid 以觸發動畫
-
-        // 等待動畫完成後再添加新 tile
-        setTimeout(() => {
-            addRandomTile();
-            renderGrid({merged: merged});
-            updateScore();
-            checkWinCondition();
-        }, 200); // 與 CSS 動畫持續時間相同
-    }
-
-}
-
-
-
-function mergeTiles(tiles, isForward) {
-    if (!isForward) tiles.reverse(); // 如果是反向（向下或向右移動），則需要先反轉陣列
-    const merged = []; //紀錄被合併的方塊位置
-    const mergedTiles = [];
-    let i = 0;
-    while (i < tiles.length) {
-        if (i + 1 < tiles.length && tiles[i].value === tiles[i + 1].value) {
-            // 合併相同值的 tiles
-            score += (tiles[i].value + 1) * 100;
-            mergedTiles.push({ value: tiles[i].value + 1, originalRow: tiles[i].originalRow, originalCol: tiles[i].originalCol });
-            merged.push({ Row: tiles[i].originalRow, Col: tiles[i].originalCol });
-            i += 2; // 跳過被合併的下一個 tile            
-            
+      const out = [];
+      let k = 0;
+      while (k < line.length) {
+        if (k + 1 < line.length && line[k] === line[k + 1]) {
+          const nextVal = Math.min(TILE_TYPES.length - 1, line[k] + 1);
+          score += (nextVal + 1) * 100;
+          out.push({ val: nextVal, merged: true });
+          didMerge = true;
+          k += 2;
         } else {
-            mergedTiles.push(tiles[i]);
-            i++;
+          out.push({ val: line[k], merged: false });
+          k++;
         }
+      }
+
+      for (let j = 0; j < out.length; j++) {
+        const destIdx = isForward ? j : GRID_SIZE - 1 - j;
+        const r = isVertical ? destIdx : i;
+        const c = isVertical ? i : destIdx;
+        newGrid[r][c] = out[j].val;
+        if (out[j].merged) mergedSet.add(`${r},${c}`);
+      }
     }
 
-    // 填充空位
-    while (mergedTiles.length < GRID_SIZE) {
-        mergedTiles.push(null); // 在結尾處填充 null 代表空格子
+    for (let r = 0; r < GRID_SIZE && !changed; r++) {
+      for (let c = 0; c < GRID_SIZE; c++) {
+        if (grid[r][c] !== newGrid[r][c]) { changed = true; break; }
+      }
     }
 
-    //if (!isForward) mergedTiles.reverse(); // 如果是反向，則再次反轉回來
-    
-    return [mergedTiles, merged];
-    
-}
+    if (!changed) return;
 
+    isAnimating = true;
+    grid = newGrid;
+    if (didMerge) sound.merge();
+    else sound.move();
 
-function updateScore() {
-    scoreElement.textContent = score;
-}
+    animTimer = setTimeout(() => {
+      addRandomTile();
+      renderGrid(mergedSet);
+      updateScore();
+      isAnimating = false;
 
-function checkWinCondition() {
-    if (grid.some(row => row.includes(TILE_TYPES.length - 1))) {
-        alert('恭喜你贏了！你已經達到了最頂級！');
+      if (!hasWon && grid.some((row) => row.includes(TILE_TYPES.length - 1))) {
+        hasWon = true;
+        showOverlay('恭喜達成宇宙終極！', `目前分數：${score} 分`, '繼續挑戰', true);
+      } else if (!canMove()) {
+        isGameOver = true;
+        sound.over();
+        showOverlay('無法再移動了！', `最終分數：${score}（最高：${bestScore}）`, '再玩一局', false);
+      }
+    }, 90);
+  }
+
+  // --- Controls (Keyboard + Pointer Swipe + Anti-Zoom) ---
+  document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+  const unlockOnce = () => sound.unlock();
+  document.addEventListener('pointerdown', unlockOnce, { passive: true });
+  document.addEventListener('touchstart', unlockOnce, { passive: true });
+  document.addEventListener('keydown', unlockOnce, { passive: true });
+
+  document.addEventListener('keydown', (e) => {
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+      e.preventDefault();
+      moveTiles(e.key);
     }
-}
+  });
 
-// 鍵盤控制
-document.addEventListener('keydown', event => {
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
-        event.preventDefault();
-        moveTiles(event.key);
-    }
-});
+  let pointerStart = null;
+  gameBoard.addEventListener('pointerdown', (e) => {
+    pointerStart = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    gameBoard.setPointerCapture(e.pointerId);
+  });
 
-// 觸摸控制
-let touchStartX = 0;
-let touchStartY = 0;
+  gameBoard.addEventListener('pointerup', (e) => {
+    if (!pointerStart || e.pointerId !== pointerStart.id) return;
+    const dx = e.clientX - pointerStart.x;
+    const dy = e.clientY - pointerStart.y;
+    pointerStart = null;
 
-document.addEventListener('touchstart', event => {
-    touchStartX = event.touches[0].clientX;
-    touchStartY = event.touches[0].clientY;
-});
-
-document.addEventListener('touchend', event => {
-    const touchEndX = event.changedTouches[0].clientX;
-    const touchEndY = event.changedTouches[0].clientY;
-
-    const diffX = touchEndX - touchStartX;
-    const diffY = touchEndY - touchStartY;
-    const minDistance = 20; // 最小滑動距離閾值，避免點擊或輕觸誤觸發滑動
-
-    if (Math.max(Math.abs(diffX), Math.abs(diffY)) < minDistance) {
-        return;
-    }
-
-    if (Math.abs(diffX) > Math.abs(diffY)) {
-        if (diffX > 0) {
-            moveTiles('ArrowRight');
-        } else {
-            moveTiles('ArrowLeft');
-        }
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      moveTiles(dx > 0 ? 'ArrowRight' : 'ArrowLeft');
     } else {
-        if (diffY > 0) {
-            moveTiles('ArrowDown');
-        } else {
-            moveTiles('ArrowUp');
-        }
+      moveTiles(dy > 0 ? 'ArrowDown' : 'ArrowUp');
     }
-});
+  });
 
-// 初始化遊戲
-initializeGame();
+  gameBoard.addEventListener('pointercancel', () => { pointerStart = null; });
+
+  btnRestart.addEventListener('click', () => {
+    sound.unlock();
+    initializeGame();
+  });
+
+  btnSound.addEventListener('click', () => {
+    sound.unlock();
+    sound.enabled = !sound.enabled;
+    btnSound.textContent = sound.enabled ? '🔊' : '🔇';
+  });
+
+  btnOverlayAction.addEventListener('click', () => {
+    sound.unlock();
+    if (btnOverlayAction.dataset.mode === 'continue') {
+      overlayEl.classList.add('hidden');
+    } else {
+      initializeGame();
+    }
+  });
+
+  initializeGame();
+})();

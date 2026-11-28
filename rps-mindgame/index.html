@@ -1,46 +1,159 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-Hant">
 <head>
-    <title>剪刀石頭布</title>
-    <link rel="stylesheet" href="style.css">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>心理猜拳博弈 | RPS Mindgame</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <div class="container">
-        <h1>剪刀石頭布</h1>
+  <div class="app-shell">
+    <!-- Top Status Bar -->
+    <header class="top-bar">
+      <div class="brand">
+        <span class="badge">MINDGAME</span>
+        <h1>心理猜拳博弈</h1>
+      </div>
 
-        <div id="rules">
-            <h2>遊戲規則</h2>
-            <ul>
-                <li>剪刀 勝利 → +20 元，輸了 → -10 元</li>
-                <li>石頭 勝利 → +10 元，輸了 → -50 元</li>
-                <li>布 勝利 → +50 元，輸了 → -20 元</li>                
-            </ul>
+      <div class="wallet-bar">
+        <div class="wallet-chip main">
+          <span class="chip-label">目前資金</span>
+          <span class="chip-value" id="money">100 元</span>
         </div>
-        <canvas id="moneyChart" width="400" height="200"></canvas>
+        <div class="wallet-chip">
+          <span class="chip-label">目標</span>
+          <span class="chip-value goal" id="goal-val">500 元</span>
+        </div>
+        <div class="wallet-chip">
+          <span class="chip-label">最高紀錄</span>
+          <span class="chip-value" id="best-val">100 元</span>
+        </div>
+        <button id="btn-sound" class="icon-btn" title="切換音效" aria-label="切換音效">🔊</button>
+        <button id="btn-restart" class="icon-btn text-btn" title="重新開始">🔄 重玩</button>
+      </div>
+    </header>
 
+    <!-- Main Responsive Grid (2-col on Tablet/Desktop, 1-col on Portrait) -->
+    <main class="main-grid">
+      <!-- Left Column: Duel Stage & Action Cards -->
+      <section class="play-column">
+        <!-- VS Duel Stage -->
+        <div class="card duel-stage">
+          <div class="duel-header">
+            <span id="round-label">第 1 局</span>
+            <span id="streak-badge" class="streak-badge hidden">🔥 0 連勝</span>
+          </div>
 
-        <div id="money">金額: 100 元</div>
+          <div class="fighters-row">
+            <div class="fighter you">
+              <span class="fighter-label">你的出拳</span>
+              <div class="hand-box" id="player-hand">❔</div>
+            </div>
 
-        <div class="choices">
-            <button id="scissors">剪刀</button>            
-            <button id="rock">石頭</button>
-            <button id="paper">布</button>
+            <div class="vs-divider">
+              <span class="vs-text">VS</span>
+              <div class="result-pill" id="result">請選擇出拳</div>
+            </div>
 
+            <div class="fighter ai">
+              <span class="fighter-label">AI 對手</span>
+              <div class="hand-box" id="ai-hand">🤖</div>
+            </div>
+          </div>
         </div>
 
-        <div id="result"></div>
+        <!-- Asymmetric Risk/Reward Choice Buttons -->
+        <div class="choices-grid" role="group" aria-label="出拳選擇">
+          <button id="scissors" class="choice-card scissors" data-choice="scissors">
+            <span class="choice-icon">✌️</span>
+            <span class="choice-name">剪刀</span>
+            <span class="choice-odds">
+              <span class="win-tag">勝 +20</span>
+              <span class="lose-tag">負 -10</span>
+            </span>
+          </button>
 
-        <div id="history">
-            <h2>歷史記錄 (最近 10 局)</h2>
-            <ul id="historyList"></ul>
+          <button id="rock" class="choice-card rock" data-choice="rock">
+            <span class="choice-icon">✊</span>
+            <span class="choice-name">石頭</span>
+            <span class="choice-odds">
+              <span class="win-tag">勝 +10</span>
+              <span class="lose-tag">負 -50</span>
+            </span>
+          </button>
+
+          <button id="paper" class="choice-card paper" data-choice="paper">
+            <span class="choice-icon">🖐️</span>
+            <span class="choice-name">布</span>
+            <span class="choice-odds">
+              <span class="win-tag">勝 +50</span>
+              <span class="lose-tag">負 -20</span>
+            </span>
+          </button>
         </div>
 
-        <div id="aiChoice">AI選擇: </div>
+        <!-- Strategy Hint / Rules -->
+        <div class="card strategy-card">
+          <div class="ai-radar-header">
+            <span>🧠 AI 讀心雷達</span>
+            <span id="ai-status-text" class="ai-status">觀察中 (0/10)</span>
+          </div>
+          <div class="ai-bars">
+            <div class="ai-bar-row">
+              <span>✌️ 剪刀</span>
+              <div class="bar-track"><div class="bar-fill scissors" id="prob-scissors" style="width: 33%"></div></div>
+              <span class="pct" id="pct-scissors">33%</span>
+            </div>
+            <div class="ai-bar-row">
+              <span>✊ 石頭</span>
+              <div class="bar-track"><div class="bar-fill rock" id="prob-rock" style="width: 33%"></div></div>
+              <span class="pct" id="pct-rock">33%</span>
+            </div>
+            <div class="ai-bar-row">
+              <span>🖐️ 布</span>
+              <div class="bar-track"><div class="bar-fill paper" id="prob-paper" style="width: 34%"></div></div>
+              <span class="pct" id="pct-paper">34%</span>
+            </div>
+          </div>
+          <p class="strategy-tip">
+            💡 <strong>心理戰提示</strong>：AI 會統計你最近 10 局的習慣並針對性反制（75% 機率出剋制你的拳）。善用低風險的「剪刀」誘敵，再用高報酬的「布」反殺！
+          </p>
+        </div>
+      </section>
+
+      <!-- Right Column: Asset Chart & History -->
+      <section class="stats-column">
+        <div class="card chart-card">
+          <h2>📈 資金走勢圖</h2>
+          <div class="chart-wrap">
+            <canvas id="moneyChart"></canvas>
+          </div>
+        </div>
+
+        <div class="card history-card">
+          <h2>📜 對戰紀錄 (最近 10 局)</h2>
+          <ul id="historyList" class="history-list">
+            <li class="empty-history">尚無對戰紀錄，快出拳吧！</li>
+          </ul>
+        </div>
+      </section>
+    </main>
+
+    <!-- End / Goal Modal Overlay -->
+    <div id="end-overlay" class="overlay" aria-hidden="true">
+      <div class="modal-card">
+        <div id="modal-emoji" class="modal-emoji">🏆</div>
+        <h2 id="modal-title">達成目標！</h2>
+        <p id="modal-desc" class="modal-desc"></p>
+        <div class="modal-actions">
+          <button id="btn-continue" class="primary-btn hidden">繼續無盡挑戰</button>
+          <button id="btn-modal-restart" class="primary-btn">再來一局</button>
+        </div>
+      </div>
     </div>
+  </div>
 
-    <script src="script.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>
