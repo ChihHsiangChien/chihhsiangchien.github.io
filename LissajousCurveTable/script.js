@@ -1,127 +1,228 @@
-const canvas = document.getElementById('lissajousCanvas');
-const ctx = canvas.getContext('2d');
-let speed = 1;
-let time = 0;
-let showLines = true; // Variable to toggle line visibility
+(() => {
+  'use strict';
 
-// 設定畫布大小
-canvas.width = 500;
-canvas.height = 500;
+  const canvas = document.getElementById('lissajousCanvas');
+  const ctx = canvas.getContext('2d');
 
-// 定義曲線參數
-const size = 9; 
-const ratio = 3 ;
-const cellSize = canvas.width / size;
+  const sizeSlider = document.getElementById('sizeSlider');
+  const phaseSlider = document.getElementById('phaseSlider');
+  const speedSlider = document.getElementById('speedSlider');
+  const lblSize = document.getElementById('lbl-size');
+  const lblPhase = document.getElementById('lbl-phase');
+  const speedDisplay = document.getElementById('speedDisplay');
+  const cellInfoEl = document.getElementById('cell-info');
 
-function drawTrackingDot(x, y, color) {
-    ctx.beginPath();
-    ctx.arc(x, y, 4, 0, Math.PI * 2);
-    ctx.fillStyle = 'white';
-    ctx.fill();
-    ctx.strokeStyle = color;
-    ctx.stroke();
-}
+  const btnPause = document.getElementById('btn-pause');
+  const btnGuides = document.getElementById('btn-guides');
+  const btnLines = document.getElementById('toggleLines');
 
-function drawCurve(x0, y0, freqX, freqY, col, row) {
-    ctx.beginPath();
-    
-    // 使用固定數量的點來繪製完整曲線
-    const points = 100;
-    for (let i = 0; i <= points; i++) {
-        // 將 t 限制在 0 到 2π 之間
-        const t = (i / points) * Math.PI * 2 + time;
-        let x, y;
-        
-        if (row === 0 && col > 0) {
-            x = x0 + (cellSize/ratio) * Math.cos(freqX * t);
-            y = y0 + (cellSize/ratio) * Math.sin(freqX * t);
-        }
-        else if (col === 0 && row > 0) {
-            x = x0 + (cellSize/ratio) * Math.cos(freqY * t);
-            y = y0 + (cellSize/ratio) * Math.sin(freqY * t);
-        }
-        else if (row > 0 && col > 0) {
-            x = x0 + (cellSize/ratio) * Math.cos(freqX * t);
-            y = y0 + (cellSize/ratio) * Math.sin(freqY * t);
-        }
-        
-        if (i === 0) {
-            ctx.moveTo(x, y);
-        } else if (showLines) { // Only draw lines if showLines is true
-            ctx.lineTo(x, y);
-        }
+  let boxSize = 560;
+  let gridSize = 8; // 8x8 -> 1..7 frequencies
+  let speed = 1.0;
+  let phaseDeg = 0;
+  let time = 0;
+  let showLines = true;
+  let showGuides = true;
+  let isPaused = false;
+  let selectedCell = null; // { row, col }
+  let lastTs = 0;
+
+  function resizeCanvas() {
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    boxSize = Math.max(240, Math.floor(rect.width));
+    canvas.width = Math.floor(boxSize * dpr);
+    canvas.height = Math.floor(boxSize * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function draw() {
+    ctx.fillStyle = '#04070e';
+    ctx.fillRect(0, 0, boxSize, boxSize);
+
+    const cell = boxSize / gridSize;
+    const radius = cell * 0.36;
+    const phaseRad = (phaseDeg * Math.PI) / 180;
+
+    // Highlight selected cell
+    if (selectedCell && selectedCell.row > 0 && selectedCell.col > 0) {
+      ctx.fillStyle = 'rgba(251, 191, 36, 0.12)';
+      ctx.fillRect(selectedCell.col * cell, selectedCell.row * cell, cell, cell);
+      ctx.strokeStyle = 'rgba(251, 191, 36, 0.7)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(selectedCell.col * cell + 1, selectedCell.row * cell + 1, cell - 2, cell - 2);
     }
-    
-    if (showLines) {
-        ctx.strokeStyle = `hsl(${(freqX + freqY) * 30}, 80%, 50%)`;
+
+    // Subtle grid lines
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1;
+    for (let i = 1; i < gridSize; i++) {
+      const p = i * cell;
+      ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, boxSize); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(boxSize, p); ctx.stroke();
+    }
+
+    // Projection guide lines from header circles
+    if (showGuides) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+
+      for (let col = 1; col < gridSize; col++) {
+        const cx = (col + 0.5) * cell;
+        const px = cx + radius * Math.cos(col * time + phaseRad);
+        ctx.beginPath();
+        ctx.moveTo(px, cell * 0.5);
+        ctx.lineTo(px, boxSize);
         ctx.stroke();
+      }
+
+      for (let row = 1; row < gridSize; row++) {
+        const cy = (row + 0.5) * cell;
+        const py = cy + radius * Math.sin(row * time);
+        ctx.beginPath();
+        ctx.moveTo(cell * 0.5, py);
+        ctx.lineTo(boxSize, py);
+        ctx.stroke();
+      }
+      ctx.restore();
     }
-    
-    // 繪製跟蹤點
-    if (!((row === 0 && col === 0) || (row > 0 && col > 0))) {
-        const t = time;
-        let currentX, currentY;
-        
-        if (row === 0 && col > 0) {
-            currentX = x0 + (cellSize/ratio) * Math.cos(freqX * t);
-            currentY = y0 + (cellSize/ratio) * Math.sin(freqX * t);
-        } else if (col === 0 && row > 0) {
-            currentX = x0 + (cellSize/ratio) * Math.cos(freqY * t);
-            currentY = y0 + (cellSize/ratio) * Math.sin(freqY * t);
+
+    // Top row circles (X-frequencies)
+    for (let col = 1; col < gridSize; col++) {
+      const cx = (col + 0.5) * cell;
+      const cy = 0.5 * cell;
+      const color = `hsl(${col * 36}, 85%, 60%)`;
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      const dx = cx + radius * Math.cos(col * time + phaseRad);
+      const dy = cy + radius * Math.sin(col * time + phaseRad);
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(dx, dy, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Left column circles (Y-frequencies)
+    for (let row = 1; row < gridSize; row++) {
+      const cx = 0.5 * cell;
+      const cy = (row + 0.5) * cell;
+      const color = `hsl(${row * 36}, 85%, 60%)`;
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      const dx = cx + radius * Math.cos(row * time);
+      const dy = cy + radius * Math.sin(row * time);
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(dx, dy, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Lissajous curves in interior cells
+    const points = 240;
+    for (let row = 1; row < gridSize; row++) {
+      for (let col = 1; col < gridSize; col++) {
+        const cx = (col + 0.5) * cell;
+        const cy = (row + 0.5) * cell;
+        const color = `hsl(${(col + row) * 26}, 82%, 60%)`;
+
+        if (showLines) {
+          ctx.beginPath();
+          for (let i = 0; i <= points; i++) {
+            const t = (i / points) * Math.PI * 2;
+            const px = cx + radius * Math.cos(col * t + phaseRad);
+            const py = cy + radius * Math.sin(row * t);
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
         }
-        
-        drawTrackingDot(currentX, currentY, ctx.strokeStyle);
+
+        const dotX = cx + radius * Math.cos(col * time + phaseRad);
+        const dotY = cy + radius * Math.sin(row * time);
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(dotX, dotY, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
-    
-    if (row > 0 && col > 0) {
-        const t = time;
-        const currentX = x0 + (cellSize/ratio) * Math.cos(freqX * t);
-        const currentY = y0 + (cellSize/ratio) * Math.sin(freqY * t);
-        drawTrackingDot(currentX, currentY, ctx.strokeStyle);
+  }
+
+  function loop(ts = 0) {
+    requestAnimationFrame(loop);
+    if (!lastTs) lastTs = ts;
+    const dt = Math.min(0.05, (ts - lastTs) / 1000);
+    lastTs = ts;
+
+    if (!isPaused) {
+      time = (time + dt * 1.15 * speed) % (Math.PI * 2);
     }
-}
-
-function draw() {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    for (let row = 0; row < size; row++) {
-        for (let col = 0; col < size; col++) {
-            const centerX = (col + 0.5) * cellSize;
-            const centerY = (row + 0.5) * cellSize;
-            
-            if (!(row === 0 && col === 0)) {
-                drawCurve(centerX, centerY, col, row, col, row);
-            }
-        }
-    }
-    
-    // 讓時間在 0 到 2π 之間循環
-    time = (time + 0.02 * speed) % (Math.PI * 2);
-    requestAnimationFrame(draw);
-}
-
-// 速度控制
-function updateSpeedDisplay() {
-    document.getElementById('speedDisplay').textContent = `Speed: ${speed}x`;
-}
-
-// Add event listener to toggle lines
-document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('toggleLines').addEventListener('click', () => {
-        showLines = !showLines; // Toggle the showLines variable
-    });
-
-    document.getElementById('speedUp').addEventListener('click', () => {
-        speed = Math.min(speed + 0.5, 5);
-        updateSpeedDisplay();
-    });
-
-    document.getElementById('speedDown').addEventListener('click', () => {
-        speed = Math.max(speed - 0.5, 0.5);
-        updateSpeedDisplay();
-    });
-
-    // Start the animation
     draw();
-});
+  }
+
+  // --- Events ---
+  document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+  window.addEventListener('resize', resizeCanvas);
+
+  canvas.addEventListener('pointerdown', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const cell = rect.width / gridSize;
+    const col = Math.floor((e.clientX - rect.left) / cell);
+    const row = Math.floor((e.clientY - rect.top) / cell);
+    if (row > 0 && col > 0 && row < gridSize && col < gridSize) {
+      selectedCell = { row, col };
+      cellInfoEl.textContent = `x = cos(${col}t + ${phaseDeg}°), y = sin(${row}t) · 頻率比 ${col}:${row}`;
+    }
+  });
+
+  sizeSlider.addEventListener('input', (e) => {
+    gridSize = Number(e.target.value);
+    lblSize.textContent = `${gridSize}×${gridSize}`;
+    selectedCell = null;
+    cellInfoEl.textContent = '點擊任一格查看頻率比';
+  });
+
+  phaseSlider.addEventListener('input', (e) => {
+    phaseDeg = Number(e.target.value);
+    lblPhase.textContent = `${phaseDeg}°`;
+    if (selectedCell) {
+      cellInfoEl.textContent = `x = cos(${selectedCell.col}t + ${phaseDeg}°), y = sin(${selectedCell.row}t) · 頻率比 ${selectedCell.col}:${selectedCell.row}`;
+    }
+  });
+
+  speedSlider.addEventListener('input', (e) => {
+    speed = parseFloat(e.target.value);
+    speedDisplay.textContent = `${speed.toFixed(1)}x`;
+  });
+
+  btnPause.addEventListener('click', () => {
+    isPaused = !isPaused;
+    btnPause.textContent = isPaused ? '▶ 繼續' : '⏸ 暫停';
+  });
+
+  btnGuides.addEventListener('click', () => {
+    showGuides = !showGuides;
+    btnGuides.classList.toggle('active', showGuides);
+  });
+
+  btnLines.addEventListener('click', () => {
+    showLines = !showLines;
+    btnLines.classList.toggle('active', showLines);
+  });
+
+  resizeCanvas();
+  requestAnimationFrame(loop);
+})();
