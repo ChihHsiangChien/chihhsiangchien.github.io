@@ -87,6 +87,7 @@ class Maze3D {
 
         // 創建渲染器
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
         this.renderer.setSize(width, height);
         this.renderer.shadowMap.enabled = true;
         canvas.appendChild(this.renderer.domElement);
@@ -651,45 +652,69 @@ class Maze3D {
             this.keys[e.key.toLowerCase()] = false;
         });
 
-        // 虛擬按鈕控制
-        // 虛擬按鈕控制 (改為長按持續動作)
-        document.querySelectorAll('.btn-arrow').forEach(btn => {
-            const direction = btn.getAttribute('data-direction');
-            let keyMap = '';
-            
-            // 對應鍵盤按鍵代碼
-            switch (direction) {
-                case 'up': keyMap = 'arrowup'; break;
-                case 'down': keyMap = 'arrowdown'; break;
-                case 'left': keyMap = 'arrowleft'; break;
-                case 'right': keyMap = 'arrowright'; break;
+        // 虛擬多方向搖桿控制（Pointer Events + setPointerCapture）
+        document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+
+        this.joyTurn = 0; // -1..1
+        this.joyMove = 0; // -1, 0, 1
+        const joyBase = document.getElementById('joystick-base');
+        const joyKnob = document.getElementById('joystick-knob');
+        let joyPointerId = null;
+
+        this.resetInputState = () => {
+            this.keys = {};
+            this.joyTurn = 0;
+            this.joyMove = 0;
+            joyPointerId = null;
+            if (joyKnob) {
+                joyKnob.classList.remove('dragging');
+                joyKnob.style.transform = 'translate(-50%, -50%)';
             }
+        };
 
-            const pressHandler = (e) => {
-                e.preventDefault(); // 防止默認行為
-                if (keyMap) {
-                    this.keys[keyMap] = true;
-                    // 觸覺回饋
-                    if (navigator.vibrate) navigator.vibrate(10);
+        const updateJoystick = (e) => {
+            const rect = joyBase.getBoundingClientRect();
+            const cx = rect.left + rect.width / 2;
+            const cy = rect.top + rect.height / 2;
+            const maxR = rect.width * 0.34;
+            let ox = e.clientX - cx;
+            let oy = e.clientY - cy;
+            const dist = Math.hypot(ox, oy);
+            if (dist > maxR) {
+                ox = (ox / dist) * maxR;
+                oy = (oy / dist) * maxR;
+            }
+            joyKnob.style.transform = `translate(calc(-50% + ${ox}px), calc(-50% + ${oy}px))`;
+
+            const normX = ox / maxR;
+            const normY = oy / maxR;
+            this.joyTurn = Math.abs(normX) > 0.18 ? -normX : 0;
+            this.joyMove = normY < -0.3 ? 1 : normY > 0.35 ? -1 : 0;
+        };
+
+        if (joyBase && joyKnob) {
+            joyBase.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                joyPointerId = e.pointerId;
+                joyBase.setPointerCapture(e.pointerId);
+                joyKnob.classList.add('dragging');
+                updateJoystick(e);
+            });
+
+            joyBase.addEventListener('pointermove', (e) => {
+                if (e.pointerId !== joyPointerId) return;
+                updateJoystick(e);
+            });
+
+            const endJoy = (e) => {
+                if (e.pointerId === joyPointerId) {
+                    this.resetInputState();
                 }
             };
-
-            const releaseHandler = (e) => {
-                // if (e.cancelable) e.preventDefault(); // 取消這行以免影響某些瀏覽器行為
-                if (keyMap) {
-                    this.keys[keyMap] = false;
-                }
-            };
-            
-            // 使用 pointer events 統一處理滑鼠和觸控
-            btn.addEventListener('pointerdown', pressHandler);
-            btn.addEventListener('pointerup', releaseHandler);
-            btn.addEventListener('pointerleave', releaseHandler);
-            btn.addEventListener('pointercancel', releaseHandler);
-            
-            // 禁用右鍵菜單
-            btn.addEventListener('contextmenu', e => e.preventDefault());
-        });
+            joyBase.addEventListener('pointerup', endJoy);
+            joyBase.addEventListener('pointercancel', endJoy);
+            joyBase.addEventListener('lostpointercapture', () => this.resetInputState());
+        }
 
         // 新遊戲按鈕
         const newGameBtn = document.getElementById('newGameBtn');
@@ -808,21 +833,26 @@ class Maze3D {
     animate() {
         requestAnimationFrame(() => this.animate());
 
-        // 連續旋轉（消除鍵盤重複的初始延遲）
-        const holdRotationStep = 0.07; // 每幀累積角度
-        if (this.keys['arrowleft'] || this.keys['a']) {
-            this.targetRotation += holdRotationStep;
-        }
-        if (this.keys['arrowright'] || this.keys['d']) {
-            this.targetRotation -= holdRotationStep;
-        }
+        // 連續旋轉（鍵盤 + 搖桿類比控制）
+        const holdRotationStep = 0.07;
+        if (!this.isPaused) {
+            if (this.keys['arrowleft'] || this.keys['a']) {
+                this.targetRotation += holdRotationStep;
+            }
+            if (this.keys['arrowright'] || this.keys['d']) {
+                this.targetRotation -= holdRotationStep;
+            }
+            if (this.joyTurn !== 0) {
+                this.targetRotation += this.joyTurn * holdRotationStep;
+            }
 
-        // 連續前進/後退（移除鍵盤重複延遲）
-        if (!this.isMoving) {
-            if (this.keys['arrowup'] || this.keys['w']) {
-                this.movePlayer(1);
-            } else if (this.keys['arrowdown'] || this.keys['s']) {
-                this.movePlayer(-1);
+            // 連續前進/後退（鍵盤 + 搖桿）
+            if (!this.isMoving) {
+                if (this.keys['arrowup'] || this.keys['w'] || this.joyMove > 0) {
+                    this.movePlayer(1);
+                } else if (this.keys['arrowdown'] || this.keys['s'] || this.joyMove < 0) {
+                    this.movePlayer(-1);
+                }
             }
         }
 

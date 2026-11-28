@@ -1,199 +1,240 @@
-document.addEventListener('DOMContentLoaded', () => {
-    // --- Elements ---
-    const startScreen = document.getElementById('start-screen');
-    const gameScreen = document.getElementById('game-screen');
-    const resultScreen = document.getElementById('result-screen');
-    
-    const startBtn = document.getElementById('start-btn');
-    const restartBtn = document.getElementById('restart-btn');
-    const keys = document.querySelectorAll('.key');
+(() => {
+  'use strict';
 
-    const currentLevelSpan = document.getElementById('current-level');
-    const digitCountSpan = document.getElementById('digit-count');
-    const numberDisplay = document.getElementById('number-display');
-    const messageDisplay = document.getElementById('message-display');
-    const inputDisplay = document.getElementById('input-display');
-    
-    const resultTitle = document.getElementById('result-title');
-    const resultIcon = document.getElementById('result-icon');
-    const finalScore = document.getElementById('final-score');
-    const resultMessage = document.getElementById('result-message');
+  const startScreen = document.getElementById('start-screen');
+  const gameScreen = document.getElementById('game-screen');
+  const resultScreen = document.getElementById('result-screen');
 
-    // --- State ---
-    let level = 5;
-    let sequence = [];
-    let userSequence = [];
-    let isAcceptingInput = false;
+  const startBtn = document.getElementById('start-btn');
+  const restartBtn = document.getElementById('restart-btn');
+  const soundBtn = document.getElementById('sound-btn');
+  const keys = document.querySelectorAll('.key');
 
-    // --- Constants ---
-    const START_LEVEL = 5;
-    const SHOW_TIME_PER_DIGIT = 1000; // 1 second total, but we show all at once? No, specific time.
-    // Miller's Magic Number: 7 +/- 2.
-    // Display strategy: Show distinct numbers for a duration based on length.
-    // Formula: Max(2000ms, length * 600ms)
-    
-    // --- Event Listeners ---
-    startBtn.addEventListener('click', startGame);
-    restartBtn.addEventListener('click', startGame);
+  const currentLevelSpan = document.getElementById('current-level');
+  const digitCountSpan = document.getElementById('digit-count');
+  const bestLevelSpan = document.getElementById('best-level');
+  const numberDisplay = document.getElementById('number-display');
+  const memBarFill = document.getElementById('mem-bar-fill');
+  const messageDisplay = document.getElementById('message-display');
+  const inputDisplay = document.getElementById('input-display');
 
-    keys.forEach(key => {
-        key.addEventListener('click', (e) => {
-            e.preventDefault(); // Prevent double tap zoom issues
-            const num = key.dataset.num;
-            if (num !== undefined) {
-                handleInput(num);
-            } else if (key.id === 'clear-btn') {
-                clearInput();
-            } else if (key.id === 'backspace-btn') {
-                backspace();
-            }
-        });
+  const resultTitle = document.getElementById('result-title');
+  const resultIcon = document.getElementById('result-icon');
+  const finalScore = document.getElementById('final-score');
+  const resultMessage = document.getElementById('result-message');
+
+  const START_LEVEL = 5;
+  let level = START_LEVEL;
+  let bestLevel = Number(localStorage.getItem('magic_num_best') || START_LEVEL);
+  let sequence = [];
+  let userSequence = [];
+  let isAcceptingInput = false;
+  let timers = [];
+
+  // --- Sound ---
+  const sound = {
+    ctx: null,
+    enabled: true,
+    unlock() {
+      if (!this.ctx) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (Ctx) this.ctx = new Ctx();
+      }
+      if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+    },
+    tone(f1, f2, dur = 0.07, type = 'triangle', vol = 0.12) {
+      if (!this.enabled || !this.ctx || this.ctx.state !== 'running') return;
+      const now = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(f1, now);
+      osc.frequency.exponentialRampToValueAtTime(f2, now + dur);
+      gain.gain.setValueAtTime(vol, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + dur + 0.02);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(now);
+      osc.stop(now + dur + 0.03);
+    },
+    tap() { this.tone(440, 520, 0.04, 'sine', 0.08); },
+    win() { this.tone(523, 784, 0.14, 'triangle', 0.14); },
+    fail() { this.tone(200, 95, 0.25, 'sawtooth', 0.11); }
+  };
+
+  function clearTimers() {
+    for (const id of timers) clearTimeout(id);
+    timers = [];
+  }
+
+  function showScreen(target) {
+    [startScreen, gameScreen, resultScreen].forEach((s) => {
+      s.classList.toggle('active', s === target);
+    });
+  }
+
+  function updateBestUI() {
+    bestLevelSpan.textContent = String(bestLevel);
+  }
+
+  function startGame() {
+    clearTimers();
+    sound.unlock();
+    level = START_LEVEL;
+    showScreen(gameScreen);
+    startLevel();
+  }
+
+  function startLevel() {
+    clearTimers();
+    sequence = Array.from({ length: level }, () => Math.floor(Math.random() * 10));
+    userSequence = [];
+    isAcceptingInput = false;
+
+    currentLevelSpan.textContent = String(level);
+    digitCountSpan.textContent = String(level);
+    numberDisplay.textContent = '...';
+    numberDisplay.classList.remove('hidden');
+    inputDisplay.textContent = '';
+    inputDisplay.style.color = '';
+    messageDisplay.classList.add('hidden');
+    memBarFill.style.transition = 'none';
+    memBarFill.style.width = '100%';
+
+    timers.push(setTimeout(showSequence, 350));
+  }
+
+  function showSequence() {
+    const displayTime = Math.max(1800, level * 650);
+    numberDisplay.textContent = sequence.join(' ');
+
+    // Animate memorization countdown bar
+    requestAnimationFrame(() => {
+      memBarFill.style.transition = `width ${displayTime}ms linear`;
+      memBarFill.style.width = '0%';
     });
 
-    // Keyboard Support
-    document.addEventListener('keydown', (e) => {
-        if (!isAcceptingInput) return;
-        
-        if (e.key >= '0' && e.key <= '9') {
-            handleInput(e.key);
-        } else if (e.key === 'Backspace') {
-            backspace();
-        } else if (e.key === 'Escape' || e.key === 'Delete') {
-            clearInput();
-        }
-    });
+    timers.push(setTimeout(() => {
+      numberDisplay.textContent = '';
+      numberDisplay.classList.add('hidden');
+      messageDisplay.classList.remove('hidden');
+      isAcceptingInput = true;
+    }, displayTime));
+  }
 
-    // --- Core Logic ---
+  function handleInput(num) {
+    if (!isAcceptingInput) return;
+    sound.tap();
+    userSequence.push(num);
+    inputDisplay.textContent = userSequence.join(' ');
 
-    function startGame() {
-        level = START_LEVEL;
-        switchScreen(startScreen, gameScreen);
+    if (userSequence.length === sequence.length) {
+      isAcceptingInput = false;
+      checkResult();
+    }
+  }
+
+  function backspace() {
+    if (!isAcceptingInput || userSequence.length === 0) return;
+    userSequence.pop();
+    inputDisplay.textContent = userSequence.join(' ');
+  }
+
+  function clearInput() {
+    if (!isAcceptingInput) return;
+    userSequence = [];
+    inputDisplay.textContent = '';
+  }
+
+  function checkResult() {
+    const correct = userSequence.join('') === sequence.join('');
+    if (correct) {
+      sound.win();
+      inputDisplay.style.color = 'var(--success)';
+      if (level > bestLevel) {
+        bestLevel = level;
+        localStorage.setItem('magic_num_best', String(bestLevel));
+        updateBestUI();
+      }
+      timers.push(setTimeout(() => {
+        inputDisplay.style.color = '';
+        level++;
         startLevel();
+      }, 750));
+    } else {
+      sound.fail();
+      inputDisplay.classList.add('shake');
+      timers.push(setTimeout(() => {
+        inputDisplay.classList.remove('shake');
+        endGame();
+      }, 750));
+    }
+  }
+
+  function endGame() {
+    clearTimers();
+    const completed = Math.max(0, level - 1);
+    finalScore.textContent = String(completed);
+
+    if (completed >= 9) {
+      resultIcon.textContent = '🤯';
+      resultTitle.textContent = '大師等級！';
+      resultMessage.textContent = '你的記憶力超越了常人！(Magic Number 7 ± 2)';
+    } else if (completed >= 7) {
+      resultIcon.textContent = '🎉';
+      resultTitle.textContent = '太強了！';
+      resultMessage.textContent = '你達到了人類短期記憶的標準範圍。';
+    } else if (completed >= 5) {
+      resultIcon.textContent = '👍';
+      resultTitle.textContent = '不錯喔！';
+      resultMessage.textContent = '再接再厲，挑戰更高位數！';
+    } else {
+      resultIcon.textContent = '😅';
+      resultTitle.textContent = '再試一次';
+      resultMessage.textContent = '集中注意力，你可以的。';
     }
 
-    function startLevel() {
-        sequence = generateSequence(level);
-        userSequence = [];
-        isAcceptingInput = false;
-        
-        // Update UI
-        currentLevelSpan.textContent = level;
-        digitCountSpan.textContent = level;
-        numberDisplay.textContent = '...';
-        inputDisplay.textContent = '';
-        messageDisplay.classList.add('hidden');
-        numberDisplay.classList.remove('hidden');
+    showScreen(resultScreen);
+  }
 
-        // Delay slightly before showing numbers
-        setTimeout(() => {
-            showSequence();
-        }, 500);
+  // --- Events ---
+  document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+  const unlockOnce = () => sound.unlock();
+  document.addEventListener('pointerdown', unlockOnce, { passive: true });
+  document.addEventListener('touchstart', unlockOnce, { passive: true });
+  document.addEventListener('keydown', unlockOnce, { passive: true });
+
+  startBtn.addEventListener('click', startGame);
+  restartBtn.addEventListener('click', startGame);
+
+  soundBtn.addEventListener('click', () => {
+    sound.unlock();
+    sound.enabled = !sound.enabled;
+    soundBtn.textContent = sound.enabled ? '🔊' : '🔇';
+  });
+
+  keys.forEach((key) => {
+    key.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      sound.unlock();
+      const num = key.dataset.num;
+      if (num !== undefined) handleInput(num);
+      else if (key.id === 'clear-btn') clearInput();
+      else if (key.id === 'backspace-btn') backspace();
+    });
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (!isAcceptingInput) return;
+    if (e.key >= '0' && e.key <= '9') {
+      handleInput(e.key);
+    } else if (e.key === 'Backspace') {
+      e.preventDefault();
+      backspace();
+    } else if (e.key === 'Escape' || e.key === 'Delete') {
+      clearInput();
     }
+  });
 
-    function generateSequence(length) {
-        const arr = [];
-        for (let i = 0; i < length; i++) {
-            arr.push(Math.floor(Math.random() * 10));
-        }
-        return arr;
-    }
-
-    function showSequence() {
-        const displayTime = Math.max(2000, level * 800); // Dynamic time
-        
-        // Show numbers
-        numberDisplay.textContent = sequence.join(' ');
-        
-        // Hide after timer
-        setTimeout(() => {
-            numberDisplay.textContent = '';
-            numberDisplay.classList.add('hidden'); // Hide the container to avoid faint visuals if any
-            messageDisplay.classList.remove('hidden');
-            isAcceptingInput = true;
-        }, displayTime);
-    }
-
-    function handleInput(num) {
-        if (!isAcceptingInput) return;
-
-        // Visual feedback
-        userSequence.push(num);
-        updateInputDisplay();
-
-        // Check completion
-        if (userSequence.length === sequence.length) {
-            isAcceptingInput = false;
-            checkResult();
-        }
-    }
-
-    function updateInputDisplay() {
-        inputDisplay.textContent = userSequence.join(' ');
-    }
-
-    function backspace() {
-        if (!isAcceptingInput || userSequence.length === 0) return;
-        userSequence.pop();
-        updateInputDisplay();
-    }
-
-    function clearInput() {
-        if (!isAcceptingInput) return;
-        userSequence = [];
-        updateInputDisplay();
-    }
-
-    function checkResult() {
-        const correct = userSequence.join('') === sequence.join('');
-        
-        if (correct) {
-            // Success
-            inputDisplay.style.color = 'var(--success)';
-            setTimeout(() => {
-                inputDisplay.style.color = '';
-                level++;
-                startLevel();
-            }, 1000);
-        } else {
-            // Failure
-            inputDisplay.classList.add('shake');
-            setTimeout(() => {
-                inputDisplay.classList.remove('shake');
-                endGame();
-            }, 1000);
-        }
-    }
-
-    function endGame() {
-        // Show Result Screen
-        finalScore.textContent = level - 1; // Completed level
-        
-        // Message customization
-        if (level - 1 >= 9) {
-            resultIcon.textContent = '🤯';
-            resultTitle.textContent = '大師等級！';
-            resultMessage.textContent = '你的記憶力超越了常人！(Magic Number 7+2)';
-        } else if (level - 1 >= 7) {
-            resultIcon.textContent = '🎉';
-            resultTitle.textContent = '太強了！';
-            resultMessage.textContent = '你達到了人類短期記憶的平均上限。';
-        } else if (level - 1 >= 5) {
-            resultIcon.textContent = '👍';
-            resultTitle.textContent = '不錯喔！';
-            resultMessage.textContent = '再接再厲，挑戰極限！';
-        } else {
-            resultIcon.textContent = '😅';
-            resultTitle.textContent = '再試一次';
-            resultMessage.textContent = '集中注意力，你可以的。';
-        }
-
-        switchScreen(gameScreen, resultScreen);
-    }
-
-    function switchScreen(from, to) {
-        from.classList.remove('active');
-        setTimeout(() => {
-            to.classList.add('active');
-        }, 300); // Match CSS transition
-    }
-});
+  updateBestUI();
+})();

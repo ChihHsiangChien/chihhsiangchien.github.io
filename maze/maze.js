@@ -218,9 +218,11 @@ class MazeGame {
     // 渲染迷宮
     render() {
         const container = document.getElementById('maze-container');
+        const boxSize = container.clientWidth || 465;
+        this.cellSize = boxSize / this.viewportSize;
         container.innerHTML = '';
-        container.style.gridTemplateColumns = `repeat(${this.viewportSize}, ${this.cellSize}px)`;
-        container.style.gridTemplateRows = `repeat(${this.viewportSize}, ${this.cellSize}px)`;
+        container.style.gridTemplateColumns = `repeat(${this.viewportSize}, 1fr)`;
+        container.style.gridTemplateRows = `repeat(${this.viewportSize}, 1fr)`;
 
         // 只渲染視口內的區域
         for (let viewY = 0; viewY < this.viewportSize; viewY++) {
@@ -362,93 +364,91 @@ document.addEventListener('keydown', (e) => {
 });
 
 // 頁面加載時初始化
+document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+
 document.addEventListener('DOMContentLoaded', () => {
     initGame();
 
-    // 虛擬按鈕控制（触摸设备）
-    document.querySelectorAll('.btn-arrow').forEach(btn => {
-        btn.addEventListener('click', () => {
-            if (!game) return;
-            
-            const direction = btn.getAttribute('data-direction');
-            switch (direction) {
-                case 'up':
-                    game.movePlayer(0, -1);
-                    break;
-                case 'down':
-                    game.movePlayer(0, 1);
-                    break;
-                case 'left':
-                    game.movePlayer(-1, 0);
-                    break;
-                case 'right':
-                    game.movePlayer(1, 0);
-                    break;
-            }
+    // 虛擬多方向搖桿控制（Pointer Events + setPointerCapture）
+    const joyBase = document.getElementById('joystick-base');
+    const joyKnob = document.getElementById('joystick-knob');
+    let joyPointerId = null;
+    let joyVector = { dx: 0, dy: 0 };
+    let joyTimer = null;
+
+    const resetJoystick = () => {
+        joyPointerId = null;
+        joyVector = { dx: 0, dy: 0 };
+        if (joyTimer) {
+            clearInterval(joyTimer);
+            joyTimer = null;
+        }
+        if (joyKnob) {
+            joyKnob.classList.remove('dragging');
+            joyKnob.style.transform = 'translate(-50%, -50%)';
+        }
+    };
+
+    const stepFromJoystick = () => {
+        if (!game) return;
+        const { dx, dy } = joyVector;
+        if (dx === 0 && dy === 0) return;
+        game.movePlayer(dx, dy);
+    };
+
+    const updateJoystickFromEvent = (e) => {
+        const rect = joyBase.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const maxR = rect.width * 0.34;
+        let ox = e.clientX - cx;
+        let oy = e.clientY - cy;
+        const dist = Math.hypot(ox, oy);
+        if (dist > maxR) {
+            ox = (ox / dist) * maxR;
+            oy = (oy / dist) * maxR;
+        }
+        joyKnob.style.transform = `translate(calc(-50% + ${ox}px), calc(-50% + ${oy}px))`;
+
+        if (dist < 12) {
+            joyVector = { dx: 0, dy: 0 };
+        } else if (Math.abs(ox) > Math.abs(oy)) {
+            joyVector = { dx: ox > 0 ? 1 : -1, dy: 0 };
+        } else {
+            joyVector = { dx: 0, dy: oy > 0 ? 1 : -1 };
+        }
+    };
+
+    if (joyBase && joyKnob) {
+        joyBase.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            joyPointerId = e.pointerId;
+            joyBase.setPointerCapture(e.pointerId);
+            joyKnob.classList.add('dragging');
+            updateJoystickFromEvent(e);
+            stepFromJoystick();
+            if (joyTimer) clearInterval(joyTimer);
+            joyTimer = setInterval(stepFromJoystick, 130);
         });
 
-        // 觸摸長按支持（持續移動）
-        let repeatInterval = null;
-        
-        btn.addEventListener('touchstart', () => {
-            const direction = btn.getAttribute('data-direction');
-            if (!game) return;
-
-            // 立即移動一次
-            switch (direction) {
-                case 'up':
-                    game.movePlayer(0, -1);
-                    break;
-                case 'down':
-                    game.movePlayer(0, 1);
-                    break;
-                case 'left':
-                    game.movePlayer(-1, 0);
-                    break;
-                case 'right':
-                    game.movePlayer(1, 0);
-                    break;
-            }
-
-            // 設置重複移動
-            repeatInterval = setInterval(() => {
-                if (!game) return;
-                switch (direction) {
-                    case 'up':
-                        game.movePlayer(0, -1);
-                        break;
-                    case 'down':
-                        game.movePlayer(0, 1);
-                        break;
-                    case 'left':
-                        game.movePlayer(-1, 0);
-                        break;
-                    case 'right':
-                        game.movePlayer(1, 0);
-                        break;
-                }
-            }, 150);
+        joyBase.addEventListener('pointermove', (e) => {
+            if (e.pointerId !== joyPointerId) return;
+            updateJoystickFromEvent(e);
         });
 
-        btn.addEventListener('touchend', () => {
-            if (repeatInterval) {
-                clearInterval(repeatInterval);
-                repeatInterval = null;
-            }
-        });
-
-        btn.addEventListener('mouseleave', () => {
-            if (repeatInterval) {
-                clearInterval(repeatInterval);
-                repeatInterval = null;
-            }
-        });
-    });
+        const endJoy = (e) => {
+            if (e.pointerId === joyPointerId) resetJoystick();
+        };
+        joyBase.addEventListener('pointerup', endJoy);
+        joyBase.addEventListener('pointercancel', endJoy);
+        joyBase.addEventListener('lostpointercapture', resetJoystick);
+    }
 
     // 新遊戲按鈕
     const newGameBtn = document.getElementById('newGameBtn');
     if (newGameBtn) {
         newGameBtn.addEventListener('click', () => {
+            resetJoystick();
             if (game) {
                 game.restart();
             }
