@@ -3372,15 +3372,6 @@ function drawRoomTiles(theme) {
     wctx.fillStyle = "#facc15";
     wctx.fillRect(1 * TILE, 5 * TILE + 4, 18 * TILE, 1);
     wctx.fillRect(1 * TILE, 5 * TILE + 15, 18 * TILE, 1);
-    // 中央霧月山莊紋章地毯（繪製於地板層，角色可正常踩踏於其上）
-    wctx.fillStyle = "#facc15";
-    wctx.beginPath(); wctx.ellipse(10 * TILE, 5.55 * TILE, 16, 10, 0, 0, Math.PI * 2); wctx.fill();
-    wctx.fillStyle = "#7f1d1d";
-    wctx.beginPath(); wctx.ellipse(10 * TILE, 5.55 * TILE, 14.5, 8.8, 0, 0, Math.PI * 2); wctx.fill();
-    wctx.fillStyle = "#fde047";
-    wctx.beginPath(); wctx.arc(10 * TILE, 5.55 * TILE, 3.2, 0, Math.PI * 2); wctx.fill();
-    wctx.fillStyle = "#7f1d1d";
-    wctx.beginPath(); wctx.arc(10 * TILE + 1.3, 5.55 * TILE - 0.6, 2.5, 0, Math.PI * 2); wctx.fill();
     drawPixelTorch(8 * TILE + 2, 4);
     drawPixelTorch(11 * TILE + 10, 4);
     // 左上古典壁爐＋跳動火光
@@ -3596,6 +3587,32 @@ function drawDoorSignposts() {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(text, Math.round(sx), Math.round(sy + 1));
+  }
+}
+
+function drawHdFloor(theme) {
+  const S = RENDER_SCALE;
+  if (theme === "hall") {
+    // Full HD 1920×1080 霧月山莊金色彎月紋章圓毯（位於角色圖層下方）
+    const rx = 10.0 * TILE * S, ry = 5.55 * TILE * S;
+    ctx.save();
+    ctx.fillStyle = "rgba(0, 0, 0, 0.28)";
+    ctx.beginPath(); ctx.ellipse(rx, ry + 5, 92, 58, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#7f1d1d"; ctx.strokeStyle = "#facc15"; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.ellipse(rx, ry, 90, 56, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = "rgba(250, 204, 21, 0.6)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(rx, ry, 72, 42, 0, 0, Math.PI * 2); ctx.stroke();
+    // 霧月彎月徽章
+    ctx.fillStyle = "#fde047";
+    ctx.beginPath(); ctx.arc(rx - 2, ry, 18, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#7f1d1d";
+    ctx.beginPath(); ctx.arc(rx + 6, ry - 4, 14, 0, Math.PI * 2); ctx.fill();
+    // 四角星芒點綴
+    ctx.fillStyle = "#fef08a";
+    [[-46, 0], [46, 0], [0, -28], [0, 28]].forEach(([dx, dy]) => {
+      ctx.beginPath(); ctx.arc(rx + dx, ry + dy, 3, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.restore();
   }
 }
 
@@ -4108,7 +4125,16 @@ function render() {
   const room = ROOMS[state.room];
   drawRoomTiles(room.theme);
 
-  // 依 Y 座標排序繪製角色與落地陰影到 320×180 像素緩衝區
+  // 1. 將 320×180 像素背景無失真放大 6 倍至 1920×1080 Full HD 主畫布
+  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(worldCanvas, 0, 0, CANVAS_W, CANVAS_H);
+
+  // 2. 高解析地板裝飾（例如大廳彎月紋章圓毯，確保位於角色下方）
+  ctx.imageSmoothingEnabled = true;
+  drawHdFloor(room.theme);
+
+  // 3. 依 Y 座標排序繪製角色與落地陰影（踩在 HD 地板裝飾上方）
   const stepFrame = state.player.moving ? (Math.floor(state.player.walkTick) % 2) : 0;
   const activeNpcs = getActiveRoomNpcs(room);
   const entities = [
@@ -4118,18 +4144,16 @@ function render() {
     { id: "edward", x: state.player.x * TILE, y: state.player.y * TILE + 2, bob: state.player.moving ? Math.abs(Math.sin(state.player.walkTick)) * -2 : 0, dir: state.player.dir, step: stepFrame }
   ];
   entities.sort((a, b) => a.y - b.y);
+  ctx.imageSmoothingEnabled = false;
   for (const e of entities) {
-    wctx.fillStyle = "rgba(0, 0, 0, 0.42)";
-    wctx.fillRect(Math.round(e.x - 5), Math.round(e.y - 2), 10, 3);
-    drawCharSprite(wctx, e.id, e.x, e.y, 1, e.bob, e.dir, e.step);
+    const ex = Math.round(e.x * RENDER_SCALE);
+    const ey = Math.round(e.y * RENDER_SCALE);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.42)";
+    ctx.fillRect(ex - 5 * RENDER_SCALE, ey - 2 * RENDER_SCALE, 10 * RENDER_SCALE, 3 * RENDER_SCALE);
+    drawCharSprite(ctx, e.id, ex, ey, RENDER_SCALE, e.bob * RENDER_SCALE, e.dir, e.step);
   }
 
-  // 1. 將 320×180 像素世界無失真放大 6 倍至 1920×1080 Full HD 主畫布
-  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(worldCanvas, 0, 0, CANVAS_W, CANVAS_H);
-
-  // 2. HD-2D 高解析道具細節、動態光影與環境微粒
+  // 4. HD-2D 高解析道具細節、動態光影與環境微粒
   ctx.imageSmoothingEnabled = true;
   drawHdProps(room.theme);
   drawHdLighting(room.theme);
