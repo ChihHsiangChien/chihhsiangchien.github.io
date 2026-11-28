@@ -1,225 +1,251 @@
-const width = 320;
-var height = 0;
-var streaming = false;
+(() => {
+  'use strict';
 
-const videoSelect = document.querySelector("select#videoSource");
-videoSelect.onchange = getStream;
-const video = document.querySelector(".player");
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const videoSelect = document.getElementById('videoSource');
+  const fileInput = document.getElementById('fileInput');
+  const video = document.querySelector('.player');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-const tempCanvas = document.getElementById("tempCanvas");
-const tempCtx = tempCanvas.getContext("2d", { willReadFrequently: true });
+  const tempCanvas = document.createElement('canvas');
+  const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
 
-var originalPixels;
+  const snapshotBtn = document.getElementById('snapshot');
+  const autoGazeBtn = document.getElementById('btn-auto-gaze');
+  const showGreyBtn = document.getElementById('showGrey');
+  const guideText = document.getElementById('guide-text');
+  const countdownBadge = document.getElementById('countdown-badge');
+  const camErrorEl = document.getElementById('cam-error');
 
-var snapshotButton = document.getElementById("snapshot");
-var showGreyButton = document.getElementById("showGrey");
+  let W = 640;
+  let H = 480;
+  let isLive = false;
+  let hasImage = false;
+  let mode = 'negative'; // 'negative' | 'grey'
+  let rafId = null;
+  let gazeTimer = null;
 
-var ifCapture = true;
-var mode = "negative";
+  function setCanvasSize(w, h) {
+    W = w;
+    H = h;
+    canvas.width = W;
+    canvas.height = H;
+    tempCanvas.width = W;
+    tempCanvas.height = H;
+  }
+  setCanvasSize(640, 480);
 
-var timerInterval = null;
+  // --- Sound Chime for Auto Switch ---
+  let audioCtx = null;
+  function playSwitchChime() {
+    try {
+      if (!audioCtx) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (Ctx) audioCtx = new Ctx();
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(660, now);
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.27);
+    } catch (_) {}
+  }
 
-// 取得裝置
-getStream().then(getDevices).then(gotDevices);
+  function applyFilter(targetMode) {
+    if (!hasImage) return;
+    const imgData = tempCtx.getImageData(0, 0, W, H);
+    const d = imgData.data;
 
-window.addEventListener("load", startup, false);
-
-function getDevices() {
-  // AFAICT in Safari this only gets default devices until gUM is called :/
-  return navigator.mediaDevices.enumerateDevices();
-}
-function gotDevices(deviceInfos) {
-  window.deviceInfos = deviceInfos; // make available to console
-  console.log("Available input and output devices:", deviceInfos);
-  for (const deviceInfo of deviceInfos) {
-    const option = document.createElement("option");
-    option.value = deviceInfo.deviceId;
-    if (deviceInfo.kind === "videoinput") {
-      option.text = deviceInfo.label || `Camera ${videoSelect.length + 1}`;
-      videoSelect.appendChild(option);
+    if (targetMode === 'negative') {
+      for (let i = 0; i < d.length; i += 4) {
+        d[i] = 255 - d[i];
+        d[i + 1] = 255 - d[i + 1];
+        d[i + 2] = 255 - d[i + 2];
+      }
+    } else {
+      for (let i = 0; i < d.length; i += 4) {
+        const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        d[i] = d[i + 1] = d[i + 2] = g;
+      }
     }
-    videoSelect.appendChild(option);
+    ctx.putImageData(imgData, 0, 0);
   }
-}
 
-async function getStream() {
-  if (window.stream) {
-    window.stream.getTracks().forEach((track) => {
-      track.stop();
-    });
-  }
-  const videoSource = videoSelect.value;
-  const constraints = {
-    audio: false,
-    video: { deviceId: videoSource ? { exact: videoSource } : undefined },
-  };
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
-    return gotStream(stream);
-  } catch (error) {
-    return handleError(error);
-  }
-}
-
-function gotStream(stream) {
-  window.stream = stream; // make stream available to console
-  videoSelect.selectedIndex = [...videoSelect.options].findIndex(
-    (option) => option.text === stream.getVideoTracks()[0].label
-  );
-
-  video.srcObject = stream;
-  video.play();
-}
-
-function handleError(error) {
-  console.error("Error: ", error);
-}
-
-function startup() {
-  video.addEventListener(
-    "canplay",
-    (ev) => {
-      if (!streaming) {
-        height = video.videoHeight / (video.videoWidth / width);
-
-        // Firefox currently has a bug where the height can't be read from
-        // the video, so we will make assumptions if this happens.
-
-        if (isNaN(height)) {
-          height = width / (4 / 3);
-        }
-
-        video.setAttribute("width", width);
-        video.setAttribute("height", height);
-        canvas.setAttribute("width", width);
-        canvas.setAttribute("height", height);
-        streaming = true;
-        paintToCanvas();
+  function loop() {
+    if (isLive && video.readyState >= 2) {
+      if (video.videoWidth && video.videoHeight && (video.videoWidth !== W || video.videoHeight !== H)) {
+        setCanvasSize(video.videoWidth, video.videoHeight);
       }
-    },
-    false
-  );
+      // Mirror live webcam horizontally for natural self-view
+      tempCtx.save();
+      tempCtx.translate(W, 0);
+      tempCtx.scale(-1, 1);
+      tempCtx.drawImage(video, 0, 0, W, H);
+      tempCtx.restore();
+      applyFilter(mode);
+    }
+    if (isLive) {
+      rafId = requestAnimationFrame(loop);
+    } else {
+      rafId = null;
+    }
+  }
 
-  //clearphoto();
-  snapshotButton.addEventListener(
-    "click",
-    (ev) => {
-      if (ifCapture) {
-        stopTimerInterval();
-        ifCapture = false;
-        snapshotButton.textContent = "重置";
-      } else{
-        paintToCanvas();
-        ifCapture = true;
-        snapshotButton.textContent = "拍照";
+  function startLoop() {
+    if (!rafId) rafId = requestAnimationFrame(loop);
+  }
+
+  function stopGazeTimer() {
+    if (gazeTimer) {
+      clearInterval(gazeTimer);
+      gazeTimer = null;
+    }
+    countdownBadge.classList.add('hidden');
+  }
+
+  function updateUI() {
+    snapshotBtn.textContent = isLive ? '📸 拍照定格' : '🔄 重新拍照';
+    autoGazeBtn.disabled = isLive || !hasImage;
+    showGreyBtn.textContent = mode === 'negative' ? '🌗 切換為：灰階' : '🌗 切換為：負片';
+  }
+
+  async function getStream() {
+    if (window.stream) {
+      window.stream.getTracks().forEach((t) => t.stop());
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      camErrorEl.classList.remove('hidden');
+      return;
+    }
+
+    const deviceId = videoSelect.value;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'user' }
+      });
+      window.stream = stream;
+      camErrorEl.classList.add('hidden');
+      video.srcObject = stream;
+      await video.play();
+      await refreshDevices(stream);
+      isLive = true;
+      hasImage = true;
+      mode = 'negative';
+      stopGazeTimer();
+      updateUI();
+      startLoop();
+    } catch (err) {
+      console.error(err);
+      camErrorEl.classList.remove('hidden');
+    }
+  }
+
+  async function refreshDevices(stream) {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const curId = stream.getVideoTracks()[0]?.getSettings()?.deviceId;
+    videoSelect.innerHTML = '';
+    let idx = 1;
+    for (const d of devices) {
+      if (d.kind === 'videoinput') {
+        const opt = document.createElement('option');
+        opt.value = d.deviceId;
+        opt.text = d.label || `攝影機 ${idx++}`;
+        if (d.deviceId === curId) opt.selected = true;
+        videoSelect.appendChild(opt);
       }
-      ev.preventDefault();
-
-    },
-    false
-  );
-
-  showGreyButton.addEventListener(
-    "click",
-    (ev) => {
-      showGrey();
-      ev.preventDefault();
-    },
-    false
-  );
-}
-
-function paintToCanvas() {
-  const width = video.videoWidth;
-  const height = video.videoHeight;
-  canvas.width = width;
-  canvas.height = height;
-  tempCanvas.width = canvas.width;
-  tempCanvas.height = canvas.height;
-
-  timerInterval = setInterval(() => {
-    tempCtx.drawImage(video, 0, 0, width, height); // 每 16 毫秒將攝影機畫面「印」至 canvas
-    // 取得圖像資訊，imgData.data 會是一類陣列，imgData.data[0] => red, imgData.data[1] => green, imgData.data[2] => blue, imgData.data[3] => alpha 以此四個一組類推
-    originalPixels = tempCtx.getImageData(0, 0, width, height);
-    // 加上濾鏡
-    let pixels = applyNegativeEffect(originalPixels);
-    // 輸出至 canvas
-    ctx.putImageData(pixels, 0, 0);
-  }, 16);
-}
-
-function showGrey() {
-  if (timerInterval) {
-    stopTimerInterval();
+    }
   }
 
-  const width = video.videoWidth;
-  const height = video.videoHeight;
-  canvas.width = width;
-  canvas.height = height;
+  // --- Events ---
+  document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+  videoSelect.addEventListener('change', getStream);
 
-  if (mode === "negative") {
-    originalPixels = tempCtx.getImageData(0, 0, width, height);
-    let pixels = applyGrayscaleEffect(originalPixels);
-    // 輸出至 canvas
-    ctx.putImageData(pixels, 0, 0);
-    mode = "grey";
-    showGreyButton.textContent = "負片";
-  } else if (mode === "grey") {
-    originalPixels = tempCtx.getImageData(0, 0, width, height);
-    let pixels = applyNegativeEffect(originalPixels);
-    // 輸出至 canvas
-    ctx.putImageData(pixels, 0, 0);
-    mode = "negative";
-    showGreyButton.textContent = "灰階";
-  }
-}
+  snapshotBtn.addEventListener('click', () => {
+    stopGazeTimer();
+    if (isLive) {
+      isLive = false;
+      mode = 'negative';
+      applyFilter('negative');
+      guideText.innerHTML = '步驟 2：請盯著中央 <strong>紅點</strong>，點選「⏱️ 15秒凝視自動切灰階」或手動切換！';
+    } else if (window.stream) {
+      isLive = true;
+      mode = 'negative';
+      guideText.innerHTML = '步驟 1：按下 <strong>📸 拍照定格</strong>（或上傳照片），接著盯著畫面中央的 <strong>紅點</strong> 看 15 秒！';
+      startLoop();
+    } else {
+      getStream();
+    }
+    updateUI();
+  });
 
-function stopTimerInterval() {
-  clearInterval(timerInterval);
-  timerInterval = null;
-}
+  showGreyBtn.addEventListener('click', () => {
+    if (!hasImage) return;
+    stopGazeTimer();
+    isLive = false;
+    mode = mode === 'negative' ? 'grey' : 'negative';
+    applyFilter(mode);
+    updateUI();
+  });
 
-// 負片效果
-function applyNegativeEffect(pixels) {
-  for (let i = 0; i < pixels.data.length; i += 4) {
-    // 获取红、绿、蓝、透明度值
-    let red = pixels.data[i];
-    let green = pixels.data[i + 1];
-    let blue = pixels.data[i + 2];
+  autoGazeBtn.addEventListener('click', () => {
+    if (!hasImage || isLive) return;
+    stopGazeTimer();
+    mode = 'negative';
+    applyFilter('negative');
+    updateUI();
 
-    // 将颜色值取反
-    red = 255 - red;
-    green = 255 - green;
-    blue = 255 - blue;
+    let sec = 15;
+    countdownBadge.textContent = String(sec);
+    countdownBadge.classList.remove('hidden');
+    guideText.innerHTML = '👀 <strong>請專心盯著中央紅點，不要轉移視線！</strong>';
 
-    // 更新像素值
-    pixels.data[i] = red;
-    pixels.data[i + 1] = green;
-    pixels.data[i + 2] = blue;
-  }
+    gazeTimer = setInterval(() => {
+      sec--;
+      if (sec <= 0) {
+        stopGazeTimer();
+        mode = 'grey';
+        applyFilter('grey');
+        updateUI();
+        playSwitchChime();
+        guideText.innerHTML = '✨ <strong>現在看到彩色了嗎？</strong> 其實這張是純灰階照片！';
+      } else {
+        countdownBadge.textContent = String(sec);
+      }
+    }, 1000);
+  });
 
-  return pixels;
-}
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        stopGazeTimer();
+        isLive = false;
+        hasImage = true;
+        camErrorEl.classList.add('hidden');
+        const maxW = 800;
+        const scale = Math.min(1, maxW / img.width);
+        setCanvasSize(Math.round(img.width * scale), Math.round(img.height * scale));
+        tempCtx.drawImage(img, 0, 0, W, H);
+        mode = 'negative';
+        applyFilter('negative');
+        guideText.innerHTML = '步驟 2：請盯著中央 <strong>紅點</strong>，點選「⏱️ 15秒凝視自動切灰階」或手動切換！';
+        updateUI();
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
 
-// 灰階效果
-function applyGrayscaleEffect(pixels) {
-  for (let i = 0; i < pixels.data.length; i += 4) {
-    // 获取红、绿、蓝通道值
-    let red = pixels.data[i];
-    let green = pixels.data[i + 1];
-    let blue = pixels.data[i + 2];
-
-    // 计算灰度值
-    let grayscale = (red + green + blue) / 3;
-
-    // 更新像素值为灰度值
-    pixels.data[i] = grayscale;
-    pixels.data[i + 1] = grayscale;
-    pixels.data[i + 2] = grayscale;
-  }
-
-  return pixels;
-}
+  getStream();
+})();
