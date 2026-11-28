@@ -3,9 +3,14 @@
   const ctx = canvas.getContext('2d');
   const actionBtn = document.getElementById('actionBtn');
   const stirBtn = document.getElementById('stirBtn');
+  const directLipaseBtn = document.getElementById('directLipaseBtn');
   const replayBtn = document.getElementById('replayBtn');
   const stepBadge = document.getElementById('stepBadge');
   const stepText = document.getElementById('stepText');
+  const surfaceMetric = document.getElementById('surfaceMetric');
+  const changeTypeMetric = document.getElementById('changeTypeMetric');
+  const digestPercent = document.getElementById('digestPercent');
+  const digestFill = document.getElementById('digestFill');
 
   const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
   const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -17,6 +22,9 @@
     head: getCSS('--oil-ring', '#E85D04'),
     tail: getCSS('--oil-tail', '#3D405B'),
     water: getCSS('--water', '#08C4D4'),
+    lipase: getCSS('--lipase', '#16A34A'),
+    glycerol: getCSS('--glycerol', '#7C3AED'),
+    fattyAcid: getCSS('--fatty-acid', '#F97316'),
     ink: getCSS('--ink', '#111111')
   };
 
@@ -41,7 +49,9 @@
   let smallDrops = [];
   let animDrops = [];
   let tempDrops = [];     // for stir_no_emul
-  let dropParticles = []; // falling surfactant droplets from dropper
+  let dropParticles = []; // falling droplets from dropper
+  let lipaseParticles = []; // green lipase enzymes
+  let productParticles = []; // glycerol & fatty acids
   let shakeState = { dx: 0, dy: 0, rot: 0, intensity: 0, phase: 0 };
 
   function getCSS(varName, fallback) {
@@ -51,6 +61,17 @@
   function updateStatus(badge, text) {
     if (stepBadge) stepBadge.textContent = badge;
     if (stepText) stepText.textContent = text;
+  }
+
+  function updateMetrics(surface, changeType, pct, barColor = C.lipase) {
+    if (surfaceMetric) surfaceMetric.textContent = surface;
+    if (changeTypeMetric) changeTypeMetric.textContent = changeType;
+    const clamped = Math.round(clamp(pct, 0, 100));
+    if (digestPercent) digestPercent.textContent = `${clamped}%`;
+    if (digestFill) {
+      digestFill.style.width = `${clamped}%`;
+      digestFill.style.backgroundColor = barColor;
+    }
   }
 
   function resize() {
@@ -180,9 +201,11 @@
 
     actionBtn.disabled = true;
     stirBtn.disabled = true;
+    directLipaseBtn.disabled = true;
     replayBtn.disabled = false;
 
-    updateStatus('對照實驗', '未加乳化劑直接搖晃：搖晃時油滴暫時衝散混合，但停止搖晃後因表面張力大迅速浮回上層');
+    updateStatus('對照實驗', '未加膽汁直接搖晃：搖晃時油滴暫時衝散，停止後因表面張力大迅速聚並浮回上層');
+    updateMetrics('1×（大油滴）', '物理混合失敗', 0);
 
     tempDrops = [];
     largeDrops.forEach(ld => {
@@ -251,12 +274,153 @@
         phase = 'before';
         actionBtn.disabled = false;
         stirBtn.disabled = false;
-        updateStatus('步驟 1 / 4', '油水再度分離！請點擊「加入乳化劑」觀察界面活性劑的作用');
+        directLipaseBtn.disabled = false;
+        updateStatus('步驟 1 / 5', '油水再度分離！請點「1. 加入膽汁」或「未乳化直接加胰液」比較差異');
+        updateMetrics('1×（大油滴）', '尚未反應', 0);
         rafId = requestAnimationFrame(loopBefore);
       }
     }
 
     rafId = requestAnimationFrame(step);
+  }
+
+  function startAddingLipase(emulsified) {
+    if (emulsified && phase !== 'after') return;
+    if (!emulsified && phase !== 'before') return;
+
+    cancelAnimationFrame(rafId);
+    phase = emulsified ? 'adding_lipase_emulsified' : 'adding_lipase_raw';
+    phaseStart = performance.now();
+    shakeState = { dx: 0, dy: 0, rot: 0, intensity: 0, phase: 0 };
+
+    actionBtn.disabled = true;
+    stirBtn.disabled = true;
+    directLipaseBtn.disabled = true;
+    replayBtn.disabled = false;
+
+    if (emulsified) {
+      updateStatus('步驟 5 / 5', '加入胰液（胰脂酶）：酵素迅速接觸大量微胞表面，將三酸甘油酯高效率分解為「甘油＋脂肪酸」');
+      updateMetrics('~10×（微小微胞）', '化學分解中（胰脂酶）', 0, C.lipase);
+    } else {
+      updateStatus('對照實驗（未乳化）', '未加膽汁直接加胰液：胰脂酶只能停在大油層表面作用，無法進入大油塊內部，分解效率極低！');
+      updateMetrics('1×（表面積過小）', '化學分解受阻', 0, '#f59e0b');
+    }
+
+    const dropperX = inner.x + inner.w * 0.5;
+    dropParticles = [];
+    for (let i = 0; i < 18; i++) {
+      dropParticles.push({
+        delay: i * 0.025,
+        x0: dropperX + rand(-8, 8),
+        y0: inner.y - 16,
+        tx: inner.x + inner.w * rand(0.15, 0.85),
+        ty: emulsified ? inner.y + inner.h * rand(0.18, 0.82) : inner.y + inner.h * rand(0.08, 0.28),
+        r: rand(3.5, 5)
+      });
+    }
+
+    lipaseParticles = [];
+    const enzymeCount = emulsified ? 28 : 22;
+    for (let i = 0; i < enzymeCount; i++) {
+      lipaseParticles.push({
+        x: inner.x + inner.w * rand(0.1, 0.9),
+        y: emulsified ? inner.y + inner.h * rand(0.12, 0.9) : inner.y + inner.h * rand(0.2, 0.85),
+        vx: rand(-0.6, 0.6),
+        vy: rand(-0.6, 0.6),
+        rot: rand(0, Math.PI * 2),
+        vrot: rand(-0.04, 0.04)
+      });
+    }
+
+    productParticles = [];
+    const prodCount = emulsified ? 75 : 14;
+    for (let i = 0; i < prodCount; i++) {
+      const isGlycerol = i % 4 === 0; // 1 glycerol : 3 fatty acids ratio!
+      const anchor = emulsified && smallDrops.length
+        ? smallDrops[i % smallDrops.length]
+        : (largeDrops[i % Math.max(1, largeDrops.length)] || { x: inner.x + inner.w * 0.5, y: inner.y + inner.h * 0.16, r: 12 });
+      productParticles.push({
+        type: isGlycerol ? 'glycerol' : 'fattyAcid',
+        appearAt: rand(0.22, 0.88),
+        sx: anchor.x + rand(-8, 8),
+        sy: emulsified ? anchor.y + rand(-8, 8) : anchor.y + anchor.r + rand(2, 10),
+        x: anchor.x,
+        y: anchor.y,
+        vx: rand(-0.45, 0.45),
+        vy: rand(-0.45, 0.45),
+        rot: rand(0, Math.PI * 2)
+      });
+    }
+
+    const duration = prefersReduced ? 350 : 3200;
+
+    function step(now) {
+      const t = clamp((now - phaseStart) / duration, 0, 1);
+      const maxPct = emulsified ? 96 : 15;
+      const curPct = easeOutCubic(clamp((t - 0.15) / 0.85, 0, 1)) * maxPct;
+      updateMetrics(
+        emulsified ? '~10×（微小微胞）' : '1×（表面積過小）',
+        emulsified ? '化學分解：三酸甘油酯 → 甘油＋脂肪酸' : '僅表面微弱分解（受限於表面積）',
+        curPct,
+        emulsified ? C.lipase : '#f59e0b'
+      );
+
+      // Gently move enzymes & emerging products
+      for (const e of lipaseParticles) {
+        e.x = clamp(e.x + e.vx, inner.x + 10, inner.x + inner.w - 10);
+        e.y = clamp(e.y + e.vy, emulsified ? inner.y + 10 : inner.y + inner.h * 0.18, inner.y + inner.h - 10);
+        if (e.x <= inner.x + 11 || e.x >= inner.x + inner.w - 11) e.vx *= -1;
+        if (e.y <= (emulsified ? inner.y + 11 : inner.y + inner.h * 0.19) || e.y >= inner.y + inner.h - 11) e.vy *= -1;
+        e.rot += e.vrot;
+      }
+      for (const p of productParticles) {
+        if (t >= p.appearAt) {
+          p.x = clamp(p.x + p.vx, inner.x + 8, inner.x + inner.w - 8);
+          p.y = clamp(p.y + p.vy, inner.y + 8, inner.y + inner.h - 8);
+          if (p.x <= inner.x + 9 || p.x >= inner.x + inner.w - 9) p.vx *= -1;
+          if (p.y <= inner.y + 9 || p.y >= inner.y + inner.h - 9) p.vy *= -1;
+        } else {
+          p.x = p.sx;
+          p.y = p.sy;
+        }
+      }
+
+      drawScene(t);
+
+      if (t < 1) {
+        rafId = requestAnimationFrame(step);
+      } else {
+        phase = emulsified ? 'digested_emulsified' : 'digested_raw';
+        if (emulsified) {
+          actionBtn.textContent = '已完成分解 (96%)';
+          updateStatus('步驟 5 / 5（完成）', '消化完成！經膽汁乳化後，胰液將絕大部分脂質分解成甘油與脂肪酸，便於小腸吸收');
+        } else {
+          updateStatus('對照結果：消化不良', '未經膽汁乳化，脂質僅表面約 15% 被分解，其餘仍是大油塊漂浮，胰液酵素無法接觸內部！');
+        }
+        rafId = requestAnimationFrame(() => loopDigested(emulsified));
+      }
+    }
+
+    rafId = requestAnimationFrame(step);
+  }
+
+  function loopDigested(emulsified) {
+    if (!emulsified) updateLargeDropsFloat();
+    for (const e of lipaseParticles) {
+      e.x = clamp(e.x + e.vx, inner.x + 10, inner.x + inner.w - 10);
+      e.y = clamp(e.y + e.vy, emulsified ? inner.y + 10 : inner.y + inner.h * 0.18, inner.y + inner.h - 10);
+      if (e.x <= inner.x + 11 || e.x >= inner.x + inner.w - 11) e.vx *= -1;
+      if (e.y <= (emulsified ? inner.y + 11 : inner.y + inner.h * 0.19) || e.y >= inner.y + inner.h - 11) e.vy *= -1;
+      e.rot += e.vrot;
+    }
+    for (const p of productParticles) {
+      p.x = clamp(p.x + p.vx, inner.x + 8, inner.x + inner.w - 8);
+      p.y = clamp(p.y + p.vy, inner.y + 8, inner.y + inner.h - 8);
+      if (p.x <= inner.x + 9 || p.x >= inner.x + inner.w - 9) p.vx *= -1;
+      if (p.y <= inner.y + 9 || p.y >= inner.y + inner.h - 9) p.vy *= -1;
+    }
+    drawScene(1);
+    rafId = requestAnimationFrame(() => loopDigested(emulsified));
   }
 
   function startAddingEmulsifier() {
@@ -268,9 +432,11 @@
 
       actionBtn.disabled = true;
       stirBtn.disabled = true;
+      directLipaseBtn.disabled = true;
       replayBtn.disabled = false;
 
-      updateStatus('步驟 2 / 4', '加入乳化劑：分子具有「親水端」與「親油端」，自動排列於油水交界面以降低表面張力');
+      updateStatus('步驟 2 / 5', '加入膽汁（膽鹽）：膽鹽具「親水端」與「親油端」，自動排列於油水交界面以降低表面張力');
+      updateMetrics('1× → 準備乳化', '物理性（膽汁）', 0);
 
       const dropperX = inner.x + inner.w * 0.5;
       dropParticles = [];
@@ -297,8 +463,8 @@
         } else {
           phase = 'ready_to_stir';
           actionBtn.disabled = false;
-          actionBtn.textContent = '搖晃混合 (乳化)';
-          updateStatus('步驟 3 / 4', '乳化劑已包覆油水界面！點擊「搖晃混合」劇烈搖晃瓶身，將油層打散成微胞');
+          actionBtn.textContent = '2. 搖晃混合（物理乳化）';
+          updateStatus('步驟 3 / 5', '膽鹽已包覆油水界面！點擊「搖晃混合」將大油塊打散成微胞，增加接觸面積');
           rafId = requestAnimationFrame(loopReadyToStir);
         }
       }
@@ -306,6 +472,8 @@
       rafId = requestAnimationFrame(step);
     } else if (phase === 'ready_to_stir') {
       startEmulsifyShake();
+    } else if (phase === 'after') {
+      startAddingLipase(true);
     }
   }
 
@@ -384,15 +552,155 @@
           s.x = animDrops[i].px;
           s.y = animDrops[i].py;
         });
-        actionBtn.textContent = '已完成乳化';
-        actionBtn.disabled = true;
+        actionBtn.textContent = '3. 加入胰液（胰脂酶分解）';
+        actionBtn.disabled = false;
         replayBtn.disabled = false;
-        updateStatus('步驟 4 / 4', '穩定水包油 (O/W) 乳化液：親水端朝外與水相容，且微胞彼此排斥不再聚並');
+        updateStatus('步驟 4 / 5', '膽汁乳化完成（物理變化）：大油滴變成微小微胞，總表面積劇增，但三酸甘油酯分子尚未分解！');
+        updateMetrics('~10×（微小微胞）', '物理變化（未斷鍵）', 0);
         rafId = requestAnimationFrame(loopAfter);
       }
     }
 
     rafId = requestAnimationFrame(step);
+  }
+
+  function startAddingLipase(emulsified) {
+    if (emulsified && phase !== 'after') return;
+    if (!emulsified && phase !== 'before') return;
+
+    cancelAnimationFrame(rafId);
+    phase = emulsified ? 'adding_lipase_emulsified' : 'adding_lipase_raw';
+    phaseStart = performance.now();
+    shakeState = { dx: 0, dy: 0, rot: 0, intensity: 0, phase: 0 };
+
+    actionBtn.disabled = true;
+    stirBtn.disabled = true;
+    directLipaseBtn.disabled = true;
+    replayBtn.disabled = false;
+
+    if (emulsified) {
+      updateStatus('步驟 5 / 5', '加入胰液（胰脂酶）：酵素迅速接觸大量微胞表面，將三酸甘油酯高效率分解為「甘油＋脂肪酸」');
+      updateMetrics('~10×（微小微胞）', '化學分解中（胰脂酶）', 0, C.lipase);
+    } else {
+      updateStatus('對照實驗（未乳化）', '未加膽汁直接加胰液：胰脂酶只能停在大油層表面作用，無法進入大油塊內部，分解效率極低！');
+      updateMetrics('1×（表面積過小）', '化學分解受阻', 0, '#f59e0b');
+    }
+
+    const dropperX = inner.x + inner.w * 0.5;
+    dropParticles = [];
+    for (let i = 0; i < 18; i++) {
+      dropParticles.push({
+        delay: i * 0.025,
+        x0: dropperX + rand(-8, 8),
+        y0: inner.y - 16,
+        tx: inner.x + inner.w * rand(0.15, 0.85),
+        ty: emulsified ? inner.y + inner.h * rand(0.18, 0.82) : inner.y + inner.h * rand(0.08, 0.28),
+        r: rand(3.5, 5)
+      });
+    }
+
+    lipaseParticles = [];
+    const enzymeCount = emulsified ? 28 : 22;
+    for (let i = 0; i < enzymeCount; i++) {
+      lipaseParticles.push({
+        x: inner.x + inner.w * rand(0.1, 0.9),
+        y: emulsified ? inner.y + inner.h * rand(0.12, 0.9) : inner.y + inner.h * rand(0.2, 0.85),
+        vx: rand(-0.6, 0.6),
+        vy: rand(-0.6, 0.6),
+        rot: rand(0, Math.PI * 2),
+        vrot: rand(-0.04, 0.04)
+      });
+    }
+
+    productParticles = [];
+    const prodCount = emulsified ? 75 : 14;
+    for (let i = 0; i < prodCount; i++) {
+      const isGlycerol = i % 4 === 0; // 1 glycerol : 3 fatty acids ratio!
+      const anchor = emulsified && smallDrops.length
+        ? smallDrops[i % smallDrops.length]
+        : (largeDrops[i % Math.max(1, largeDrops.length)] || { x: inner.x + inner.w * 0.5, y: inner.y + inner.h * 0.16, r: 12 });
+      productParticles.push({
+        type: isGlycerol ? 'glycerol' : 'fattyAcid',
+        appearAt: rand(0.22, 0.88),
+        sx: anchor.x + rand(-8, 8),
+        sy: emulsified ? anchor.y + rand(-8, 8) : anchor.y + anchor.r + rand(2, 10),
+        x: anchor.x,
+        y: anchor.y,
+        vx: rand(-0.45, 0.45),
+        vy: rand(-0.45, 0.45),
+        rot: rand(0, Math.PI * 2)
+      });
+    }
+
+    const duration = prefersReduced ? 350 : 3200;
+
+    function step(now) {
+      const t = clamp((now - phaseStart) / duration, 0, 1);
+      const maxPct = emulsified ? 96 : 15;
+      const curPct = easeOutCubic(clamp((t - 0.15) / 0.85, 0, 1)) * maxPct;
+      updateMetrics(
+        emulsified ? '~10×（微小微胞）' : '1×（表面積過小）',
+        emulsified ? '化學分解：三酸甘油酯 → 甘油＋脂肪酸' : '僅表面微弱分解（受限於表面積）',
+        curPct,
+        emulsified ? C.lipase : '#f59e0b'
+      );
+
+      // Gently move enzymes & emerging products
+      for (const e of lipaseParticles) {
+        e.x = clamp(e.x + e.vx, inner.x + 10, inner.x + inner.w - 10);
+        e.y = clamp(e.y + e.vy, emulsified ? inner.y + 10 : inner.y + inner.h * 0.18, inner.y + inner.h - 10);
+        if (e.x <= inner.x + 11 || e.x >= inner.x + inner.w - 11) e.vx *= -1;
+        if (e.y <= (emulsified ? inner.y + 11 : inner.y + inner.h * 0.19) || e.y >= inner.y + inner.h - 11) e.vy *= -1;
+        e.rot += e.vrot;
+      }
+      for (const p of productParticles) {
+        if (t >= p.appearAt) {
+          p.x = clamp(p.x + p.vx, inner.x + 8, inner.x + inner.w - 8);
+          p.y = clamp(p.y + p.vy, inner.y + 8, inner.y + inner.h - 8);
+          if (p.x <= inner.x + 9 || p.x >= inner.x + inner.w - 9) p.vx *= -1;
+          if (p.y <= inner.y + 9 || p.y >= inner.y + inner.h - 9) p.vy *= -1;
+        } else {
+          p.x = p.sx;
+          p.y = p.sy;
+        }
+      }
+
+      drawScene(t);
+
+      if (t < 1) {
+        rafId = requestAnimationFrame(step);
+      } else {
+        phase = emulsified ? 'digested_emulsified' : 'digested_raw';
+        if (emulsified) {
+          actionBtn.textContent = '已完成分解 (96%)';
+          updateStatus('步驟 5 / 5（完成）', '消化完成！經膽汁乳化後，胰液將絕大部分脂質分解成甘油與脂肪酸，便於小腸吸收');
+        } else {
+          updateStatus('對照結果：消化不良', '未經膽汁乳化，脂質僅表面約 15% 被分解，其餘仍是大油塊漂浮，胰液酵素無法接觸內部！');
+        }
+        rafId = requestAnimationFrame(() => loopDigested(emulsified));
+      }
+    }
+
+    rafId = requestAnimationFrame(step);
+  }
+
+  function loopDigested(emulsified) {
+    if (!emulsified) updateLargeDropsFloat();
+    for (const e of lipaseParticles) {
+      e.x = clamp(e.x + e.vx, inner.x + 10, inner.x + inner.w - 10);
+      e.y = clamp(e.y + e.vy, emulsified ? inner.y + 10 : inner.y + inner.h * 0.18, inner.y + inner.h - 10);
+      if (e.x <= inner.x + 11 || e.x >= inner.x + inner.w - 11) e.vx *= -1;
+      if (e.y <= (emulsified ? inner.y + 11 : inner.y + inner.h * 0.19) || e.y >= inner.y + inner.h - 11) e.vy *= -1;
+      e.rot += e.vrot;
+    }
+    for (const p of productParticles) {
+      p.x = clamp(p.x + p.vx, inner.x + 8, inner.x + inner.w - 8);
+      p.y = clamp(p.y + p.vy, inner.y + 8, inner.y + inner.h - 8);
+      if (p.x <= inner.x + 9 || p.x >= inner.x + inner.w - 9) p.vx *= -1;
+      if (p.y <= inner.y + 9 || p.y >= inner.y + inner.h - 9) p.vy *= -1;
+    }
+    drawScene(1);
+    rafId = requestAnimationFrame(() => loopDigested(emulsified));
   }
 
   function updateLargeDropsFloat() {
@@ -463,9 +771,9 @@
   function drawScene(animT = 0) {
     ctx.clearRect(0, 0, W, H);
 
-    // Draw dropper if adding emulsifier
-    if (phase === 'adding_emulsifier') {
-      drawDropper(animT);
+    // Draw dropper if adding bile or lipase
+    if (phase === 'adding_emulsifier' || phase === 'adding_lipase_emulsified' || phase === 'adding_lipase_raw') {
+      drawDropper(animT, phase === 'adding_emulsifier' ? C.head : C.lipase);
     }
 
     // Apply bottle shake transform around bottle center
@@ -532,6 +840,26 @@
       drawDrops(animDrops.map(a => ({ x: a.px, y: a.py, r: a.pr })), 1);
     } else if (phase === 'after') {
       drawDrops(smallDrops, 1);
+    } else if (phase === 'adding_lipase_emulsified' || phase === 'digested_emulsified') {
+      const prog = phase === 'digested_emulsified' ? 1 : animT;
+      const micelleScale = clamp(1 - prog * 0.72, 0.28, 1);
+      const micelleAlpha = clamp(1 - prog * 0.78, 0.18, 1);
+      ctx.save();
+      ctx.globalAlpha = micelleAlpha;
+      drawDrops(smallDrops.map(s => ({ x: s.x, y: s.y, r: Math.max(2, s.r * micelleScale) })), 1);
+      ctx.restore();
+      if (phase === 'adding_lipase_emulsified') {
+        drawFallingDrops(animT, C.lipase);
+      }
+      drawLipaseAndProducts(prog);
+    } else if (phase === 'adding_lipase_raw' || phase === 'digested_raw') {
+      const prog = phase === 'digested_raw' ? 1 : animT;
+      drawOilFilm(0.92, 0, shakeState);
+      drawDrops(largeDrops.map(d => ({ x: d.x, y: d.y, r: d.r * (1 - prog * 0.08) })), 0);
+      if (phase === 'adding_lipase_raw') {
+        drawFallingDrops(animT, C.lipase);
+      }
+      drawLipaseAndProducts(prog);
     }
 
     ctx.restore(); // end fluid clip
@@ -624,7 +952,7 @@
     ctx.restore();
   }
 
-  function drawDropper(t) {
+  function drawDropper(t, bulbColor = C.head) {
     const cx = inner.x + inner.w * 0.5;
     const tipY = inner.y - 4;
     ctx.save();
@@ -641,9 +969,77 @@
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = C.head;
+    ctx.fillStyle = bulbColor;
     ctx.beginPath();
     ctx.arc(cx, tipY - 28, 9, Math.PI, 0, false);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawFallingDrops(t, color) {
+    ctx.save();
+    ctx.fillStyle = color;
+    for (const p of dropParticles) {
+      const localT = clamp((t - p.delay) / 0.45, 0, 1);
+      if (localT <= 0 || localT >= 1) continue;
+      const x = lerp(p.x0, p.tx, localT);
+      const y = lerp(p.y0, p.ty, easeOutCubic(localT));
+      ctx.beginPath();
+      ctx.arc(x, y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawLipaseAndProducts(prog) {
+    ctx.save();
+    // Draw digestion products (glycerol + fatty acids)
+    for (const p of productParticles) {
+      if (prog < p.appearAt) continue;
+      if (p.type === 'glycerol') {
+        ctx.fillStyle = C.glycerol;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 4.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      } else {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.strokeStyle = C.fattyAcid;
+        ctx.lineWidth = 2.4;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(-6, 0);
+        ctx.quadraticCurveTo(-2, -3, 2, 0);
+        ctx.quadraticCurveTo(5, 3, 8, 0);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // Draw green lipase enzymes
+    for (const e of lipaseParticles) {
+      drawLipaseEnzyme(e.x, e.y, e.rot, 6.5);
+    }
+    ctx.restore();
+  }
+
+  function drawLipaseEnzyme(x, y, rot, size) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.fillStyle = C.lipase;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    // Pac-man / active-site cleft shape representing enzyme
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, size, 0.45, Math.PI * 2 - 0.45);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
@@ -773,7 +1169,7 @@
 
     let shrinkProgress = 0;
     if (phase === 'emulsifying') shrinkProgress = easeOutCubic(clamp(animT, 0, 1));
-    else if (phase === 'after') shrinkProgress = 1;
+    else if (phase === 'after' || phase === 'adding_lipase_emulsified' || phase === 'digested_emulsified') shrinkProgress = 1;
 
     // Follow bottle shake slightly for the ROI target ring
     const roiX = lerp(roiBefore.x, roiAfter.x, shrinkProgress) + shakeState.dx * 0.8;
@@ -814,13 +1210,26 @@
 
     const R0 = mag.r * 0.56;
     const R1 = mag.r * 0.30;
-    const r = lerp(R0, R1, shrinkProgress);
+    let r = lerp(R0, R1, shrinkProgress);
 
     let surfCoverage = 0;
     if (phase === 'adding_emulsifier') {
       surfCoverage = clamp((animT - 0.2) / 0.75, 0, 1);
-    } else if (phase === 'ready_to_stir' || phase === 'emulsifying' || phase === 'after') {
+    } else if (phase === 'ready_to_stir' || phase === 'emulsifying' || phase === 'after' || phase === 'adding_lipase_emulsified') {
       surfCoverage = 1;
+    } else if (phase === 'digested_emulsified') {
+      surfCoverage = 0.25;
+    }
+
+    const digestProg =
+      phase === 'adding_lipase_emulsified' ? easeOutCubic(clamp(animT, 0, 1)) :
+      phase === 'digested_emulsified' ? 1 :
+      phase === 'adding_lipase_raw' ? easeOutCubic(clamp(animT, 0, 1)) :
+      phase === 'digested_raw' ? 1 : 0;
+
+    if (phase === 'adding_lipase_emulsified' || phase === 'digested_emulsified') {
+      r = lerp(R1, mag.r * 0.08, digestProg);
+      surfCoverage = lerp(1, 0.2, digestProg);
     }
 
     // Subtle vibration inside magnifier during shaking
@@ -829,14 +1238,30 @@
     const mCx = mag.x + microJoltX;
     const mCy = mag.y + microJoltY;
 
-    ctx.fillStyle = C.oil;
-    ctx.beginPath();
-    ctx.arc(mCx, mCy, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = C.oilStroke;
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
+    // Oil core
+    if (!(phase === 'digested_emulsified')) {
+      ctx.save();
+      if (phase === 'adding_lipase_emulsified') ctx.globalAlpha = 1 - digestProg * 0.8;
+      ctx.fillStyle = C.oil;
+      ctx.beginPath();
+      ctx.arc(mCx, mCy, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = C.oilStroke;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
 
+      // Show intact Triglyceride molecules inside oil core!
+      const molOffsets = shrinkProgress > 0.5
+        ? [{ dx: -r * 0.28, dy: 0 }, { dx: r * 0.28, dy: 0 }]
+        : [{ dx: -r * 0.36, dy: -r * 0.25 }, { dx: r * 0.32, dy: -r * 0.22 }, { dx: -r * 0.3, dy: r * 0.28 }, { dx: r * 0.34, dy: r * 0.26 }, { dx: 0, dy: 0 }];
+      const molScale = shrinkProgress > 0.5 ? Math.max(0.45, mag.r * 0.0055) : Math.max(0.55, mag.r * 0.007);
+      for (const mo of molOffsets) {
+        drawTriglycerideMolecule(mCx + mo.dx, mCy + mo.dy, molScale);
+      }
+      ctx.restore();
+    }
+
+    // Bile salt amphiphiles around droplet
     if (surfCoverage > 0.01) {
       ctx.save();
       ctx.globalAlpha = surfCoverage;
@@ -855,31 +1280,88 @@
       ctx.restore();
     }
 
+    // Lipase enzymes & molecular breakdown visualization
+    if (phase === 'adding_lipase_emulsified' || phase === 'digested_emulsified') {
+      // Show green lipase enzymes cleaving and glycerol + fatty acids dispersing!
+      const enzymeAngles = [0.4, 2.2, 4.1];
+      enzymeAngles.forEach((ang, idx) => {
+        const dist = lerp(mag.r * 0.65, mag.r * 0.36, digestProg);
+        const ex = mCx + Math.cos(ang + digestProg * 0.5) * dist;
+        const ey = mCy + Math.sin(ang + digestProg * 0.5) * dist;
+        drawLipaseEnzyme(ex, ey, ang + Math.PI, Math.max(6, mag.r * 0.085));
+      });
+
+      // Dispersing glycerol & 3x fatty acid chains
+      const pairs = 4;
+      for (let i = 0; i < pairs; i++) {
+        const baseAng = (i / pairs) * Math.PI * 2 + 0.3;
+        const spread = lerp(r * 0.3, mag.r * 0.52, digestProg);
+        const gx = mCx + Math.cos(baseAng) * spread;
+        const gy = mCy + Math.sin(baseAng) * spread;
+        ctx.fillStyle = C.glycerol;
+        ctx.beginPath();
+        ctx.arc(gx, gy, Math.max(4, mag.r * 0.048), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // 3 fatty acids per glycerol
+        for (let f = -1; f <= 1; f++) {
+          const faAng = baseAng + f * 0.42;
+          const fx = gx + Math.cos(faAng) * (mag.r * 0.14);
+          const fy = gy + Math.sin(faAng) * (mag.r * 0.14);
+          ctx.strokeStyle = C.fattyAcid;
+          ctx.lineWidth = 2.6;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(fx, fy);
+          ctx.lineTo(fx + Math.cos(faAng) * (mag.r * 0.16), fy + Math.sin(faAng) * (mag.r * 0.16));
+          ctx.stroke();
+        }
+      }
+    } else if (phase === 'adding_lipase_raw' || phase === 'digested_raw') {
+      // Un-emulsified: Lipase stuck on outer rim, core remains intact!
+      const rimAngles = [0.2, 1.5, 2.9, 4.3, 5.4];
+      rimAngles.forEach((ang) => {
+        const ex = mCx + Math.cos(ang) * (r + mag.r * 0.1);
+        const ey = mCy + Math.sin(ang) * (r + mag.r * 0.1);
+        drawLipaseEnzyme(ex, ey, ang + Math.PI, Math.max(6, mag.r * 0.085));
+      });
+      // Only 1 tiny edge glycerol + fatty acid near the surface
+      const gx = mCx + Math.cos(0.6) * (r + mag.r * 0.24);
+      const gy = mCy + Math.sin(0.6) * (r + mag.r * 0.24);
+      ctx.fillStyle = C.glycerol;
+      ctx.beginPath();
+      ctx.arc(gx, gy, Math.max(4, mag.r * 0.045), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     ctx.fillStyle = C.ink;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    const titleFont = Math.max(11, Math.round(mag.r * 0.12));
-    ctx.font = `600 ${titleFont}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+    const titleFont = Math.max(11, Math.round(mag.r * 0.115));
+    ctx.font = `700 ${titleFont}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
 
-    if (surfCoverage < 0.3) {
-      ctx.fillText('大油滴', mCx, mCy - 8);
-      ctx.font = `${Math.max(10, titleFont - 2)}px system-ui, -apple-system, sans-serif`;
-      ctx.fillStyle = '#333';
-      ctx.fillText('(油水界面張力大)', mCx, mCy + 10);
+    if (phase === 'adding_lipase_emulsified' || phase === 'digested_emulsified') {
+      ctx.fillText('化學變化：胰脂酶分解', mag.x, mag.y - mag.r * 0.74);
+      drawMagBottomBanner(mag.x, mag.y, mag.r, '三酸甘油酯 → 甘油 + 3脂肪酸');
+    } else if (phase === 'adding_lipase_raw' || phase === 'digested_raw') {
+      ctx.fillText('無膽汁乳化：酵素受阻', mag.x, mag.y - mag.r * 0.74);
+      drawMagBottomBanner(mag.x, mag.y, mag.r, '僅表面分解，核心仍為完整脂質');
+    } else if (surfCoverage < 0.3) {
+      ctx.fillText('大油滴 (含三酸甘油酯)', mag.x, mag.y - mag.r * 0.74);
+      drawMagBottomBanner(mag.x, mag.y, mag.r, '表面積小・油水界面張力大');
     } else if (phase === 'after') {
-      ctx.fillText('微胞 (Micelle)', mag.x, mag.y - mag.r * 0.72);
-      ctx.font = `600 ${Math.max(10, titleFont - 2)}px system-ui, -apple-system, sans-serif`;
-      ctx.fillText('油核', mCx, mCy);
-      drawMicroCallouts(mag.x, mag.y, r, mag.r);
+      ctx.fillText('微胞 (物理變化：未分解)', mag.x, mag.y - mag.r * 0.74);
+      drawMagBottomBanner(mag.x, mag.y, mag.r, '表面積劇增・三酸甘油酯仍完整');
     } else if (phase === 'emulsifying') {
-      ctx.fillText('搖晃打散並包覆', mag.x, mag.y - mag.r * 0.74);
-      ctx.font = `600 ${Math.max(10, titleFont - 1)}px system-ui, -apple-system, sans-serif`;
-      ctx.fillText('油滴碎裂中', mCx, mCy);
+      ctx.fillText('膽鹽打散並包覆', mag.x, mag.y - mag.r * 0.74);
+      drawMagBottomBanner(mag.x, mag.y, mag.r, '大油塊 → 微小脂肪微胞');
     } else {
-      ctx.fillText('乳化劑吸附界面', mag.x, mag.y - mag.r * 0.74);
-      ctx.font = `600 ${Math.max(10, titleFont - 1)}px system-ui, -apple-system, sans-serif`;
-      ctx.fillText('油滴', mCx, mCy);
+      ctx.fillText('膽鹽吸附油水界面', mag.x, mag.y - mag.r * 0.74);
+      drawMagBottomBanner(mag.x, mag.y, mag.r, '親油尾插油・親水頭朝水');
     }
 
     ctx.restore(); // end lens clip
@@ -935,17 +1417,40 @@
     ctx.stroke();
   }
 
-  function drawMicroCallouts(cx, cy, coreR, lensR) {
-    const fontSz = Math.max(9, Math.round(lensR * 0.095));
-    ctx.font = `600 ${fontSz}px system-ui, -apple-system, sans-serif`;
-
-    const labelY = cy + lensR * 0.68;
-    ctx.fillStyle = 'rgba(255,255,255,0.88)';
-    roundedRect(ctx, cx - lensR * 0.72, labelY - 11, lensR * 1.44, 22, 6);
+  function drawTriglycerideMolecule(cx, cy, scale) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+    // Glycerol backbone (vertical purple bar)
+    ctx.fillStyle = C.glycerol;
+    roundedRect(ctx, -10, -10, 5, 20, 2.5);
     ctx.fill();
+    // 3 fatty acid chains
+    ctx.strokeStyle = C.fattyAcid;
+    ctx.lineWidth = 2.6;
+    ctx.lineCap = 'round';
+    [-6, 0, 6].forEach((yOff) => {
+      ctx.beginPath();
+      ctx.moveTo(-5, yOff);
+      ctx.lineTo(12, yOff);
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
 
+  function drawMagBottomBanner(cx, cy, lensR, text) {
+    const fontSz = Math.max(9, Math.round(lensR * 0.088));
+    ctx.font = `600 ${fontSz}px system-ui, -apple-system, sans-serif`;
+    const labelY = cy + lensR * 0.68;
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    roundedRect(ctx, cx - lensR * 0.76, labelY - 11, lensR * 1.52, 22, 6);
+    ctx.fill();
     ctx.fillStyle = C.ink;
-    ctx.fillText('親油尾插油・親水頭朝水', cx, labelY);
+    ctx.fillText(text, cx, labelY);
+  }
+
+  function drawMicroCallouts(cx, cy, coreR, lensR) {
+    drawMagBottomBanner(cx, cy, lensR, '親油尾插油・親水頭朝水');
   }
 
   function largestDropPoint() {
@@ -996,23 +1501,29 @@
     cancelAnimationFrame(rafId);
     phase = 'before';
     shakeState = { dx: 0, dy: 0, rot: 0, intensity: 0, phase: 0 };
+    lipaseParticles = [];
+    productParticles = [];
     actionBtn.disabled = false;
-    actionBtn.textContent = '加入乳化劑';
+    actionBtn.textContent = '1. 加入膽汁（乳化）';
     stirBtn.disabled = false;
+    directLipaseBtn.disabled = false;
     replayBtn.disabled = true;
-    updateStatus('步驟 1 / 4', '油水不相溶：密度較小的油浮在水面上');
+    updateStatus('步驟 1 / 5', '脂質（三酸甘油酯）不溶於水，聚集成大油層浮在消化液表面');
+    updateMetrics('1×（大油滴）', '尚未反應', 0);
     setupBeforeData();
     drawScene(0);
     rafId = requestAnimationFrame(loopBefore);
   }
 
   // Events
+  document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
   window.addEventListener('resize', () => {
     resize();
-    drawScene(phase === 'after' ? 1 : 0);
+    drawScene(phase === 'after' || phase === 'digested_emulsified' || phase === 'digested_raw' ? 1 : 0);
   });
   actionBtn.addEventListener('click', startAddingEmulsifier);
   stirBtn.addEventListener('click', startStirWithoutEmulsifier);
+  directLipaseBtn.addEventListener('click', () => startAddingLipase(false));
   replayBtn.addEventListener('click', reset);
 
   // Kickoff
