@@ -506,17 +506,29 @@ let len = 50;
 
 
 
-// Canvas and context
+// Canvas and context (Retina DPR + responsive resize)
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
-canvas.width = 800;
-canvas.height = 600;
+let viewW = 800;
+let viewH = 600;
+let generationCount = 0;
+const MAX_SYMBOLS = 60000;
 
-
+function resizeCanvas() {
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    viewW = Math.max(260, rect.width);
+    viewH = Math.max(260, rect.height);
+    canvas.width = Math.floor(viewW * dpr);
+    canvas.height = Math.floor(viewH * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+}
 
 // drag
-let isDragging = false; // To check if we are dragging
-let startX, startY; // To store where the drag starts
+let isDragging = false;
+let dragPointerId = null;
+let startX = 0, startY = 0;
 
 // Zoom scaling parameters
 const zoomFactor = 0.1; // Amount of zoom per scroll step
@@ -725,6 +737,10 @@ function generate() {
     const symbols = getSymbols(sentence);
     tree = buildTree(symbols, "+-"); // Build the tree
 
+    if (symbols.length > MAX_SYMBOLS) {
+        return;
+    }
+
     let nextSentence = "";
 
     // Iterate through each symbol in the sentence
@@ -766,11 +782,10 @@ function generate() {
         }
     }
 
-    sentence = nextSentence;
-
-    // Shorten the length but keep it dynamic
+    sentence = nextSentence.slice(0, MAX_SYMBOLS * 2);
+    generationCount++;
     len *= 1;
-    console.log(sentence);
+    autoFitView();
     draw();
 }
 
@@ -783,6 +798,10 @@ function generate3() {
     tree = buildTree(symbols, "+-"); // Build the tree
 
     //printTree(tree); // Print the constructed tree structure
+    if (symbols.length > MAX_SYMBOLS) {
+        return;
+    }
+
     let nextSentence = "";
 
     // Iterate through each symbol in the sentence
@@ -835,6 +854,10 @@ function generate2() {
 
     // Get all symbols in the current sentence
     const symbols = getSymbols(sentence);
+
+    if (symbols.length > MAX_SYMBOLS) {
+        return;
+    }
 
     let nextSentence = "";
 
@@ -904,6 +927,10 @@ function generate1() {
     // 使用正則表達式匹配所有符號
     const symbols = getSymbols(sentence);
 
+    if (symbols.length > MAX_SYMBOLS) {
+        return;
+    }
+
     let nextSentence = "";
 
     for (let i = 0; i < symbols.length; i++) {
@@ -931,36 +958,84 @@ function generate1() {
 }
 
 
+function computeBounds() {
+    let x = 0, y = 0, dir = -Math.PI / 2;
+    const rad = (parseFloat(angleInput.value) * Math.PI) / 180;
+    const stack = [];
+    let minX = 0, maxX = 0, minY = 0, maxY = 0;
+    const syms = getSymbols(sentence);
+    for (let i = 0; i < syms.length; i++) {
+        const ch = syms[i];
+        if (ch === "F" || ch === "Fl" || ch === "Fr" || ch === "L" || ch === "R" || ch === "G" || ch === "f") {
+            x += Math.cos(dir) * len;
+            y += Math.sin(dir) * len;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+        } else if (ch === "+") {
+            dir += rad;
+        } else if (ch === "-") {
+            dir -= rad;
+        } else if (ch === "|") {
+            dir += Math.PI;
+        } else if (ch === "[") {
+            stack.push([x, y, dir]);
+        } else if (ch === "]") {
+            const st = stack.pop();
+            if (st) [x, y, dir] = st;
+        }
+    }
+    return { minX, maxX, minY, maxY };
+}
+
+function autoFitView() {
+    const b = computeBounds();
+    const bw = Math.max(10, b.maxX - b.minX);
+    const bh = Math.max(10, b.maxY - b.minY);
+    const pad = 36;
+    const fitScale = Math.min((viewW - pad * 2) / bw, (viewH - pad * 2) / bh);
+    scale = Math.max(0.05, Math.min(5, fitScale));
+    scaleSlider.value = String(scale.toFixed(2));
+
+    const cx = (b.minX + b.maxX) / 2;
+    const cy = (b.minY + b.maxY) / 2;
+    xOriginSlider.value = String(Math.round(viewW / 2 - cx * scale));
+    yOriginSlider.value = String(Math.round(viewH / 2 - cy * scale));
+}
+
 function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, viewW, viewH);
     ctx.save();
 
-    // Get the updated origin from sliders
-    xOrigin = xOriginSlider.value;
-    yOrigin = yOriginSlider.value;
-
-    // Convert the angle from degrees to radians
+    xOrigin = parseFloat(xOriginSlider.value) || viewW / 2;
+    yOrigin = parseFloat(yOriginSlider.value) || viewH / 2;
     angle = (parseFloat(angleInput.value) * Math.PI) / 180;
 
     ctx.translate(xOrigin, yOrigin);
-    ctx.strokeStyle = "grey";
-    ctx.lineWidth = 1;
+    ctx.scale(scale, scale);
+    ctx.lineWidth = Math.max(0.6, 1.4 / Math.max(0.2, scale));
 
-    // Apply the current scale
-    ctx.scale(scale, scale); // Apply scaling
+    const syms = getSymbols(sentence);
+    const genEl = document.getElementById("lbl-gen");
+    const lenEl = document.getElementById("lbl-len");
+    if (genEl) genEl.textContent = String(generationCount);
+    if (lenEl) lenEl.textContent = String(syms.length);
 
-    // Split the sentence into an array of symbols (e.g., Fl, Fr, F, G, +, -)
-    const symbols = getSymbols(sentence);
-    for (let i = 0; i < symbols.length; i++) {
-        let current = symbols[i];
+    let depth = 0;
+    const palette = ["#34d399", "#38bdf8", "#a78bfa", "#fbbf24", "#f472b6"];
+
+    for (let i = 0; i < syms.length; i++) {
+        let current = syms[i];
+        ctx.strokeStyle = palette[depth % palette.length];
 
         switch (current) {
             case "F":
-            case "Fl": // Move forward and draw a line
-            case "Fr": // Move forward and draw a line
-            case "L": // Move forward and draw a line
-            case "R": // Move forward and draw a line                        
-            case "G": // Move forward and draw a line (G acts the same as F in this context)
+            case "Fl":
+            case "Fr":
+            case "L":
+            case "R":
+            case "G":
                 ctx.beginPath();
                 ctx.moveTo(0, 0);
                 ctx.lineTo(0, -len);
@@ -969,38 +1044,38 @@ function draw() {
                 break;
 
             case "X":
-                // Draw a circle at the current position for 'X'
                 ctx.beginPath();
-                ctx.arc(0, 0, len / 4, 0, 2 * Math.PI); // Draw a circle with radius len / 2
+                ctx.arc(0, 0, len / 4, 0, 2 * Math.PI);
                 ctx.stroke();
-                break;                
-
-            case "f": // Move forward without drawing
-                ctx.translate(0, -len); // Just move without drawing
                 break;
 
-            case "+": // Turn left (rotate clockwise)
+            case "f":
+                ctx.translate(0, -len);
+                break;
+
+            case "+":
                 ctx.rotate(angle);
                 break;
 
-            case "-": // Turn right (rotate counterclockwise)
+            case "-":
                 ctx.rotate(-angle);
                 break;
 
-            case "|": // Turn around (180 degrees)
-                ctx.rotate(Math.PI); // Rotate by 180 degrees
+            case "|":
+                ctx.rotate(Math.PI);
                 break;
 
-            case "[": // Save the current state (start a branch)
-                ctx.save(); // Save the current state (position, angle)
+            case "[":
+                ctx.save();
+                depth++;
                 break;
 
-            case "]": // Restore the saved state (complete a branch)
-                ctx.restore(); // Restore the previously saved state
+            case "]":
+                ctx.restore();
+                depth = Math.max(0, depth - 1);
                 break;
 
             default:
-                // For other symbols (e.g. ∧, &, \, /, $, ., {), which we are ignoring
                 break;
         }
     }
@@ -1008,38 +1083,72 @@ function draw() {
     ctx.restore();
 }
 
-
-
 // Reset the L-System with new axiom and rule
 function reset() {
-    // Get the values from input fields
     axiom = axiomInput.value;
-    sentence = axiom;    
-    //rules[0].output = ruleInput.value;
+    sentence = axiom;
+    generationCount = 0;
     symbols = getSymbols(sentence);
-    tree = buildTree(symbols, "+-"); // Build the tree
-    printTree(tree); // Print the constructed tree structure
+    tree = buildTree(symbols, "+-");
     rules = ruleInput.value;
-
-    len = 50; // Reset the length
-    
-    // Reset sliders to initial positions
-    xOriginSlider.value = canvas.width / 2;
-    yOriginSlider.value = canvas.height / 2;
-    scale = parseFloat(scaleSlider.value); // Reset scale from slider
-    draw(); // Redraw the initial state
+    len = 50;
+    autoFitView();
+    draw();
 }
 
 // Redraw function
 function redraw() {
-    scale = parseFloat(scaleSlider.value); // Get the current scale value
-    draw(); // Redraw the current state
+    scale = parseFloat(scaleSlider.value);
+    draw();
 }
-
 
 // Initial setup
 function setup() {
-    angle = parseFloat(document.getElementById("angleInput").value); // Get angle from input
+    document.addEventListener("dblclick", (e) => e.preventDefault(), { passive: false });
+    window.addEventListener("resize", resizeCanvas);
+
+    canvas.addEventListener("pointerdown", (e) => {
+        isDragging = true;
+        dragPointerId = e.pointerId;
+        canvas.setPointerCapture(e.pointerId);
+        startX = e.clientX - parseFloat(xOriginSlider.value);
+        startY = e.clientY - parseFloat(yOriginSlider.value);
+    });
+
+    canvas.addEventListener("pointermove", (e) => {
+        if (!isDragging || e.pointerId !== dragPointerId) return;
+        xOriginSlider.value = String(Math.round(e.clientX - startX));
+        yOriginSlider.value = String(Math.round(e.clientY - startY));
+        draw();
+    });
+
+    const endDrag = (e) => {
+        if (isDragging && e.pointerId === dragPointerId) {
+            isDragging = false;
+            dragPointerId = null;
+        }
+    };
+    canvas.addEventListener("pointerup", endDrag);
+    canvas.addEventListener("pointercancel", endDrag);
+
+    canvas.addEventListener("wheel", (e) => {
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+        scale = Math.max(0.05, Math.min(5, scale * factor));
+        scaleSlider.value = String(scale.toFixed(2));
+        draw();
+    }, { passive: false });
+
+    const fitBtn = document.getElementById("fitBtn");
+    if (fitBtn) {
+        fitBtn.addEventListener("click", () => {
+            autoFitView();
+            draw();
+        });
+    }
+
+    resizeCanvas();
+    autoFitView();
     draw();
 }
 
