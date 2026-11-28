@@ -1,130 +1,247 @@
-const canvas = document.getElementById('animationCanvas');
-const ctx = canvas.getContext('2d');
+(() => {
+  'use strict';
 
-// Set canvas size
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+  const canvas = document.getElementById('animationCanvas');
+  const ctx = canvas.getContext('2d');
 
-// Default values for lengths, speeds, multipliers
-let lengths = [19.11, 30.45, 22.72];
-let speeds = [41, 53, -41];
-let lengthMultiplier = 5;
-let speedMultiplier = 10;
+  const lengthsInput = document.getElementById('lengthsInput');
+  const speedsInput = document.getElementById('speedsInput');
+  const lenMultSlider = document.getElementById('lengthMultiplierInput');
+  const spdMultSlider = document.getElementById('speedMultiplierInput');
+  const lblLenMult = document.getElementById('lbl-len-mult');
+  const lblSpdMult = document.getElementById('lbl-spd-mult');
 
-let angles = [0, 0, 0];  // Initial angles of each segment
+  const btnApply = document.getElementById('applyButton');
+  const btnPause = document.getElementById('btn-pause');
+  const btnArms = document.getElementById('btn-arms');
+  const btnRainbow = document.getElementById('btn-rainbow');
+  const btnClear = document.getElementById('btn-clear');
+  const btnRandom = document.getElementById('btn-random');
 
-// Set default values in the input fields via JavaScript
-document.getElementById('lengthsInput').value = lengths.join(', ');
-document.getElementById('speedsInput').value = speeds.join(', ');
-document.getElementById('lengthMultiplierInput').value = lengthMultiplier;
-document.getElementById('speedMultiplierInput').value = speedMultiplier;
+  let width = 700;
+  let height = 520;
 
-// Convert degrees to radians
-function degreesToRadians(degrees) {
-    return degrees * (Math.PI / 180);
-}
+  let lengths = [19, 30, 23];
+  let speeds = [41, 53, -41];
+  let lengthMultiplier = 1.0;
+  let speedMultiplier = 3.0;
+  let angles = [0, 0, 0];
 
-// Get the end point of a line segment given its starting point, length, and angle
-function getEndpoint(startX, startY, length, angle) {
-    return {
-        x: startX + length * Math.cos(angle),
-        y: startY + length * Math.sin(angle)
-    };
-}
+  let isPaused = false;
+  let showArms = true;
+  let rainbowMode = true;
+  let hueOffset = 0;
 
-// Variables to store the trajectory of the last segment's endpoint
-const trajectory = [];
+  // Bounded trajectory ring buffer so FPS stays 60 even after minutes
+  const MAX_TRAIL = 3200;
+  let trajectory = [];
+  let lastTime = 0;
 
-// Function to draw the line segments
-function drawSegments() {
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
+  function resizeCanvas() {
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    width = Math.max(240, rect.width);
+    height = Math.max(240, rect.height);
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
 
-    let currentX = centerX;
-    let currentY = centerY;
-    let lastX, lastY;
+  function parseList(str, fallback) {
+    const arr = str.split(',').map((s) => parseFloat(s.trim())).filter((n) => Number.isFinite(n));
+    return arr.length > 0 ? arr : fallback.slice();
+  }
 
-    // Clear the canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  function resetPattern(newLengths, newSpeeds) {
+    lengths = newLengths;
+    speeds = newSpeeds;
+    // Ensure equal array length without crashing
+    while (speeds.length < lengths.length) speeds.push(0);
+    if (speeds.length > lengths.length) speeds = speeds.slice(0, lengths.length);
 
-    // Set line styles
-    ctx.strokeStyle = 'white';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    
-    for (let i = 0; i < lengths.length; i++) {
-        ctx.moveTo(currentX, currentY);
-        let angle = degreesToRadians(angles[i]);
-        const end = getEndpoint(currentX, currentY, lengths[i] * lengthMultiplier, angle);
-        ctx.lineTo(end.x, end.y);
+    angles = new Array(lengths.length).fill(0);
+    trajectory = [];
+    hueOffset = 0;
+  }
 
-        currentX = end.x;
-        currentY = end.y;
+  function computeAutoScale() {
+    const totalLen = lengths.reduce((acc, v) => acc + Math.abs(v), 0) || 1;
+    const targetRadius = Math.min(width, height) * 0.41;
+    return (targetRadius / totalLen) * lengthMultiplier;
+  }
 
-        if (i === lengths.length - 1) {
-            lastX = currentX;
-            lastY = currentY;
+  function stepPhysics(dt) {
+    const subSteps = 6;
+    const subDt = dt / subSteps;
+    const scale = computeAutoScale();
+    const cx = width / 2;
+    const cy = height / 2;
+
+    for (let s = 0; s < subSteps; s++) {
+      let x = cx;
+      let y = cy;
+      for (let i = 0; i < lengths.length; i++) {
+        angles[i] += speeds[i] * speedMultiplier * subDt;
+        const rad = (angles[i] * Math.PI) / 180;
+        x += lengths[i] * scale * Math.cos(rad);
+        y += lengths[i] * scale * Math.sin(rad);
+      }
+      hueOffset = (hueOffset + subDt * 32) % 360;
+      trajectory.push({ x, y, hue: hueOffset });
+      if (trajectory.length > MAX_TRAIL) trajectory.shift();
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, width, height);
+    const scale = computeAutoScale();
+    const cx = width / 2;
+    const cy = height / 2;
+
+    // Draw trajectory
+    if (trajectory.length > 1) {
+      if (!rainbowMode) {
+        ctx.save();
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(trajectory[0].x, trajectory[0].y);
+        for (let i = 1; i < trajectory.length; i++) {
+          ctx.lineTo(trajectory[i].x, trajectory[i].y);
         }
+        ctx.stroke();
+        ctx.restore();
+      } else {
+        ctx.lineWidth = 2;
+        const chunk = 16;
+        for (let i = 0; i < trajectory.length - 1; i += chunk) {
+          const end = Math.min(trajectory.length - 1, i + chunk);
+          ctx.beginPath();
+          ctx.strokeStyle = `hsl(${trajectory[i].hue}, 90%, 62%)`;
+          ctx.moveTo(trajectory[i].x, trajectory[i].y);
+          for (let j = i + 1; j <= end; j++) {
+            ctx.lineTo(trajectory[j].x, trajectory[j].y);
+          }
+          ctx.stroke();
+        }
+      }
     }
 
-    ctx.stroke();
+    // Draw rotating vector arms
+    if (showArms) {
+      let x = cx;
+      let y = cy;
+      ctx.save();
+      for (let i = 0; i < lengths.length; i++) {
+        const rad = (angles[i] * Math.PI) / 180;
+        const nx = x + lengths[i] * scale * Math.cos(rad);
+        const ny = y + lengths[i] * scale * Math.sin(rad);
 
-    // Store the last segment's endpoint for drawing trajectory
-    trajectory.push({x: lastX, y: lastY});
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(nx, ny);
+        ctx.stroke();
 
-    // Draw the trajectory of the last segment's endpoint
-    ctx.strokeStyle = 'yellow';
-    ctx.beginPath();
-    trajectory.forEach((point, index) => {
-        if (index === 0) {
-            ctx.moveTo(point.x, point.y);
-        } else {
-            ctx.lineTo(point.x, point.y);
-        }
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath();
+        ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        x = nx;
+        y = ny;
+      }
+
+      // Tip pen dot
+      ctx.fillStyle = '#fde68a';
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function loop(ts = 0) {
+    requestAnimationFrame(loop);
+    if (!lastTime) lastTime = ts;
+    const dt = Math.min(0.05, (ts - lastTime) / 1000);
+    lastTime = ts;
+
+    if (!isPaused) {
+      stepPhysics(dt);
+    }
+    draw();
+  }
+
+  // --- Events ---
+  document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+  window.addEventListener('resize', () => {
+    resizeCanvas();
+    trajectory = [];
+  });
+
+  btnApply.addEventListener('click', () => {
+    const newL = parseList(lengthsInput.value, [19, 30, 23]);
+    const newS = parseList(speedsInput.value, [41, 53, -41]);
+    lengthsInput.value = newL.join(', ');
+    speedsInput.value = newS.slice(0, newL.length).join(', ');
+    resetPattern(newL, newS);
+  });
+
+  lenMultSlider.addEventListener('input', (e) => {
+    lengthMultiplier = parseFloat(e.target.value);
+    lblLenMult.textContent = `${lengthMultiplier.toFixed(1)}x`;
+    trajectory = [];
+  });
+
+  spdMultSlider.addEventListener('input', (e) => {
+    speedMultiplier = parseFloat(e.target.value);
+    lblSpdMult.textContent = `${speedMultiplier.toFixed(1)}x`;
+  });
+
+  document.querySelectorAll('.preset-btn[data-l]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.preset-btn[data-l]').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      lengthsInput.value = btn.dataset.l;
+      speedsInput.value = btn.dataset.s;
+      resetPattern(parseList(btn.dataset.l, lengths), parseList(btn.dataset.s, speeds));
     });
-    ctx.stroke();
-}
+  });
 
-// Function to update the angles of the segments
-function updateAngles(deltaTime) {
-    for (let i = 0; i < speeds.length; i++) {
-        angles[i] += speeds[i] * speedMultiplier * deltaTime / 1000;
-    }
-}
+  btnRandom.addEventListener('click', () => {
+    const count = 2 + Math.floor(Math.random() * 3);
+    const l = Array.from({ length: count }, () => 10 + Math.floor(Math.random() * 28));
+    const s = Array.from({ length: count }, () => {
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      return dir * (10 + Math.floor(Math.random() * 75));
+    });
+    lengthsInput.value = l.join(', ');
+    speedsInput.value = s.join(', ');
+    document.querySelectorAll('.preset-btn[data-l]').forEach((b) => b.classList.remove('active'));
+    resetPattern(l, s);
+  });
 
-// Animation loop
-let lastTime = 0;
-function animate(time) {
-    const deltaTime = time - lastTime;
-    lastTime = time;
+  btnPause.addEventListener('click', () => {
+    isPaused = !isPaused;
+    btnPause.textContent = isPaused ? '▶ 繼續' : '⏸ 暫停';
+  });
 
-    updateAngles(deltaTime);
-    drawSegments();
+  btnArms.addEventListener('click', () => {
+    showArms = !showArms;
+    btnArms.classList.toggle('active', showArms);
+  });
 
-    requestAnimationFrame(animate);
-}
+  btnRainbow.addEventListener('click', () => {
+    rainbowMode = !rainbowMode;
+    btnRainbow.classList.toggle('active', rainbowMode);
+  });
 
-// Start the animation
-requestAnimationFrame(animate);
+  btnClear.addEventListener('click', () => {
+    trajectory = [];
+  });
 
-// Function to parse input from the input boxes
-function parseInput(inputStr) {
-    return inputStr.split(',').map(Number);
-}
-
-// Apply button logic
-document.getElementById('applyButton').addEventListener('click', () => {
-    const lengthsInput = document.getElementById('lengthsInput').value;
-    const speedsInput = document.getElementById('speedsInput').value;
-    const lengthMultiplierInput = document.getElementById('lengthMultiplierInput').value;
-    const speedMultiplierInput = document.getElementById('speedMultiplierInput').value;
-
-    lengths = parseInput(lengthsInput);
-    speeds = parseInput(speedsInput);
-    lengthMultiplier = Number(lengthMultiplierInput);
-    speedMultiplier = Number(speedMultiplierInput);
-
-    // Reset angles and trajectory when new values are applied
-    angles = Array(lengths.length).fill(0);
-    trajectory.length = 0;  // Clear trajectory
-});
+  resizeCanvas();
+  requestAnimationFrame(loop);
+})();

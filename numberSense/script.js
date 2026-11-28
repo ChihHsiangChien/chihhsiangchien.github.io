@@ -1,251 +1,328 @@
-class Game {
-  constructor() {
-    this.numAInput = document.getElementById('numA');
-    this.numBInput = document.getElementById('numB');
-    this.roundsInput = document.getElementById('rounds');
-    this.showTimeInput = document.getElementById('showTime');
-    this.feedbackToggle = document.getElementById('feedbackToggle');
-    this.startBtn = document.getElementById('startBtn');
-    this.restartBtn = document.getElementById('restartBtn');
-    
-    this.uiPanel = document.getElementById('ui-panel');
-    this.playArea = document.getElementById('play-area');
-    this.resultOverlay = document.getElementById('result-overlay');
-    this.areaLeft = document.getElementById('areaLeft');
-    this.areaRight = document.getElementById('areaRight');
-    this.accuracyText = document.getElementById('accuracy-text');
+(() => {
+  'use strict';
 
-    this.currentRound = 0;
-    this.totalRounds = 10;
-    this.correctCount = 0;
-    this.numA = 0;
-    this.numB = 0;
-    this.displayTime = 1000;
-    this.showFeedback = true;
-    this.isPlaying = false;
-    this.canClick = false;
-    
-    // Audio Context
-    this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  class NumberSenseGame {
+    constructor() {
+      this.numAInput = document.getElementById('numA');
+      this.numBInput = document.getElementById('numB');
+      this.roundsInput = document.getElementById('rounds');
+      this.showTimeInput = document.getElementById('showTime');
+      this.feedbackToggle = document.getElementById('feedbackToggle');
+      this.setupError = document.getElementById('setup-error');
 
-    this.startBtn.addEventListener('click', () => {
-        this.resumeAudio(); // Browser requirement to resume context on user gesture
-        this.startGame();
-    });
-    this.restartBtn.addEventListener('click', () => this.resetGame());
-    
-    this.areaLeft.addEventListener('mousedown', () => this.handleInput('left'));
-    this.areaRight.addEventListener('mousedown', () => this.handleInput('right'));
-    
-    // Support touch
-    this.areaLeft.addEventListener('touchstart', (e) => { e.preventDefault(); this.handleInput('left'); });
-    this.areaRight.addEventListener('touchstart', (e) => { e.preventDefault(); this.handleInput('right'); });
-  }
+      this.startBtn = document.getElementById('startBtn');
+      this.restartBtn = document.getElementById('restartBtn');
+      this.quitBtn = document.getElementById('quitBtn');
+      this.soundBtn = document.getElementById('soundBtn');
 
-  resumeAudio() {
-      if (this.audioCtx.state === 'suspended') {
-          this.audioCtx.resume();
+      this.uiPanel = document.getElementById('ui-panel');
+      this.playArea = document.getElementById('play-area');
+      this.resultOverlay = document.getElementById('result-overlay');
+      this.areaLeft = document.getElementById('areaLeft');
+      this.areaRight = document.getElementById('areaRight');
+
+      this.roundProgressEl = document.getElementById('round-progress');
+      this.promptPillEl = document.getElementById('prompt-pill');
+      this.accuracyText = document.getElementById('accuracy-text');
+      this.scoreText = document.getElementById('score-text');
+      this.rtText = document.getElementById('rt-text');
+      this.resultEmoji = document.getElementById('result-emoji');
+
+      this.currentRound = 0;
+      this.totalRounds = 10;
+      this.correctCount = 0;
+      this.reactionTimes = [];
+      this.promptShownAt = 0;
+      this.numA = 9;
+      this.numB = 10;
+      this.displayTime = 1000;
+      this.showFeedback = true;
+      this.soundEnabled = true;
+      this.isPlaying = false;
+      this.canClick = false;
+      this.correctSide = 'left';
+
+      this.audioCtx = null;
+      this.timers = [];
+
+      this.bindEvents();
+    }
+
+    unlockAudio() {
+      if (!this.audioCtx) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (Ctx) this.audioCtx = new Ctx();
       }
-  }
+      if (this.audioCtx && this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume();
+      }
+    }
 
-  playTone(freq, type, duration) {
-      if (!this.audioCtx) return;
+    clearTimers() {
+      for (const id of this.timers) clearTimeout(id);
+      this.timers = [];
+    }
+
+    playTone(freq, type, duration, vol = 0.12) {
+      if (!this.soundEnabled || !this.audioCtx || this.audioCtx.state !== 'running') return;
+      const now = this.audioCtx.currentTime;
       const osc = this.audioCtx.createOscillator();
       const gain = this.audioCtx.createGain();
       osc.type = type;
-      osc.frequency.setValueAtTime(freq, this.audioCtx.currentTime);
-      gain.gain.setValueAtTime(0.1, this.audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, this.audioCtx.currentTime + duration);
-      
+      osc.frequency.setValueAtTime(freq, now);
+      gain.gain.setValueAtTime(vol, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
       osc.connect(gain);
       gain.connect(this.audioCtx.destination);
-      osc.start();
-      osc.stop(this.audioCtx.currentTime + duration);
-  }
-
-  playCorrectSound() {
-      // High pitch major arpeggio
-      this.playTone(600, 'sine', 0.1);
-      setTimeout(() => this.playTone(900, 'sine', 0.2), 100);
-  }
-
-  playWrongSound() {
-      // Low pitch buzz
-      this.playTone(150, 'sawtooth', 0.3);
-  }
-
-  startGame() {
-    this.numA = parseInt(this.numAInput.value);
-    this.numB = parseInt(this.numBInput.value);
-    this.totalRounds = parseInt(this.roundsInput.value);
-    this.displayTime = parseInt(this.showTimeInput.value);
-    this.showFeedback = this.feedbackToggle.checked;
-
-    if (this.numA === this.numB) {
-      alert("請選擇兩個不同的數字!");
-      return;
+      osc.start(now);
+      osc.stop(now + duration + 0.02);
     }
 
-    this.currentRound = 0;
-    this.correctCount = 0;
-    this.isPlaying = true;
-
-    this.uiPanel.style.display = 'none';
-    this.resultOverlay.style.display = 'none';
-    this.playArea.style.display = 'flex';
-
-    this.nextRound();
-  }
-
-  resetGame() {
-    this.uiPanel.style.display = 'block';
-    this.playArea.style.display = 'none';
-    this.resultOverlay.style.display = 'none';
-    // Clean up
-    this.clearFeedback();
-  }
-
-  clearFeedback() {
-    this.areaLeft.className = 'split-screen left';
-    this.areaRight.className = 'split-screen right';
-    this.areaLeft.innerHTML = '';
-    this.areaRight.innerHTML = '';
-  }
-
-  nextRound() {
-    if (this.currentRound >= this.totalRounds) {
-      this.endGame();
-      return;
+    playCorrectSound() {
+      this.playTone(587.33, 'triangle', 0.1, 0.14);
+      this.timers.push(setTimeout(() => this.playTone(880, 'triangle', 0.16, 0.14), 80));
     }
 
-    this.currentRound++;
-    this.canClick = false;
-    this.clearFeedback();
+    playWrongSound() {
+      this.playTone(160, 'sawtooth', 0.24, 0.1);
+    }
 
-    // Decide which side has which number
-    const isALeft = Math.random() < 0.5;
-    const countLeft = isALeft ? this.numA : this.numB;
-    const countRight = isALeft ? this.numB : this.numA;
+    bindEvents() {
+      document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+      const unlockOnce = () => this.unlockAudio();
+      document.addEventListener('pointerdown', unlockOnce, { passive: true });
+      document.addEventListener('touchstart', unlockOnce, { passive: true });
+      document.addEventListener('keydown', unlockOnce, { passive: true });
 
-    this.correctSide = countLeft > countRight ? 'left' : 'right';
+      document.querySelectorAll('.preset-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.preset-btn').forEach((b) => b.classList.remove('active'));
+          btn.classList.add('active');
+          this.numAInput.value = btn.dataset.a;
+          this.numBInput.value = btn.dataset.b;
+          this.showTimeInput.value = btn.dataset.t;
+          this.setupError.classList.add('hidden');
+        });
+      });
 
-    // Generate squares
-    this.generateSquares(this.areaLeft, countLeft);
-    this.generateSquares(this.areaRight, countRight);
+      this.startBtn.addEventListener('click', () => {
+        this.unlockAudio();
+        this.startGame();
+      });
 
-    // Hide after timeout
-    setTimeout(() => {
+      this.restartBtn.addEventListener('click', () => this.resetGame());
+      this.quitBtn.addEventListener('click', () => this.resetGame());
+
+      this.soundBtn.addEventListener('click', () => {
+        this.unlockAudio();
+        this.soundEnabled = !this.soundEnabled;
+        this.soundBtn.textContent = this.soundEnabled ? '🔊' : '🔇';
+      });
+
+      this.areaLeft.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        this.unlockAudio();
+        this.handleInput('left');
+      });
+
+      this.areaRight.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        this.unlockAudio();
+        this.handleInput('right');
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (!this.isPlaying || !this.canClick) return;
+        if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+          e.preventDefault();
+          this.handleInput('left');
+        } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+          e.preventDefault();
+          this.handleInput('right');
+        }
+      });
+    }
+
+    startGame() {
+      this.numA = Math.max(1, Math.min(50, parseInt(this.numAInput.value, 10) || 9));
+      this.numB = Math.max(1, Math.min(50, parseInt(this.numBInput.value, 10) || 10));
+      this.totalRounds = Math.max(1, Math.min(50, parseInt(this.roundsInput.value, 10) || 10));
+      this.displayTime = Math.max(150, Math.min(5000, parseInt(this.showTimeInput.value, 10) || 1000));
+      this.showFeedback = this.feedbackToggle.checked;
+
+      if (this.numA === this.numB) {
+        this.setupError.textContent = '請選擇兩個不同的數字！';
+        this.setupError.classList.remove('hidden');
+        return;
+      }
+
+      this.setupError.classList.add('hidden');
+      this.clearTimers();
+      this.currentRound = 0;
+      this.correctCount = 0;
+      this.reactionTimes = [];
+      this.isPlaying = true;
+
+      this.uiPanel.classList.add('hidden');
+      this.resultOverlay.classList.add('hidden');
+      this.playArea.classList.remove('hidden');
+
+      this.nextRound();
+    }
+
+    resetGame() {
+      this.clearTimers();
+      this.isPlaying = false;
+      this.canClick = false;
+      this.clearFeedback();
+      this.playArea.classList.add('hidden');
+      this.resultOverlay.classList.add('hidden');
+      this.uiPanel.classList.remove('hidden');
+    }
+
+    clearFeedback() {
+      this.areaLeft.className = 'split-screen left';
+      this.areaRight.className = 'split-screen right';
+      this.areaLeft.innerHTML = '';
+      this.areaRight.innerHTML = '';
+    }
+
+    nextRound() {
+      if (!this.isPlaying) return;
+      if (this.currentRound >= this.totalRounds) {
+        this.endGame();
+        return;
+      }
+
+      this.currentRound++;
+      this.canClick = false;
+      this.clearFeedback();
+
+      this.roundProgressEl.textContent = `第 ${this.currentRound} / ${this.totalRounds} 題`;
+      this.promptPillEl.textContent = '👀 請記住兩側數量…';
+      this.promptPillEl.classList.remove('ready');
+
+      const isALeft = Math.random() < 0.5;
+      const countLeft = isALeft ? this.numA : this.numB;
+      const countRight = isALeft ? this.numB : this.numA;
+      this.correctSide = countLeft > countRight ? 'left' : 'right';
+
+      this.generateSquares(this.areaLeft, countLeft);
+      this.generateSquares(this.areaRight, countRight);
+
+      const tid = setTimeout(() => {
         if (!this.isPlaying) return;
         this.hideSquares();
         this.canClick = true;
-    }, this.displayTime);
-  }
-
-  generateSquares(container, count) {
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
-    const size = 30; // square size
-    const padding = 50; // Distance from border
-    const squares = [];
-    
-    // Ensure container is large enough for padding
-    const effectiveWidth = containerWidth - size - (2 * padding);
-    const effectiveHeight = containerHeight - size - (2 * padding);
-
-    if (effectiveWidth < 0 || effectiveHeight < 0) {
-        // Fallback if container is too small, reduce padding or ignore
-        console.warn("Container too small for requested padding");
+        this.promptShownAt = performance.now();
+        this.promptPillEl.textContent = '👆 請點擊較多的一側！';
+        this.promptPillEl.classList.add('ready');
+        this.areaLeft.classList.add('selectable');
+        this.areaRight.classList.add('selectable');
+      }, this.displayTime);
+      this.timers.push(tid);
     }
-    
-    for (let i = 0; i < count; i++) {
-      let x, y, overlap;
-      let attempts = 0;
-      const maxAttempts = 500;
 
-      do {
-        overlap = false;
-        if (effectiveWidth > 0 && effectiveHeight > 0) {
-            x = padding + Math.random() * effectiveWidth;
-            y = padding + Math.random() * effectiveHeight;
-        } else {
-             // Fallback
-             x = Math.random() * (containerWidth - size);
-             y = Math.random() * (containerHeight - size);
-        }
+    generateSquares(container, count) {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      const size = Math.max(16, Math.min(28, Math.floor(Math.min(w, h) * 0.065)));
+      const pad = Math.max(16, Math.floor(size * 0.9));
+      const effW = Math.max(size, w - size - pad * 2);
+      const effH = Math.max(size, h - size - pad * 2);
+      const squares = [];
 
-        for (const s of squares) {
-            if (x < s.x + size &&
-                x + size > s.x &&
-                y < s.y + size &&
-                y + size > s.y) {
-                overlap = true;
-                break;
+      for (let i = 0; i < count; i++) {
+        let x = 0;
+        let y = 0;
+        let overlap = false;
+        let attempts = 0;
+
+        do {
+          overlap = false;
+          x = pad + Math.random() * effW;
+          y = pad + Math.random() * effH;
+          for (const s of squares) {
+            if (x < s.x + size + 4 && x + size + 4 > s.x && y < s.y + size + 4 && y + size + 4 > s.y) {
+              overlap = true;
+              break;
             }
-        }
-        attempts++;
-      } while (overlap && attempts < maxAttempts);
+          }
+          attempts++;
+        } while (overlap && attempts < 400);
 
-      squares.push({x, y});
-      
-      const el = document.createElement('div');
-      el.classList.add('square');
-      el.style.left = x + 'px';
-      el.style.top = y + 'px';
-      container.appendChild(el);
-    }
-  }
-
-  hideSquares() {
-     const squares = document.querySelectorAll('.square');
-     squares.forEach(s => s.style.display = 'none');
-  }
-
-  handleInput(side) {
-    if (!this.isPlaying || !this.canClick) return;
-    this.canClick = false; // Prevent double click
-
-    const isCorrect = side === this.correctSide;
-    if (isCorrect) {
-      this.correctCount++;
+        squares.push({ x, y });
+        const el = document.createElement('div');
+        el.className = 'square';
+        el.style.width = `${size}px`;
+        el.style.height = `${size}px`;
+        el.style.left = `${x}px`;
+        el.style.top = `${y}px`;
+        container.appendChild(el);
+      }
     }
 
-    if (this.showFeedback) {
+    hideSquares() {
+      this.areaLeft.querySelectorAll('.square').forEach((s) => { s.style.display = 'none'; });
+      this.areaRight.querySelectorAll('.square').forEach((s) => { s.style.display = 'none'; });
+    }
+
+    handleInput(side) {
+      if (!this.isPlaying || !this.canClick) return;
+      this.canClick = false;
+      this.areaLeft.classList.remove('selectable');
+      this.areaRight.classList.remove('selectable');
+
+      if (this.promptShownAt > 0) {
+        this.reactionTimes.push(performance.now() - this.promptShownAt);
+      }
+
+      const isCorrect = side === this.correctSide;
+      if (isCorrect) this.correctCount++;
+
+      if (this.showFeedback) {
         this.showRoundFeedback(isCorrect, side);
-    } else {
-        this.nextRound(); // Instant next if feedback disabled
+      } else {
+        this.nextRound();
+      }
     }
-  }
 
-  showRoundFeedback(isCorrect, side) {
-      // Audio
+    showRoundFeedback(isCorrect, side) {
       if (isCorrect) this.playCorrectSound();
       else this.playWrongSound();
 
-      // Visual
       const selectedArea = side === 'left' ? this.areaLeft : this.areaRight;
       selectedArea.classList.add(isCorrect ? 'correct-feedback' : 'wrong-feedback');
-      
-      // Add Icon
+
       const icon = document.createElement('div');
-      icon.textContent = isCorrect ? 'O' : 'X';
+      icon.textContent = isCorrect ? '⭕' : '❌';
       selectedArea.appendChild(icon);
 
-      // Wait then next
-      setTimeout(() => {
-          this.nextRound();
-      }, 1000); // 1 second feedback
+      const tid = setTimeout(() => {
+        if (this.isPlaying) this.nextRound();
+      }, 750);
+      this.timers.push(tid);
+    }
+
+    endGame() {
+      this.clearTimers();
+      this.isPlaying = false;
+      this.playArea.classList.add('hidden');
+      this.resultOverlay.classList.remove('hidden');
+
+      const accuracy = Math.round((this.correctCount / this.totalRounds) * 100);
+      const avgRt = this.reactionTimes.length > 0
+        ? `${Math.round(this.reactionTimes.reduce((a, b) => a + b, 0) / this.reactionTimes.length)} ms`
+        : '—';
+
+      this.resultEmoji.textContent = accuracy >= 80 ? '🏆' : accuracy >= 50 ? '👍' : '💪';
+      this.accuracyText.textContent = `${accuracy}%`;
+      this.scoreText.textContent = `${this.correctCount} / ${this.totalRounds}`;
+      this.rtText.textContent = avgRt;
+    }
   }
 
-  endGame() {
-    this.isPlaying = false;
-    this.playArea.style.display = 'none';
-    this.resultOverlay.style.display = 'flex';
-    
-    const accuracy = Math.round((this.correctCount / this.totalRounds) * 100);
-    this.accuracyText.textContent = `正確率: ${accuracy}% (${this.correctCount}/${this.totalRounds})`;
-  }
-}
-
-window.addEventListener('load', () => {
-    new Game();
-});
+  window.addEventListener('load', () => {
+    new NumberSenseGame();
+  });
+})();
